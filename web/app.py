@@ -14,12 +14,17 @@ from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 
-from utils.web_db import init_web_db, seed_cities_and_agents, get_db_connection
+from utils.web_db import (
+    init_web_db, seed_cities_and_agents, get_db_connection,
+    insert_scheduled_inspection, get_upcoming_inspections,
+    get_inspections_by_jurisdiction, cleanup_old_inspections
+)
 from web.auth import (
     require_auth, generate_tokens, verify_password, hash_password,
     get_user_permissions, get_user_cities, get_user_agents,
     check_permission, revoke_token, AuthError
 )
+from workers.inspection_scheduler import get_scheduler_status, fetch_inspections_now
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -770,6 +775,192 @@ def update_user_access(user_id):
     conn.close()
 
     return jsonify({"status": "access updated"}), 200
+
+
+# ─────────────────────────────────────────────────────────
+# Scheduled Inspections Endpoints
+# ─────────────────────────────────────────────────────────
+
+@app.route('/api/scheduled_inspections', methods=['GET'])
+@require_auth
+def list_scheduled_inspections():
+    """
+    Get scheduled inspections filtered by jurisdiction and date range.
+
+    Query params:
+      - jurisdiction: Filter by jurisdiction (e.g., "berkeley", "contra_costa")
+      - start_date: Start date YYYY-MM-DD (optional)
+      - end_date: End date YYYY-MM-DD (optional)
+      - limit: Max results (default 100)
+    """
+    jurisdiction = request.args.get('jurisdiction')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    limit = request.args.get('limit', 100, type=int)
+
+    if not jurisdiction:
+        return jsonify({"error": "jurisdiction parameter required"}), 400
+
+    try:
+        inspections = get_inspections_by_jurisdiction(jurisdiction, start_date, end_date)
+        # Limit results
+        inspections = inspections[:limit]
+
+        return jsonify({
+            "jurisdiction": jurisdiction,
+            "count": len(inspections),
+            "inspections": inspections
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error listing inspections: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/leads/<path:lead_id>/scheduled_inspections', methods=['GET'])
+@require_auth
+def get_lead_scheduled_inspections(lead_id):
+    """
+    Get upcoming scheduled inspections for a specific lead.
+
+    Query params:
+      - days: Look ahead N days (default 30)
+    """
+    days = request.args.get('days', 30, type=int)
+
+    try:
+        # lead_id typically is an address or address_key
+        inspections = get_upcoming_inspections(lead_id, days=days)
+
+        return jsonify({
+            "lead_id": lead_id,
+            "days": days,
+            "count": len(inspections),
+            "inspections": inspections
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error getting lead inspections: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/scheduled_inspections', methods=['POST'])
+@require_auth
+def create_scheduled_inspection():
+    """
+    Create or update a scheduled inspection (admin only).
+
+    Request body:
+      {
+        "permit_id": "string",
+        "address": "string",
+        "inspection_date": "YYYY-MM-DD",
+        "inspection_type": "FOUNDATION|FRAMING|ROUGH_MEP|INSULATION|DRYWALL|FINAL",
+        "jurisdiction": "string",
+        "inspector_name": "string (optional)",
+        "time_window_start": "HH:MM (optional)",
+        "time_window_end": "HH:MM (optional)"
+      }
+    """
+    # Check admin permission
+    if not check_permission(g.user_id, "inspections", "create"):
+        return jsonify({"error": "Insufficient permissions"}), 403
+
+    data = request.get_json() or {}
+
+    # Validate required fields
+    required = ["permit_id", "address", "inspection_date", "jurisdiction"]
+    for field in required:
+        if not data.get(field):
+            return jsonify({"error": f"Missing required field: {field}"}), 400
+
+    try:
+        # Prepare inspection data
+        inspection_data = {
+            "permit_id": data.get("permit_id"),
+            "address": data.get("address"),
+            "inspection_date": data.get("inspection_date"),
+            "inspection_type": data.get("inspection_type", "INSPECTION"),
+            "jurisdiction": data.get("jurisdiction"),
+            "inspector_name": data.get("inspector_name"),
+            "time_window_start": data.get("time_window_start"),
+            "time_window_end": data.get("time_window_end"),
+            "status": "SCHEDULED",
+            "gc_presence_probability": data.get("gc_presence_probability", 0.8),
+            "source_url": f"/api/scheduled_inspections (manual)",
+        }
+
+        row_id = insert_scheduled_inspection(inspection_data)
+
+        return jsonify({
+            "id": row_id,
+            "status": "created",
+            "inspection": inspection_data
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Error creating inspection: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────
+# Inspection Scheduler Admin Endpoints
+# ─────────────────────────────────────────────────────────
+
+@app.route('/api/admin/scheduler/status', methods=['GET'])
+@require_auth
+def get_scheduler_status_endpoint():
+    """Get status of the inspection scheduler (admin only)."""
+    if not check_permission(g.user_id, "admin", "view"):
+        return jsonify({"error": "Insufficient permissions"}), 403
+
+    try:
+        status = get_scheduler_status()
+        return jsonify(status), 200
+    except Exception as e:
+        logger.error(f"Error getting scheduler status: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/admin/scheduler/fetch-now', methods=['POST'])
+@require_auth
+def trigger_inspection_fetch():
+    """Manually trigger inspection fetch now (admin only)."""
+    if not check_permission(g.user_id, "admin", "manage"):
+        return jsonify({"error": "Insufficient permissions"}), 403
+
+    try:
+        count = fetch_inspections_now()
+        return jsonify({
+            "status": "completed",
+            "inspections_saved": count,
+            "timestamp": datetime.utcnow().isoformat()
+        }), 200
+    except Exception as e:
+        logger.error(f"Error triggering fetch: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/admin/scheduler/cleanup', methods=['POST'])
+@require_auth
+def trigger_cleanup():
+    """Cleanup old inspection records (admin only)."""
+    if not check_permission(g.user_id, "admin", "manage"):
+        return jsonify({"error": "Insufficient permissions"}), 403
+
+    days = request.get_json().get('older_than_days', 60) if request.get_json() else 60
+
+    try:
+        count = cleanup_old_inspections(older_than_days=days)
+        return jsonify({
+            "status": "completed",
+            "deleted_records": count,
+            "older_than_days": days,
+            "timestamp": datetime.utcnow().isoformat()
+        }), 200
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # ─────────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ Escala: 0-100
 """
 
 import logging
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ _WEIGHTS = {
     "geography":        10,   # Zona demográfica favorable
     "source_type":      10,   # Fuente del lead (permit > solar > rodent > etc.)
     "insulation_signal": 10,  # Señales directas de necesidad de insulación
+    "inspection_timing":  8,  # Próxima inspección programada (nuevo)
 }
 
 
@@ -201,6 +203,31 @@ def score_lead(lead: dict) -> dict:
         reasons.append("Baja eficiencia energética en la zona")
 
     total += min(insulation_signals, 10)
+
+    # ── 8. Inspección próxima (0-8 pts) ──────────────────────────────
+    # Leads con inspecciones próximas merecen prioridad (GC en sitio)
+    next_insp_date = lead.get("next_scheduled_inspection_date")
+    if next_insp_date:
+        try:
+            if isinstance(next_insp_date, str):
+                insp_date = datetime.strptime(next_insp_date[:10], "%Y-%m-%d").date()
+            else:
+                insp_date = next_insp_date
+
+            today = datetime.utcnow().date()
+            days_until = (insp_date - today).days
+
+            if 0 <= days_until <= 7:
+                total += 8
+                reasons.append(f"Inspección en {days_until} días (GC en sitio)")
+            elif days_until <= 14:
+                total += 6
+                reasons.append(f"Inspección en {days_until} días")
+            elif days_until <= 30:
+                total += 4
+                reasons.append(f"Inspección próximo mes")
+        except (ValueError, TypeError, AttributeError):
+            pass
 
     # ── Calcular grado ───────────────────────────────────────────
     score = min(int(total), 100)
