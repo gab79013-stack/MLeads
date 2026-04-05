@@ -17,6 +17,7 @@ Incluye **dashboard multi-usuario** con control de acceso por ciudad/agente, acc
 | Reportes 311 Plagas | SeeClickFix, Socrata, CKAN, Thumbtack | 54 (55 fuentes) | 2 hrs | Roedores/plagas = insulacion danada |
 | Alertas NOAA Inundacion | NOAA Weather API | 13 zonas | 30 min | Agua = crawlspace danado |
 | Construcciones Activas | Socrata, CKAN, BuildZoom | 54 (14 fuentes) | 60 min | Fase framing = insulacion es siguiente paso |
+| **Calendario de Inspecciones** | **PDF (CC, Berkeley) + CKAN (San Jose) + Predicción** | **54 (3 públicos)** | **Daily 9 AM** | **GC estará en sitio próximamente — timing perfecto** |
 | Deconstruccion | Socrata, CKAN, ATTOM | 54 (14 fuentes) | 2 hrs | Demolicion/asbesto = insulacion nueva |
 | Propiedades Vendidas | Socrata (assessor data) | 10 condados | 2 hrs | Nuevo dueno = renovacion probable |
 | Eficiencia Energetica | Socrata (benchmarking) | SF, Oakland, SJ + condados | 6 hrs | Baja eficiencia = oportunidad insulacion |
@@ -58,7 +59,7 @@ Cuando la misma propiedad aparece en multiples agentes (ej: permiso de construcc
 Clustering geografico en tiempo real. Cuando 3+ leads caen dentro de un radio de 500m, genera una alerta de "zona caliente" con link a Google Maps y recomendacion de campana puerta-a-puerta.
 
 ### Lead Scoring (0-100)
-Score automatico basado en: valor del proyecto, tipo de proyecto, calidad de contacto, recencia, geografia, fuente, y senales de insulacion.
+Score automatico basado en: valor del proyecto, tipo de proyecto, calidad de contacto, recencia, geografia, fuente, senales de insulacion, **y proximidad de inspecciones**.
 
 | Score | Grado | Accion |
 |-------|-------|--------|
@@ -67,6 +68,32 @@ Score automatico basado en: valor del proyecto, tipo de proyecto, calidad de con
 | 50-69 | MEDIUM | Seguimiento estandar |
 | 25-49 | COOL | Baja prioridad |
 | 0-24 | COLD | Archivo |
+
+### Calendario de Inspecciones (Nuevo 🆕)
+
+**Integración automática de calendarios públicos para saber cuándo el GC estará en el sitio.**
+
+El sistema ahora enriquece cada lead con información de inspecciones programadas usando:
+
+- **Contra Costa County:** PDF diario (actualizado a las 8:45 AM)
+- **Berkeley:** PDF diario  
+- **San Jose:** Open Data Portal (CKAN API)
+- **Otras ciudades:** Predicción automática basada en fase de construcción
+
+Beneficios:
+- **Timing perfecto:** Contacta al GC cuando esté en el sitio (inspeccion programada)
+- **Score boost:** Leads con inspección < 7 días reciben +8 puntos (🔥 HOT)
+- **Predicción inteligente:** Estima próxima inspección por fase (FOUNDATION → FRAMING → ROUGH_MEP → ...)
+- **Scheduler automático:** Actualiza calendarios diarios a las 9 AM
+
+Endpoints:
+```
+GET  /api/scheduled_inspections?jurisdiction=berkeley
+GET  /api/leads/{id}/scheduled_inspections
+POST /api/admin/scheduler/fetch-now
+```
+
+Ver [CALENDAR_INTEGRATION.md](CALENDAR_INTEGRATION.md) para documentación completa.
 
 ### Multi-Channel Notifications
 - **Telegram** — todos los leads en tiempo real
@@ -530,6 +557,25 @@ python web/init_demo_users.py     # Crear usuarios demo (5 usuarios)
 gunicorn -w 4 -b 0.0.0.0:5000 web_server:app
 ```
 
+### Calendario de Inspecciones (API)
+```bash
+# Listar inspecciones por jurisdiccion
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:5000/api/scheduled_inspections?jurisdiction=berkeley"
+
+# Ver inspecciones proximas para un lead
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:5000/api/leads/{lead_id}/scheduled_inspections"
+
+# Disparar fetch manual (admin)
+curl -X POST -H "Authorization: Bearer <admin_token>" \
+  http://localhost:5000/api/admin/scheduler/fetch-now
+
+# Ver estado del scheduler
+curl -H "Authorization: Bearer <admin_token>" \
+  http://localhost:5000/api/admin/scheduler/status
+```
+
 ### Habilitar/Deshabilitar Agentes
 
 En `.env`, cambia a `false` para desactivar:
@@ -544,6 +590,23 @@ AGENT_REALESTATE=true
 AGENT_ENERGY=true
 AGENT_PLACES=false     # Requiere Google Places API key
 AGENT_YELP=false       # Requiere Yelp API key
+
+# Calendario de Inspecciones (nuevo)
+INSPECTION_SCHEDULER_ENABLED=true  # Scheduler automático @ 9 AM
+```
+
+### Nuevas Dependencias (Calendario)
+
+Las siguientes dependencias se instalan automáticamente con `pip install -r requirements.txt`:
+
+```
+pdfplumber>=0.11        # Parser para PDFs de calendarios (Contra Costa, Berkeley)
+apscheduler>=3.11       # Scheduler para actualizaciones diarias
+```
+
+Si instalas manualmente:
+```bash
+pip install pdfplumber apscheduler
 ```
 
 ---
@@ -584,15 +647,24 @@ Insulleads/
 │
 ├── utils/
 │   ├── db.py                       # SQLite — dedup de leads enviados
-│   ├── web_db.py                   # Schema multi-usuario (12 tablas)
+│   ├── web_db.py                   # Schema multi-usuario (13 tablas)
 │   ├── telegram.py                 # Rate-limited Telegram sender
 │   ├── contacts_loader.py          # 50K+ contactos CSV, fuzzy matching
-│   ├── lead_scoring.py             # Score 0-100 con 7 factores
+│   ├── lead_scoring.py             # Score 0-100 con 8 factores (+ inspecciones)
 │   ├── dedup.py                    # Cross-agent deduplication engine
 │   ├── hot_zones.py                # Geographic clustering (500m radius)
 │   ├── census.py                   # US Census demographics
 │   ├── contact_enrichment.py       # Hunter.io + Apollo.io
-│   └── notifications.py            # SendGrid + WhatsApp + Slack
+│   ├── notifications.py            # SendGrid + WhatsApp + Slack
+│   ├── inspection_calendar_fetchers.py  # PDF + API fetchers (CC, Berkeley, San Jose)
+│   └── inspection_predictor.py     # Predicción de inspecciones por fase
+│
+├── workers/                        # Background tasks & schedulers
+│   └── inspection_scheduler.py     # APScheduler — fetch calendarios diarios @ 9 AM
+│
+├── tests/
+│   ├── test_inspection_calendar.py # Unit tests para fetchers + predictor
+│   └── ...
 │
 ├── contacts/                       # CSVs de contratistas (tu data)
 │   ├── B_CONTACTS_GC.csv
@@ -600,8 +672,10 @@ Insulleads/
 │   ├── Real_State_The_Bay_Area.csv
 │   └── ... (24 archivos CSV)
 │
+├── CALENDAR_INTEGRATION.md         # Documentacion del calendario de inspecciones
+│
 └── data/
-    └── leads.db                    # Auto-creada — leads + usuarios + permisos
+    └── leads.db                    # Auto-creada — leads + usuarios + permisos + inspecciones
 ```
 
 ---
@@ -623,9 +697,17 @@ Insulleads/
 ▸ Telefono GC: +19253820739  (via CSV B_CONTACTS_GC.csv)
 ▸ Email GC: info@bayarearemodeling.com
 ▸ Propietario: John Smith
-▸ Lead Score: 🔥 92/100 (HOT) — Proyecto alto valor | Mencion directa de insulacion
 
-📲 Contacta al GC y ofrece insulacion para el proyecto
+🔥 PROXIMA INSPECCION (NUEVO):
+▸ Fecha: 2026-04-08 (en 3 días)
+▸ Tipo: FRAMING
+▸ Inspector: Jane Smith
+▸ Ventana: 9:00 AM - 12:00 PM
+▸ Fuente: Calendario público de Walnut Creek
+
+▸ Lead Score: 🔥 100/100 (HOT) — Proyecto alto valor | Inspección en 3 días (GC en sitio)
+
+📲 ¡CONTACTA AHORA! GC estará en el sitio el 8/4 — timing perfecto para insulacion
 ```
 
 ---
@@ -709,3 +791,20 @@ Si. Ambos comparten la misma base de datos SQLite sin conflictos. Los agentes es
 
 **Como restrinjo un usuario a solo ciertas ciudades?**
 Al crear el usuario, pasa `city_ids` con los IDs de las ciudades permitidas. Dejar vacio = acceso a todas.
+
+**Que es el Calendario de Inspecciones?**
+Sistema automático que obtiene calendarios de inspecciones públicos (Contra Costa, Berkeley, San Jose) y predice próximas inspecciones para otras ciudades. Cuando una inspección está próxima (< 7 días), el lead recibe un boost de score porque el GC estará en el sitio.
+
+**De donde saca el Calendario de Inspecciones?**
+- **Contra Costa & Berkeley:** PDFs diarios descargados y parseados con pdfplumber
+- **San Jose:** Open Data Portal (CKAN API)
+- **Otras ciudades:** Predicción automática basada en la fase de construcción (FOUNDATION → FRAMING → ROUGH_MEP → INSULATION → DRYWALL → FINAL)
+
+**Con que frecuencia se actualiza el Calendario?**
+Diariamente a las 9:00 AM UTC. Puedes disparar un fetch manual con `POST /api/admin/scheduler/fetch-now`.
+
+**Como afecta el Calendario al Score?**
+Los leads con inspección programada < 7 días reciben +8 puntos extra. Si el score era 80, sube a 88 (WARM → HOT).
+
+**Puedo crear inspecciones manualmente?**
+Si. Admin puede usar `POST /api/scheduled_inspections` para agregar inspecciones de forma manual (util para casos especiales).
