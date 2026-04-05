@@ -176,6 +176,32 @@ def init_web_db():
     """)
 
     # ─────────────────────────────────────────────────────
+    # Scheduled Inspections (public calendar data & predictions)
+    # ─────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS scheduled_inspections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            permit_id TEXT NOT NULL,
+            address TEXT NOT NULL,
+            address_key TEXT,
+            inspection_date DATE NOT NULL,
+            inspection_type TEXT,
+            time_window_start TEXT,
+            time_window_end TEXT,
+            inspector_name TEXT,
+            inspector_id TEXT,
+            jurisdiction TEXT NOT NULL,
+            source_url TEXT,
+            status TEXT DEFAULT 'SCHEDULED',
+            gc_presence_probability REAL DEFAULT 0.8,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            fetched_at TIMESTAMP,
+            UNIQUE(permit_id, inspection_date, jurisdiction)
+        )
+    """)
+
+    # ─────────────────────────────────────────────────────
     # Create indexes for performance
     # ─────────────────────────────────────────────────────
     c.execute("CREATE INDEX IF NOT EXISTS idx_user_roles ON user_roles(user_id)")
@@ -185,6 +211,10 @@ def init_web_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(access_token)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_lead_contacts_user ON lead_contacts(user_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_inspections_permit ON scheduled_inspections(permit_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_inspections_address ON scheduled_inspections(address_key)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_inspections_date ON scheduled_inspections(inspection_date)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_inspections_jurisdiction ON scheduled_inspections(jurisdiction)")
 
     # ─────────────────────────────────────────────────────
     # Insert default roles
@@ -388,3 +418,169 @@ def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+# ─────────────────────────────────────────────────────
+# Scheduled Inspections Helper Functions
+# ─────────────────────────────────────────────────────
+
+def insert_scheduled_inspection(data: dict) -> int:
+    """
+    Insert a scheduled inspection into the database.
+
+    Args:
+        data: Dictionary with inspection fields
+
+    Returns:
+        Row ID of inserted inspection
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        c.execute("""
+            INSERT OR REPLACE INTO scheduled_inspections (
+                permit_id, address, address_key, inspection_date, inspection_type,
+                time_window_start, time_window_end, inspector_name, inspector_id,
+                jurisdiction, source_url, status, gc_presence_probability, fetched_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data.get('permit_id'),
+            data.get('address'),
+            data.get('address_key'),
+            data.get('inspection_date'),
+            data.get('inspection_type'),
+            data.get('time_window_start'),
+            data.get('time_window_end'),
+            data.get('inspector_name'),
+            data.get('inspector_id'),
+            data.get('jurisdiction'),
+            data.get('source_url'),
+            data.get('status', 'SCHEDULED'),
+            data.get('gc_presence_probability', 0.8),
+            data.get('fetched_at', datetime.now()),
+        ))
+
+        conn.commit()
+        return c.lastrowid
+
+    finally:
+        conn.close()
+
+
+def get_upcoming_inspections(address_key: str, days: int = 30) -> list:
+    """
+    Get upcoming inspections for an address within N days.
+
+    Args:
+        address_key: Address key to search
+        days: Number of days in future to search (default 30)
+
+    Returns:
+        List of inspection records
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        c.execute("""
+            SELECT * FROM scheduled_inspections
+            WHERE address_key = ?
+            AND inspection_date >= DATE('now')
+            AND inspection_date <= DATE('now', '+' || ? || ' days')
+            AND status = 'SCHEDULED'
+            ORDER BY inspection_date ASC
+        """, (address_key, days))
+
+        return [dict(row) for row in c.fetchall()]
+
+    finally:
+        conn.close()
+
+
+def get_inspections_by_jurisdiction(jurisdiction: str, start_date: str = None, end_date: str = None) -> list:
+    """
+    Get all scheduled inspections for a jurisdiction within a date range.
+
+    Args:
+        jurisdiction: Jurisdiction name
+        start_date: YYYY-MM-DD format (optional)
+        end_date: YYYY-MM-DD format (optional)
+
+    Returns:
+        List of inspection records
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        if start_date is None:
+            start_date = datetime.now().strftime("%Y-%m-%d")
+        if end_date is None:
+            end_date = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+
+        c.execute("""
+            SELECT * FROM scheduled_inspections
+            WHERE jurisdiction = ?
+            AND inspection_date BETWEEN ? AND ?
+            AND status = 'SCHEDULED'
+            ORDER BY inspection_date ASC
+        """, (jurisdiction, start_date, end_date))
+
+        return [dict(row) for row in c.fetchall()]
+
+    finally:
+        conn.close()
+
+
+def link_inspection_to_lead(inspection_id: int, lead_id: str) -> None:
+    """
+    Link a scheduled inspection to a lead (via address_key matching).
+    This is typically done during lead enrichment.
+
+    Args:
+        inspection_id: Inspection record ID
+        lead_id: Lead ID (usually address_key)
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        # Update inspection with address_key matching
+        c.execute("""
+            UPDATE scheduled_inspections
+            SET address_key = ?
+            WHERE id = ?
+        """, (lead_id, inspection_id))
+
+        conn.commit()
+
+    finally:
+        conn.close()
+
+
+def cleanup_old_inspections(older_than_days: int = 60) -> int:
+    """
+    Delete old inspection records (older than N days).
+
+    Args:
+        older_than_days: Delete inspections older than this many days
+
+    Returns:
+        Number of deleted records
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        c.execute("""
+            DELETE FROM scheduled_inspections
+            WHERE inspection_date < DATE('now', '-' || ? || ' days')
+            AND status IN ('COMPLETED', 'CANCELLED')
+        """, (older_than_days,))
+
+        conn.commit()
+        return c.rowcount
+
+    finally:
+        conn.close()

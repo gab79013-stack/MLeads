@@ -34,6 +34,8 @@ from utils.telegram import send_lead
 from utils.contacts_loader import load_all_contacts, lookup_contact
 from utils.lead_scoring import score_lead, format_score_line
 from utils.notifications import notify_multichannel
+from utils.inspection_predictor import predict_next_inspection, estimate_gc_presence
+from utils.web_db import get_upcoming_inspections
 
 logger = logging.getLogger(__name__)
 
@@ -731,6 +733,32 @@ class ConstructionAgent(BaseAgent):
                                 lead["contact_phone"]  = match.get("phone", "")
                                 lead["contact_email"]  = match.get("email", "")
                                 lead["contact_source"] = f"CSV ({match['source']})"
+
+                        # Enriquecer con información de inspecciones programadas
+                        try:
+                            # Buscar inspecciones públicas programadas
+                            address_key = addr  # Usar dirección como key
+                            upcoming = get_upcoming_inspections(address_key, days=30)
+
+                            if upcoming:
+                                # Usar la próxima inspección pública
+                                next_insp = upcoming[0]
+                                lead["next_scheduled_inspection_date"] = next_insp.get("inspection_date")
+                                lead["next_inspection_type"] = next_insp.get("inspection_type")
+                                lead["gc_likely_on_site_date"] = next_insp.get("inspection_date")
+                                lead["inspection_source"] = "public_calendar"
+                                lead["_gc_presence_probability"] = next_insp.get("gc_presence_probability", 0.85)
+                            else:
+                                # Fallback: Predecir próxima inspección
+                                prediction = predict_next_inspection(lead)
+                                if prediction:
+                                    lead["next_scheduled_inspection_date"] = prediction["estimated_date"]
+                                    lead["next_inspection_type"] = prediction["inspection_type"]
+                                    lead["gc_likely_on_site_date"] = prediction["estimated_date"]
+                                    lead["inspection_source"] = "prediction"
+                                    lead["_gc_presence_probability"] = prediction.get("gc_probability", 0.6)
+                        except Exception as e:
+                            logger.warning(f"Error enriching inspection data for {addr}: {e}")
 
                         # Lead scoring
                         scoring = score_lead(lead)
