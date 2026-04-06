@@ -904,7 +904,22 @@
 
                 <!-- INSPECTIONS VIEW -->
                 <div class="view" id="inspections-view">
-                    <h3 style="margin-bottom: 20px; color: var(--text-dark);">Scheduled Inspections</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3 style="margin: 0; color: var(--text-dark);">Scheduled Inspections</h3>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <div style="display: flex; gap: 8px;">
+                                <select id="inspectionDaysFilter" style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 5px; font-size: 13px;">
+                                    <option value="">All Dates</option>
+                                    <option value="7">Next 7 Days</option>
+                                    <option value="14">Next 14 Days</option>
+                                    <option value="30">Next 30 Days</option>
+                                    <option value="60">Next 60 Days</option>
+                                </select>
+                                <button id="refreshInspectionsBtn" style="padding: 6px 12px; background-color: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 13px;">🔄 Refresh</button>
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-light);" id="lastFetchedTime">Last fetched: --</div>
+                        </div>
+                    </div>
                     <div class="table-container">
                         <table>
                             <thead>
@@ -913,11 +928,12 @@
                                     <th>Jurisdiction</th>
                                     <th>Inspection Type</th>
                                     <th>Date</th>
+                                    <th>Days Until</th>
                                     <th>GC Probability</th>
                                 </tr>
                             </thead>
                             <tbody id="inspectionsTableBody">
-                                <tr><td colspan="5" style="text-align: center; color: var(--text-light);">Loading...</td></tr>
+                                <tr><td colspan="6" style="text-align: center; color: var(--text-light);">Loading...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1199,6 +1215,43 @@
             });
         });
 
+        // Inspection view filters and controls
+        const inspectionDaysFilter = document.getElementById('inspectionDaysFilter');
+        if (inspectionDaysFilter) {
+            inspectionDaysFilter.addEventListener('change', loadInspections);
+        }
+
+        const refreshInspectionsBtn = document.getElementById('refreshInspectionsBtn');
+        if (refreshInspectionsBtn) {
+            refreshInspectionsBtn.addEventListener('click', async () => {
+                refreshInspectionsBtn.disabled = true;
+                refreshInspectionsBtn.textContent = '⏳ Fetching...';
+                try {
+                    const response = await fetch('/api/admin/scheduler/fetch-now', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                    });
+                    if (response.ok) {
+                        await loadInspections();
+                        // Update last fetched time
+                        const now = new Date();
+                        const timeStr = now.toLocaleTimeString();
+                        document.getElementById('lastFetchedTime').textContent = `Last fetched: ${timeStr}`;
+                        refreshInspectionsBtn.textContent = '🔄 Refresh';
+                    } else {
+                        alert('Failed to refresh inspections');
+                        refreshInspectionsBtn.textContent = '🔄 Refresh';
+                    }
+                } catch (e) {
+                    console.error('Error refreshing inspections:', e);
+                    alert('Error refreshing inspections');
+                    refreshInspectionsBtn.textContent = '🔄 Refresh';
+                } finally {
+                    refreshInspectionsBtn.disabled = false;
+                }
+            });
+        }
+
         // Logout
         document.getElementById('logoutBtn').addEventListener('click', () => {
             localStorage.removeItem('access_token');
@@ -1387,6 +1440,9 @@
 
         async function loadInspections() {
             try {
+                // Get filter values
+                const daysFilter = document.getElementById('inspectionDaysFilter').value;
+
                 // Get jurisdiction from user's first city or default to berkeley
                 const userResponse = await fetch('/api/user', {
                     headers: { 'Authorization': `Bearer ${currentAccessToken}` }
@@ -1394,25 +1450,57 @@
                 const user = await userResponse.json();
                 const jurisdiction = user.cities && user.cities[0] ? user.cities[0].name.toLowerCase() : 'berkeley';
 
-                const response = await fetch(`/api/scheduled_inspections?jurisdiction=${jurisdiction}`, {
+                let url = `/api/scheduled_inspections?jurisdiction=${jurisdiction}`;
+                if (daysFilter) {
+                    url += `&days=${daysFilter}`;
+                }
+
+                const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${currentAccessToken}` }
                 });
                 const data = await response.json();
                 const inspections = data.inspections || [];
                 const tbody = document.getElementById('inspectionsTableBody');
+
                 if (inspections.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No inspections for ' + jurisdiction + '</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No inspections found</td></tr>';
                     return;
                 }
-                tbody.innerHTML = inspections.map(insp => `
-                    <tr>
-                        <td>${insp.address}</td>
-                        <td>${insp.jurisdiction}</td>
-                        <td>${insp.inspection_type || '-'}</td>
-                        <td>${insp.inspection_date}</td>
-                        <td>${(insp.gc_presence_probability * 100).toFixed(0)}%</td>
-                    </tr>
-                `).join('');
+
+                // Helper function to calculate days until inspection
+                function daysUntil(inspectionDate) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const insp = new Date(inspectionDate);
+                    insp.setHours(0, 0, 0, 0);
+                    const diff = insp - today;
+                    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+                }
+
+                // Helper function for GC probability color
+                function getGCProbColor(prob) {
+                    if (prob >= 0.8) return '#04844b';  // green
+                    if (prob >= 0.6) return '#ffb81c';  // warm
+                    return '#6b7280';  // gray
+                }
+
+                tbody.innerHTML = inspections.map(insp => {
+                    const daysDiff = daysUntil(insp.inspection_date);
+                    const probPercent = (insp.gc_presence_probability * 100).toFixed(0);
+                    const probColor = getGCProbColor(insp.gc_presence_probability);
+                    const daysDisplay = daysDiff < 0 ? 'Overdue' : daysDiff === 0 ? 'Today' : daysDiff === 1 ? 'Tomorrow' : `${daysDiff}d`;
+
+                    return `
+                        <tr onclick="showLeadPanel('${insp.address}');" style="cursor: pointer;">
+                            <td>${insp.address}</td>
+                            <td>${insp.jurisdiction}</td>
+                            <td>${insp.inspection_type || '-'}</td>
+                            <td>${insp.inspection_date}</td>
+                            <td><span style="background: ${probColor}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px;">${daysDisplay}</span></td>
+                            <td><span style="color: ${probColor}; font-weight: 500;">${probPercent}%</span></td>
+                        </tr>
+                    `;
+                }).join('');
             } catch (e) {
                 console.error('Error loading inspections:', e);
             }

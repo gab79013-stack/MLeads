@@ -285,6 +285,7 @@ def list_leads():
     min_score = request.args.get('min_score', 0, type=int)
     min_value = request.args.get('min_value', 0, type=int)
     status = request.args.get('status', 'all')  # all, new, contacted, pending
+    inspection_days = request.args.get('inspection_days', type=int)  # Filter leads with upcoming inspections within N days
     page = request.args.get('page', 1, type=int)
     per_page = 100
 
@@ -346,6 +347,14 @@ def list_leads():
     elif status == 'new':
         where_clauses.append("NOT EXISTS (SELECT 1 FROM lead_contacts WHERE lead_id = l.address_key AND user_id = ?)")
         params.append(user_id)
+
+    # Inspection days filter (leads with upcoming inspections within N days)
+    if inspection_days and inspection_days > 0:
+        where_clauses.append("""
+            CAST(json_extract(l.lead_data, '$.next_scheduled_inspection_date') AS DATE)
+            BETWEEN date('now') AND date('now', '+' || ? || ' days')
+        """)
+        params.append(inspection_days)
 
     where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
 
@@ -415,6 +424,9 @@ def list_leads():
             'service_type': service_type,
             'service_label': service_info.get('label', ''),
             'service_emoji': service_info.get('emoji', ''),
+            'next_inspection_date': lead_data.get('next_scheduled_inspection_date', ''),
+            'inspection_source': lead_data.get('inspection_source', ''),
+            'gc_presence_probability': lead_data.get('_gc_presence_probability', 0),
         }
 
         leads.append(lead)
@@ -492,6 +504,7 @@ def get_lead(lead_id):
         'scoring_reasons': scoring.get('reasons', []),
         'next_inspection_date': lead_data.get('next_scheduled_inspection_date'),
         'inspection_source': lead_data.get('inspection_source', 'none'),
+        'gc_presence_probability': lead_data.get('_gc_presence_probability', 0),
         'service_type': row_dict.get('primary_service_type'),
         'service_label': service_label,
         'service_emoji': service_emoji,
@@ -500,7 +513,7 @@ def get_lead(lead_id):
     # Try to find upcoming inspection from public calendar
     try:
         c.execute("""
-            SELECT inspection_date, inspection_type, jurisdiction
+            SELECT inspection_date, inspection_type, jurisdiction, gc_presence_probability
             FROM scheduled_inspections
             WHERE address = ? AND inspection_date >= date('now')
             ORDER BY inspection_date ASC
@@ -510,6 +523,7 @@ def get_lead(lead_id):
         if insp_row:
             lead['next_inspection_date'] = insp_row[0]
             lead['inspection_source'] = 'public_calendar'
+            lead['gc_presence_probability'] = insp_row[3] if insp_row[3] else 0
     except Exception as e:
         logger.debug(f"Could not fetch scheduled inspection: {e}")
 
