@@ -868,6 +868,7 @@
                                 <tr>
                                     <th>Address</th>
                                     <th>City</th>
+                                    <th>Service</th>
                                     <th>Contact</th>
                                     <th>Score</th>
                                     <th>Agent</th>
@@ -875,7 +876,7 @@
                                 </tr>
                             </thead>
                             <tbody id="leadsTableBody">
-                                <tr><td colspan="6" class="empty-state">No leads found</td></tr>
+                                <tr><td colspan="7" class="empty-state">No leads found</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1049,6 +1050,7 @@
 
             <div class="panel-section">
                 <div class="panel-section-title">Project Details</div>
+                <div class="panel-field"><div class="panel-label">Service Type</div><div class="panel-value" id="panelServiceType"></div></div>
                 <div class="panel-field"><div class="panel-label">Source</div><div class="panel-value" id="panelSource"></div></div>
                 <div class="panel-field"><div class="panel-label">Next Inspection</div><div class="panel-value" id="panelInspection"></div></div>
                 <div class="panel-field"><div class="panel-label">Inspection Source</div><div class="panel-value" id="panelInspectionSource"></div></div>
@@ -1327,22 +1329,25 @@
                 const tbody = document.getElementById('leadsTableBody');
 
                 if (leads.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No leads found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No leads found</td></tr>';
                     return;
                 }
 
                 tbody.innerHTML = leads.map(lead => `
-                    <tr class="lead-row" onclick="showLeadPanel('${lead.address_key}')">
+                    <tr class="lead-row" onclick="showLeadPanel('${lead.id}')">
                         <td>${lead.address}</td>
                         <td>${lead.city}</td>
                         <td>
+                            ${lead.service_emoji ? `<span title="${lead.service_label}">${lead.service_emoji} ${lead.service_label}</span>` : '-'}
+                        </td>
+                        <td>
                             <div class="contact-info">
-                                ${lead.phone ? `<div class="contact-item"><span class="icon-small">📞</span>${lead.phone}</div>` : ''}
-                                ${lead.email ? `<div class="contact-item"><span class="icon-small">📧</span>${lead.email}</div>` : ''}
+                                ${lead.contact_phone ? `<div class="contact-item"><span class="icon-small">📞</span>${lead.contact_phone}</div>` : ''}
+                                ${lead.contact_email ? `<div class="contact-item"><span class="icon-small">📧</span>${lead.contact_email}</div>` : ''}
                             </div>
                         </td>
                         <td><span class="badge ${getScoreBadge(lead.score)}">${lead.score}</span></td>
-                        <td>${lead.agent_sources || '-'}</td>
+                        <td>${lead.source || '-'}</td>
                         <td>${lead.next_inspection_date ? `<span class="inspection-badge">📅 ${lead.next_inspection_date}</span>` : '-'}</td>
                     </tr>
                 `).join('');
@@ -1433,6 +1438,10 @@
                 document.getElementById('panelEmail').textContent = lead.contact_email || '-';
 
                 // Populate project details section
+                const serviceDisplay = lead.service_emoji && lead.service_label
+                    ? `${lead.service_emoji} ${lead.service_label}`
+                    : (lead.service_type || '-');
+                document.getElementById('panelServiceType').textContent = serviceDisplay;
                 document.getElementById('panelSource').textContent = lead.source || '-';
                 document.getElementById('panelInspection').textContent = lead.next_inspection_date || '-';
                 document.getElementById('panelInspectionSource').textContent = lead.inspection_source || '-';

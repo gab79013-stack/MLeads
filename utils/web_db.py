@@ -99,11 +99,32 @@ def init_web_db():
         )
     """)
 
+    # Migration: add tier_status column to cities
+    try:
+        c.execute("SELECT tier_status FROM cities LIMIT 1")
+    except sqlite3.OperationalError:
+        c.execute("ALTER TABLE cities ADD COLUMN tier_status TEXT DEFAULT 'Emerging'")
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS agents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE NOT NULL,
             description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # ─────────────────────────────────────────────────────
+    # Phase 2e: Service Types (from agents)
+    # ─────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS service_types (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            display_label TEXT NOT NULL,
+            emoji TEXT,
+            description TEXT,
+            category TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -230,6 +251,12 @@ def init_web_db():
             notified INTEGER DEFAULT 0
         )
     """)
+
+    # Migration: add primary_service_type column to consolidated_leads
+    try:
+        c.execute("SELECT primary_service_type FROM consolidated_leads LIMIT 1")
+    except sqlite3.OperationalError:
+        c.execute("ALTER TABLE consolidated_leads ADD COLUMN primary_service_type TEXT")
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS property_signals (
@@ -382,6 +409,14 @@ def init_web_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_activity_feed_user_id ON activity_feed(user_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_activity_feed_created_at ON activity_feed(created_at)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_export_logs_user_id ON export_logs(user_id)")
+
+    # Phase 2e: Service Types & Cities
+    c.execute("CREATE INDEX IF NOT EXISTS idx_service_types_name ON service_types(name)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_service_types_category ON service_types(category)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cities_state ON cities(state)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cities_county ON cities(county)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cities_tier ON cities(tier_status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_consolidated_leads_service ON consolidated_leads(primary_service_type)")
 
     # ─────────────────────────────────────────────────────
     # Insert default roles
@@ -548,6 +583,39 @@ def seed_cities_and_agents():
         ("Vacaville", "CA", "Solano"),
         ("Vallejo", "CA", "Solano"),
         ("Walnut Creek", "CA", "Contra Costa"),
+
+        # New US Cities - Phase 2e Expansion
+        # Tier 1A: Elite Markets
+        ("Los Angeles", "CA", "Los Angeles"),
+        ("New York City", "NY", "New York"),
+        ("Chicago", "IL", "Cook"),
+        ("Houston", "TX", "Harris"),
+        ("Austin", "TX", "Travis"),
+        ("Dallas", "TX", "Dallas"),
+        ("Seattle", "WA", "King"),
+        ("Atlanta", "GA", "Fulton"),
+
+        # Tier 1B: High Volume Markets
+        ("Phoenix", "AZ", "Maricopa"),
+        ("Miami", "FL", "Miami-Dade"),
+        ("Denver", "CO", "Denver"),
+        ("Boston", "MA", "Suffolk"),
+        ("San Diego", "CA", "San Diego"),
+        ("Philadelphia", "PA", "Philadelphia"),
+        ("Charlotte", "NC", "Mecklenburg"),
+        ("Raleigh", "NC", "Wake"),
+        ("Portland", "OR", "Multnomah"),
+
+        # Tier 1C: Secondary Markets
+        ("Sacramento", "CA", "Sacramento"),
+        ("Minneapolis", "MN", "Hennepin"),
+        ("Washington", "DC", "District of Columbia"),
+        ("Tampa", "FL", "Hillsborough"),
+        ("Las Vegas", "NV", "Clark"),
+        ("Pasadena", "CA", "Los Angeles"),
+        ("Long Beach", "CA", "Los Angeles"),
+        ("Tucson", "AZ", "Pima"),
+        ("San Antonio", "TX", "Bexar"),
     ]
 
     for city_name, state, county in cities:
@@ -575,6 +643,69 @@ def seed_cities_and_agents():
             "INSERT OR IGNORE INTO agents (name, description) VALUES (?, ?)",
             (agent_name, description),
         )
+
+    # ─────────────────────────────────────────────────────
+    # Phase 2e: Insert Service Types with emoji and categories
+    # ─────────────────────────────────────────────────────
+    service_types = [
+        ("permits", "Building Permits", "🏗️", "Building and demolition permits", "building"),
+        ("solar", "Solar Installation", "☀️", "Solar installation leads", "green"),
+        ("energy", "Energy Efficiency", "⚡", "Energy efficiency programs", "green"),
+        ("rodents", "Pest Control", "🐭", "Pest control and rodent complaints", "maintenance"),
+        ("construction", "Construction", "👷", "Active construction projects", "building"),
+        ("realestate", "Real Estate", "🏠", "Real estate sales and transfers", "real_estate"),
+        ("flood", "Water Damage", "💧", "Flood and water damage reports", "maintenance"),
+        ("deconstruction", "Demolition", "💥", "Deconstruction and demolition projects", "demolition"),
+        ("yelp", "Business Directory", "⭐", "Business directory and reviews", "information"),
+        ("places", "Business Licenses", "📍", "Business licenses and permits", "information"),
+    ]
+
+    for name, label, emoji, description, category in service_types:
+        c.execute(
+            "INSERT OR IGNORE INTO service_types (name, display_label, emoji, description, category) VALUES (?, ?, ?, ?, ?)",
+            (name, label, emoji, description, category),
+        )
+
+    # ─────────────────────────────────────────────────────
+    # Phase 2e: Update city tier_status based on tier rankings
+    # ─────────────────────────────────────────────────────
+    tier_assignments = {
+        "Elite": [
+            "San Francisco", "Los Angeles", "New York City", "Chicago", "Houston",
+            "Austin", "Dallas", "Seattle", "Atlanta"
+        ],
+        "Prime": [
+            "Phoenix", "Miami", "Denver", "Boston", "San Diego", "Philadelphia",
+            "Charlotte", "Raleigh", "Portland"
+        ],
+        "Strong": [
+            "Sacramento", "Minneapolis", "Washington", "Tampa", "Las Vegas",
+            "Pasadena", "Long Beach", "Tucson", "San Antonio"
+        ],
+        "Solid": [
+            "Fremont", "Oakland", "San Jose"
+        ],
+        "Growth": [
+            # Remaining CA Bay Area cities
+            "Alameda", "Albany", "Antioch", "Benicia", "Berkeley", "Brentwood",
+            "Campbell", "Clayton", "Concord", "Daly City", "Danville", "Dublin",
+            "East Palo Alto", "Fairfield", "Gilroy", "Hayward", "Hercules",
+            "Hillsborough", "Livermore", "Los Altos", "Los Gatos", "Martinez",
+            "Menlo Park", "Milpitas", "Moraga", "Morgan Hill", "Mountain View",
+            "Napa", "Newark", "Novato", "Oakley", "Orinda", "Pacifica", "Palo Alto",
+            "Petaluma", "Piedmont", "Pinole", "Pittsburg", "Pleasanton",
+            "Redwood City", "Richmond", "San Leandro", "San Mateo", "San Rafael",
+            "Santa Clara", "Santa Cruz", "Saratoga", "Sonoma", "Sunnyvale",
+            "Vacaville", "Vallejo", "Walnut Creek"
+        ]
+    }
+
+    for tier, cities_in_tier in tier_assignments.items():
+        for city_name in cities_in_tier:
+            c.execute(
+                "UPDATE cities SET tier_status = ? WHERE name = ?",
+                (tier, city_name),
+            )
 
     conn.commit()
     conn.close()

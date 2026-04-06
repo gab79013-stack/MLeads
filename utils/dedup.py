@@ -234,13 +234,16 @@ class DeduplicationEngine:
         import json
         try:
             with self._get_conn() as conn:
+                # Extract primary_service_type from the first agent (primary source)
+                primary_service_type = agents[0] if agents else None
+
                 conn.execute("""
                     INSERT OR REPLACE INTO consolidated_leads
-                    (address_key, address, city, agent_sources, first_seen, last_updated, lead_data, notified)
+                    (address_key, address, city, agent_sources, first_seen, last_updated, lead_data, notified, primary_service_type)
                     VALUES (?, ?, ?, ?, COALESCE(
                         (SELECT first_seen FROM consolidated_leads WHERE address_key = ?),
                         ?
-                    ), ?, ?, 0)
+                    ), ?, ?, 0, ?)
                 """, (
                     addr_key,
                     lead.get("address", ""),
@@ -250,6 +253,7 @@ class DeduplicationEngine:
                     datetime.utcnow().isoformat(),
                     datetime.utcnow().isoformat(),
                     json.dumps(lead, default=str),
+                    primary_service_type,
                 ))
                 conn.commit()
         except Exception as e:

@@ -357,7 +357,7 @@ def list_leads():
     offset = (page - 1) * per_page
     c.execute(f"""
         SELECT l.address_key, l.address, l.city, l.agent_sources,
-               l.first_seen, l.last_updated, l.lead_data
+               l.first_seen, l.last_updated, l.lead_data, l.primary_service_type
         FROM consolidated_leads l
         WHERE {where_sql}
         ORDER BY l.last_updated DESC
@@ -379,6 +379,10 @@ def list_leads():
         """, [user_id] + lead_ids)
         contacted_leads = {row[0] for row in c.fetchall()}
 
+    # Fetch all service types in one query (fixes N+1 problem)
+    c.execute("SELECT name, display_label, emoji FROM service_types")
+    service_types_map = {row[0]: {'label': row[1], 'emoji': row[2]} for row in c.fetchall()}
+
     leads = []
     for row in rows:
         row_dict = dict(row)
@@ -388,6 +392,10 @@ def list_leads():
             lead_data = json.loads(row_dict.get('lead_data', '{}') or '{}')
         except Exception:
             pass
+
+        # Get service type information
+        service_type = row_dict.get('primary_service_type') or (row_dict['agent_sources'].split(',')[0] if row_dict['agent_sources'] else None)
+        service_info = service_types_map.get(service_type, {})
 
         scoring = lead_data.get('_scoring', {})
         lead = {
@@ -404,6 +412,9 @@ def list_leads():
             'contact_phone': lead_data.get('contact_phone', ''),
             'contact_email': lead_data.get('contact_email', ''),
             'contacted': row_dict['address_key'] in contacted_leads,
+            'service_type': service_type,
+            'service_label': service_info.get('label', ''),
+            'service_emoji': service_info.get('emoji', ''),
         }
 
         leads.append(lead)
@@ -432,7 +443,7 @@ def get_lead(lead_id):
     c = conn.cursor()
 
     c.execute("""
-        SELECT address_key, address, city, agent_sources, first_seen, last_updated, lead_data
+        SELECT address_key, address, city, agent_sources, first_seen, last_updated, lead_data, primary_service_type
         FROM consolidated_leads
         WHERE address_key = ?
     """, (lead_id,))
@@ -449,6 +460,19 @@ def get_lead(lead_id):
         lead_data = json.loads(row_dict.get('lead_data', '{}') or '{}')
     except Exception:
         pass
+
+    # Get service type information
+    c.execute("SELECT display_label, emoji FROM service_types WHERE name = ?", (row_dict.get('primary_service_type'),))
+    service_row = c.fetchone()
+    service_label = service_row[0] if service_row else ''
+    service_emoji = service_row[1] if service_row else ''
+    if not (service_label and service_emoji) and row_dict['agent_sources']:
+        # Fallback to first agent if primary_service_type not found
+        first_agent = row_dict['agent_sources'].split(',')[0]
+        c.execute("SELECT display_label, emoji FROM service_types WHERE name = ?", (first_agent,))
+        service_row = c.fetchone()
+        service_label = service_row[0] if service_row else ''
+        service_emoji = service_row[1] if service_row else ''
 
     scoring = lead_data.get('_scoring', {})
     lead = {
@@ -468,6 +492,9 @@ def get_lead(lead_id):
         'scoring_reasons': scoring.get('reasons', []),
         'next_inspection_date': lead_data.get('next_scheduled_inspection_date'),
         'inspection_source': lead_data.get('inspection_source', 'none'),
+        'service_type': row_dict.get('primary_service_type'),
+        'service_label': service_label,
+        'service_emoji': service_emoji,
     }
 
     # Try to find upcoming inspection from public calendar
