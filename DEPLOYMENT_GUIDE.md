@@ -1,360 +1,138 @@
-# MLeads Dashboard - Deployment Guide
+# MLeads Dashboard - Deployment & Testing Guide
 
-## Status
+## Quick Start (Local Development)
 
-✅ **Implementation Complete**
-- Salesforce-style dashboard UI with collapsible sidebar
-- Inspection calendar integration (Contra Costa, Berkeley, San Jose)
-- Multi-user authentication system
-- Lead management and scoring
-- Automated inspection scheduler
-
----
-
-## Droplet Deployment (Quick Start)
-
-### On Your Droplet (as root):
-
+### 1. Install Dependencies
 ```bash
-# 1. Navigate to project directory
-cd /home/mleads/MLeads
-
-# 2. Fetch latest code from git
-git fetch origin claude/check-lead-calendar-integration-K0AOx
-git checkout claude/check-lead-calendar-integration-K0AOx
-git pull origin claude/check-lead-calendar-integration-K0AOx
-
-# 3. Run automated deployment
-bash deploy.sh
+pip install -r requirements.txt
+python scripts/init_test_user.py
 ```
 
-The `deploy.sh` script will:
-- ✓ Verify all required files exist
-- ✓ Install/update Python dependencies
-- ✓ Stop the old web service
-- ✓ Kill lingering processes
-- ✓ Start the new service
-- ✓ Verify the service is listening
-- ✓ Test the dashboard endpoint
+### 2. Run Development Server
+```bash
+python web_server.py
+```
 
----
+The dashboard is now available at `http://localhost:5001/`
+- Login page: `http://localhost:5001/login.html`
+- Default credentials: `admin` / `admin123`
 
-## Manual Deployment (Step by Step)
+## Production Deployment on DigitalOcean
 
 ### Prerequisites
+- Fresh Ubuntu 20.04+ droplet (minimum 1GB RAM, 1 CPU recommended)
+- SSH access to the droplet
+
+### Automated Deployment
+
+Run the deployment script from your local machine:
+
 ```bash
-# Ensure you have Python 3 and pip installed
-python3 --version
-pip3 --version
-
-# Create and activate virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
+bash scripts/deploy_to_droplet.sh 159.223.199.152
 ```
 
-### Database Setup
+This will:
+1. Pull the latest code
+2. Install dependencies
+3. Restart the application
+4. Verify the service is running
+
+### Manual Deployment
+
+SSH into the droplet:
 ```bash
-# Initialize database (if not exists)
-python3 -c "
-from utils.web_db import init_web_db, seed_cities_and_agents
-init_web_db()
-seed_cities_and_agents()
-print('✓ Database initialized')
-"
+ssh mleads@<droplet_ip>
 ```
 
-### Start the Web Server
+Then run:
 ```bash
-# Option 1: Development server (for testing)
-python3 web_server.py
-
-# Option 2: Production with gunicorn (recommended)
-gunicorn --workers 4 --bind 0.0.0.0:5001 --timeout 30 web_server:app
-```
-
-### Using systemd Service (Recommended)
-```bash
-# Service file should already exist at:
-# /etc/systemd/system/mleads-web.service
-
-# Start service
-sudo systemctl start mleads-web
-sudo systemctl enable mleads-web  # Auto-start on reboot
-
-# Check status
-sudo systemctl status mleads-web
-
-# View logs
-sudo journalctl -u mleads-web -f  # Follow logs in real-time
-```
-
----
-
-## Verification Checklist
-
-### 1. Service Status
-```bash
-sudo systemctl status mleads-web
-# Should show: ● mleads-web.service - MLeads Web Server
-#              Loaded: loaded
-#              Active: active (running)
-```
-
-### 2. Port Binding
-```bash
-sudo netstat -tuln | grep -E ":5001|:5000"
-# Should show: tcp  0  0  0.0.0.0:5001  0.0.0.0:*  LISTEN
-```
-
-### 3. Dashboard Access
-```bash
-# From droplet
-curl http://localhost:5001/
-
-# Should return HTML containing: "MLeads Dashboard"
-```
-
-### 4. API Endpoints
-```bash
-# Get scheduler status
-curl http://localhost:5001/api/scheduler/status
-
-# Response should include:
-# {
-#   "running": true,
-#   "jobs": [
-#     {"id": "fetch_inspections_daily", "name": "Daily inspection fetch", ...},
-#     {"id": "cleanup_inspections_weekly", "name": "Weekly cleanup", ...}
-#   ]
-# }
-```
-
----
-
-## Features Implemented
-
-### Dashboard Features
-- ✅ Salesforce-style UI with collapsible sidebar
-- ✅ Multi-view navigation (Dashboard, Leads, Users, Inspections, Settings)
-- ✅ Lead filtering and search
-- ✅ Real-time lead scoring with visual indicators
-- ✅ Contact information display
-- ✅ Audit log tracking
-
-### Inspection Calendar Integration
-- ✅ **Contra Costa County** - PDF + Accela API
-- ✅ **Berkeley** - PDF + Accela Citizen Access
-- ✅ **San Jose** - Open Data CKAN API
-- ✅ Automatic daily fetching (9:00 AM)
-- ✅ Weekly cleanup of old records (Monday 2:00 AM)
-- ✅ Fallback prediction model for unsupported jurisdictions
-
-### Authentication & Authorization
-- ✅ JWT token-based authentication
-- ✅ User role management (admin, agent, supervisor)
-- ✅ City and agent assignments per user
-- ✅ Token refresh mechanism
-- ✅ Audit trail logging
-
-### Database
-- ✅ SQLite database with proper schema
-- ✅ `consolidated_leads` table with full lead information
-- ✅ `scheduled_inspections` table for calendar data
-- ✅ User authentication and role management
-- ✅ Audit log table for tracking activity
-
----
-
-## Troubleshooting
-
-### Issue: Service fails to start
-```bash
-# Check logs
-sudo journalctl -u mleads-web -n 50 --no-pager
-
-# Common causes:
-# - ModuleNotFoundError: Missing web/app.py (should be fixed by git pull)
-# - Port already in use: Check what's using 5000/5001
-#   sudo netstat -tuln | grep LISTEN
-#   sudo lsof -i :5001
-# - Database locked: Check if another process is using the DB
-```
-
-### Issue: Dashboard shows old UI
-```bash
-# Clear browser cache and hard refresh (Ctrl+Shift+R or Cmd+Shift+R)
-# Or open in private/incognito window
-
-# Verify correct file is being served:
-curl http://localhost:5001/ | grep -o "MLeads Dashboard\|Insurleads Dashboard"
-# Should show: MLeads Dashboard
-```
-
-### Issue: Inspection calendar not updating
-```bash
-# Check scheduler status
-curl http://localhost:5001/api/scheduler/status
-
-# Manually trigger fetch
-curl -X POST http://localhost:5001/api/inspections/fetch_now
-
-# Check logs for fetcher errors
-sudo journalctl -u mleads-web | grep -i "fetch\|inspection"
-```
-
-### Issue: Port already in use
-```bash
-# Find what's using the port
-sudo lsof -i :5001
-
-# Kill any old processes
-sudo pkill -f "gunicorn.*mleads"
-sudo pkill -f "python.*web_server"
-
-# Restart service
+cd /home/mleads/MLeads
+git fetch origin
+git checkout claude/check-lead-calendar-integration-K0AOx
+git pull origin claude/check-lead-calendar-integration-K0AOx
+pip install --upgrade -r requirements.txt
+python scripts/init_test_user.py
 sudo systemctl restart mleads-web
 ```
 
----
+## Testing the Dashboard
 
-## Environment Variables
+### 1. Access the Dashboard
+Navigate to: `http://<droplet_ip>/`
 
-Optional environment variables in `.env` file:
+### 2. Login
+- Click "Login" in the top navigation
+- Enter credentials (default: `admin` / `admin123`)
+- You should see the main dashboard
 
-```bash
-# Web server configuration
-PORT=5001                          # Port to run on (default: 5001)
-FLASK_DEBUG=false                  # Debug mode (default: false)
-FLASK_ENV=production               # Environment (development/production)
+### 3. Test Dashboard View
+The Dashboard view shows:
+- Total leads count
+- Contacted leads count
+- Recent leads table (top 5)
+- Click on any lead to open the side panel
 
-# Database
-DATABASE_PATH=/home/mleads/mleads.db   # SQLite database location
+**Expected behavior:**
+- Count should match the number of leads in the database
+- Table should display recent leads with scores and inspection dates
+- Click on a lead row to open side panel
 
-# Inspection calendar
-INSPECTION_FETCH_HOUR=9            # Hour to fetch inspections (0-23)
-INSPECTION_CLEANUP_DAYS=60         # Delete inspections older than N days
+### 4. Test Leads View
+Click on "Leads" in the sidebar
+- Filter by city (dropdown)
+- Filter by agent (dropdown)
+- Filter by minimum score (slider)
+- Click "Search" to apply filters
+- Click "Reset" to clear filters
 
-# Authentication
-SECRET_KEY=your-secret-key         # Flask secret key (required in production)
-JWT_EXPIRATION_HOURS=24            # JWT token expiration
-```
+**Expected behavior:**
+- Table should display all leads matching filters
+- Each row shows address, city, contact info, score, agent, and next inspection
+- Click on any lead to open the side panel with full details
 
----
+### 5. Test Lead Details (Side Panel)
+Click on any lead in the Leads view
+- Side panel should open on the right
+- Display fields:
+  - Address, City, Score, Estimated Value
+  - Contractor, Phone, Email
+  - Source, Next Inspection, Inspection Source
 
-## Performance Tuning
+**Expected behavior:**
+- All fields should populate with data from the API
+- "Mark as Contacted" button should work
+- Close button should close the panel
 
-### For Production Deployment
-```bash
-# Use more workers based on CPU cores
-gunicorn --workers 4 --worker-class sync --bind 0.0.0.0:5001 web_server:app
+### 6. Test Users View
+Click on "Users" in the sidebar
+- Table shows all users with: username, email, full_name, roles, status
+- "Add User" button opens modal
 
-# Or with async workers
-pip install gunicorn[gevent]
-gunicorn --workers 4 --worker-class gevent --bind 0.0.0.0:5001 web_server:app
+**Expected behavior:**
+- Table should display all users in the system
+- Add User modal should allow creating new users
+- Edit button exists
 
-# Monitor resource usage
-watch -n 1 "ps aux | grep gunicorn | grep -v grep"
-```
+### 7. Test Inspections View
+Click on "Inspections" in the sidebar
+- Table shows upcoming inspections for your city
+- Displays: Address, Jurisdiction, Type, Date, GC Probability
 
-### Database Optimization
-```bash
-# Run VACUUM to optimize database
-sqlite3 /home/mleads/mleads.db VACUUM
+**Expected behavior:**
+- Table should populate with inspection calendar data for your city
+- If no inspections, show "No inspections for [city]" message
+- GC Probability shows as percentage
 
-# Create indexes for faster queries
-sqlite3 /home/mleads/mleads.db << EOF
-CREATE INDEX IF NOT EXISTS idx_leads_address ON consolidated_leads(address);
-CREATE INDEX IF NOT EXISTS idx_leads_city ON consolidated_leads(city);
-CREATE INDEX IF NOT EXISTS idx_inspections_date ON scheduled_inspections(inspection_date);
-EOF
-```
+## Features Checklist - Phase 1 (Current)
 
----
-
-## Monitoring
-
-### Real-time Log Monitoring
-```bash
-# Follow service logs
-sudo journalctl -u mleads-web -f
-
-# Filter by error level
-sudo journalctl -u mleads-web -p err -f
-
-# Show logs from last hour
-sudo journalctl -u mleads-web --since "1 hour ago"
-```
-
-### Health Check Script
-```bash
-#!/bin/bash
-echo "MLeads Service Health Check"
-echo "============================="
-
-# Check service status
-if systemctl is-active --quiet mleads-web; then
-    echo "✓ Service is running"
-else
-    echo "✗ Service is NOT running"
-    exit 1
-fi
-
-# Check port
-if netstat -tuln | grep -q ":5001"; then
-    echo "✓ Port 5001 is listening"
-else
-    echo "✗ Port 5001 is NOT listening"
-    exit 1
-fi
-
-# Check API response
-if curl -s http://localhost:5001/ | grep -q "MLeads"; then
-    echo "✓ Dashboard is responding"
-else
-    echo "✗ Dashboard is NOT responding"
-    exit 1
-fi
-
-echo "All checks passed!"
-```
-
----
-
-## Rollback
-
-If something breaks, you can rollback to the previous version:
-
-```bash
-# Check git history
-git log --oneline -5
-
-# Checkout previous commit
-git checkout <previous-commit-sha>
-
-# Restart service
-sudo systemctl restart mleads-web
-
-# Or switch to main branch
-git checkout main
-git pull origin main
-sudo systemctl restart mleads-web
-```
-
----
-
-## Support
-
-For issues or questions:
-1. Check the logs: `sudo journalctl -u mleads-web`
-2. Verify files exist: `ls -la web/app.py web_server.py`
-3. Test database: `sqlite3 mleads.db ".tables"`
-4. Verify branch: `git branch --show-current`
-
----
-
-**Last Updated:** 2026-04-06
-**Branch:** claude/check-lead-calendar-integration-K0AOx
-**Status:** Ready for Production
+- [x] User authentication with JWT tokens
+- [x] Dashboard with lead counts and preview
+- [x] Leads view with filtering
+- [x] Lead detail side panel
+- [x] Contact history display
+- [x] Notes functionality
+- [x] Scheduled inspections calendar view
+- [x] Mark leads as contacted
+- [x] User management (list/view)
+- [ ] User management (edit/delete) - Phase 2
+- [ ] Settings page - Phase 2
