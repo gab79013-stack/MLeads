@@ -9,6 +9,7 @@ REST API endpoints for:
 """
 
 import os
+import json
 import logging
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, g, send_file
@@ -85,6 +86,11 @@ def catch_all(filename):
     """Catch all routes and serve dashboard for SPA routing."""
     if filename.endswith('.json') or filename.startswith('api'):
         return jsonify({"error": "Not found"}), 404
+    # Check if user has valid token before serving dashboard
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token and filename not in ['login.html', '']:
+        # If no token and not login page, let JavaScript redirect to login
+        pass
     return index()
 
 
@@ -339,14 +345,28 @@ def list_leads():
         LIMIT ? OFFSET ?
     """, params + [per_page, offset])
 
-    import json as json_mod
+
+    # Fetch all rows
+    rows = c.fetchall()
+
+    # Get all contacted leads for this user in one query (fixes N+1 problem)
+    lead_ids = [row['address_key'] for row in rows]
+    contacted_leads = set()
+    if lead_ids:
+        placeholders = ','.join('?' * len(lead_ids))
+        c.execute(f"""
+            SELECT DISTINCT lead_id FROM lead_contacts
+            WHERE user_id = ? AND lead_id IN ({placeholders})
+        """, [user_id] + lead_ids)
+        contacted_leads = {row[0] for row in c.fetchall()}
+
     leads = []
-    for row in c.fetchall():
+    for row in rows:
         row_dict = dict(row)
         # Parse lead_data JSON for display fields
         lead_data = {}
         try:
-            lead_data = json_mod.loads(row_dict.get('lead_data', '{}') or '{}')
+            lead_data = json.loads(row_dict.get('lead_data', '{}') or '{}')
         except Exception:
             pass
 
@@ -364,14 +384,8 @@ def list_leads():
             'contractor': lead_data.get('contractor', ''),
             'contact_phone': lead_data.get('contact_phone', ''),
             'contact_email': lead_data.get('contact_email', ''),
+            'contacted': row_dict['address_key'] in contacted_leads,
         }
-
-        # Check if user has contacted this lead
-        c.execute("""
-            SELECT COUNT(*) FROM lead_contacts
-            WHERE lead_id = ? AND user_id = ?
-        """, (lead['id'], user_id))
-        lead['contacted'] = c.fetchone()[0] > 0
 
         leads.append(lead)
 
@@ -395,7 +409,6 @@ def get_lead(lead_id):
     if not check_permission(user_id, "leads", "view"):
         return jsonify({"error": "Permission denied"}), 403
 
-    import json as json_mod
     conn = get_db_connection()
     c = conn.cursor()
 
@@ -414,7 +427,7 @@ def get_lead(lead_id):
     row_dict = dict(row)
     lead_data = {}
     try:
-        lead_data = json_mod.loads(row_dict.get('lead_data', '{}') or '{}')
+        lead_data = json.loads(row_dict.get('lead_data', '{}') or '{}')
     except Exception:
         pass
 
@@ -687,19 +700,27 @@ def create_user():
                     VALUES (?, ?)
                 """, (user_id, role[0]))
 
-        # Assign city access
+        # Assign city access (validate city_ids exist)
         for city_id in city_ids:
-            c.execute("""
-                INSERT INTO user_city_access (user_id, city_id)
-                VALUES (?, ?)
-            """, (user_id, city_id))
+            c.execute("SELECT id FROM cities WHERE id = ?", (city_id,))
+            if c.fetchone():
+                c.execute("""
+                    INSERT INTO user_city_access (user_id, city_id)
+                    VALUES (?, ?)
+                """, (user_id, city_id))
+            else:
+                logger.warning(f"City ID {city_id} does not exist, skipping")
 
-        # Assign agent access
+        # Assign agent access (validate agent_ids exist)
         for agent_id in agent_ids:
-            c.execute("""
-                INSERT INTO user_agent_access (user_id, agent_id)
-                VALUES (?, ?)
-            """, (user_id, agent_id))
+            c.execute("SELECT id FROM agents WHERE id = ?", (agent_id,))
+            if c.fetchone():
+                c.execute("""
+                    INSERT INTO user_agent_access (user_id, agent_id)
+                    VALUES (?, ?)
+                """, (user_id, agent_id))
+            else:
+                logger.warning(f"Agent ID {agent_id} does not exist, skipping")
 
         conn.commit()
         conn.close()
@@ -794,18 +815,26 @@ def update_user_access(user_id):
     c.execute("DELETE FROM user_city_access WHERE user_id = ?", (user_id,))
     c.execute("DELETE FROM user_agent_access WHERE user_id = ?", (user_id,))
 
-    # Set new access
+    # Set new access (validate IDs exist)
     for city_id in city_ids:
-        c.execute("""
-            INSERT INTO user_city_access (user_id, city_id)
-            VALUES (?, ?)
-        """, (user_id, city_id))
+        c.execute("SELECT id FROM cities WHERE id = ?", (city_id,))
+        if c.fetchone():
+            c.execute("""
+                INSERT INTO user_city_access (user_id, city_id)
+                VALUES (?, ?)
+            """, (user_id, city_id))
+        else:
+            logger.warning(f"City ID {city_id} does not exist, skipping")
 
     for agent_id in agent_ids:
-        c.execute("""
-            INSERT INTO user_agent_access (user_id, agent_id)
-            VALUES (?, ?)
-        """, (user_id, agent_id))
+        c.execute("SELECT id FROM agents WHERE id = ?", (agent_id,))
+        if c.fetchone():
+            c.execute("""
+                INSERT INTO user_agent_access (user_id, agent_id)
+                VALUES (?, ?)
+            """, (user_id, agent_id))
+        else:
+            logger.warning(f"Agent ID {agent_id} does not exist, skipping")
 
     conn.commit()
     conn.close()

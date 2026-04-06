@@ -202,6 +202,34 @@ def init_web_db():
     """)
 
     # ─────────────────────────────────────────────────────
+    # Consolidated Leads & Property Signals
+    # ─────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS consolidated_leads (
+            address_key TEXT PRIMARY KEY,
+            address TEXT NOT NULL,
+            city TEXT NOT NULL,
+            agent_sources TEXT NOT NULL,
+            first_seen TEXT NOT NULL,
+            last_updated TEXT NOT NULL,
+            lead_data TEXT NOT NULL,
+            notified INTEGER DEFAULT 0
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS property_signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            address_key TEXT NOT NULL,
+            agent_key TEXT NOT NULL,
+            signal_type TEXT NOT NULL,
+            signal_data TEXT,
+            detected_at TEXT NOT NULL,
+            UNIQUE(address_key, agent_key, signal_type)
+        )
+    """)
+
+    # ─────────────────────────────────────────────────────
     # Create indexes for performance
     # ─────────────────────────────────────────────────────
     c.execute("CREATE INDEX IF NOT EXISTS idx_user_roles ON user_roles(user_id)")
@@ -215,6 +243,10 @@ def init_web_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_inspections_address ON scheduled_inspections(address_key)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_inspections_date ON scheduled_inspections(inspection_date)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_inspections_jurisdiction ON scheduled_inspections(jurisdiction)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_inspections_jurisdiction_date ON scheduled_inspections(jurisdiction, inspection_date)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_consolidated_leads_city ON consolidated_leads(city)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_property_signals_address ON property_signals(address_key)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_property_signals_agent ON property_signals(agent_key)")
 
     # ─────────────────────────────────────────────────────
     # Insert default roles
@@ -573,10 +605,11 @@ def cleanup_old_inspections(older_than_days: int = 60) -> int:
     c = conn.cursor()
 
     try:
+        # Delete old inspections that are either completed/cancelled OR are old scheduled inspections
         c.execute("""
             DELETE FROM scheduled_inspections
             WHERE inspection_date < DATE('now', '-' || ? || ' days')
-            AND status IN ('COMPLETED', 'CANCELLED')
+            AND (status IN ('COMPLETED', 'CANCELLED') OR status = 'SCHEDULED')
         """, (older_than_days,))
 
         conn.commit()

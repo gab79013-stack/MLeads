@@ -63,7 +63,7 @@ class ScheduledInspectionFetcher:
 
     def __init__(self):
         self.session = requests.Session()
-        self.session.timeout = 30
+        self.request_timeout = 30  # Timeout for HTTP requests (seconds)
 
     def fetch(self) -> List[ScheduledInspection]:
         """Fetch scheduled inspections. Must be implemented by subclasses."""
@@ -317,7 +317,8 @@ class SanJoseFetcher(ScheduledInspectionFetcher):
             inspection_date = self._parse_date(date_str)
             if not inspection_date:
                 # If no date, estimate next inspection (14 days from today)
-                inspection_date = date.today()
+                from datetime import timedelta
+                inspection_date = date.today() + timedelta(days=14)
 
             # Guess inspection type from work description
             inspection_type = self._guess_inspection_type(work_desc)
