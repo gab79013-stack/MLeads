@@ -24,7 +24,9 @@ from web.auth import (
     get_user_permissions, get_user_cities, get_user_agents,
     check_permission, revoke_token, AuthError
 )
-from workers.inspection_scheduler import get_scheduler_status, fetch_inspections_now
+from workers.inspection_scheduler import (
+    start_inspection_scheduler, get_scheduler_status, fetch_inspections_now
+)
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -971,6 +973,13 @@ def create_app():
     """Application factory."""
     init_web_db()
     seed_cities_and_agents()
+
+    # Start the inspection scheduler for automatic calendar updates
+    try:
+        start_inspection_scheduler()
+    except Exception as e:
+        logger.warning(f"Failed to start inspection scheduler: {e}")
+
     return app
 
 
