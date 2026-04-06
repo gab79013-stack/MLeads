@@ -27,6 +27,53 @@
             --bg-white: #ffffff;
         }
 
+        /* Dark theme */
+        body.dark-theme {
+            --text-dark: #e5e7eb;
+            --text-light: #9ca3af;
+            --border: #374151;
+            --bg-light: #111827;
+            --bg-white: #1f2937;
+            --primary-light: #1e3a8a;
+        }
+
+        body.dark-theme {
+            background: var(--bg-light) !important;
+            color: var(--text-dark);
+        }
+
+        body.dark-theme .sidebar,
+        body.dark-theme .modal-content,
+        body.dark-theme .side-panel,
+        body.dark-theme input[type="text"],
+        body.dark-theme input[type="email"],
+        body.dark-theme input[type="password"],
+        body.dark-theme input[type="number"],
+        body.dark-theme select,
+        body.dark-theme textarea {
+            background: var(--bg-white);
+            color: var(--text-dark);
+            border-color: var(--border);
+        }
+
+        body.dark-theme .main-content {
+            background: var(--bg-light);
+        }
+
+        body.dark-theme table {
+            background: var(--bg-white);
+            color: var(--text-dark);
+        }
+
+        body.dark-theme table thead {
+            background: var(--primary-dark);
+            color: white;
+        }
+
+        body.dark-theme table tbody tr:hover {
+            background: var(--primary-light);
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: var(--bg-light);
@@ -865,10 +912,101 @@
 
                 <!-- SETTINGS VIEW -->
                 <div class="view" id="settings-view">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">⚙️</div>
-                        <h3>Settings</h3>
-                        <p>Settings coming soon...</p>
+                    <div style="max-width: 800px; margin: 0 auto; padding: 20px;">
+                        <h1 style="margin-bottom: 30px;">Settings</h1>
+
+                        <!-- Appearance Section -->
+                        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h3 style="margin-top: 0; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">🎨 Appearance</h3>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Theme</label>
+                                <div style="display: flex; gap: 10px;">
+                                    <button id="themeLightBtn" style="padding: 8px 15px; border: 2px solid var(--border); border-radius: 5px; background: white; cursor: pointer; flex: 1;">☀️ Light</button>
+                                    <button id="themeDarkBtn" style="padding: 8px 15px; border: 2px solid var(--border); border-radius: 5px; background: white; cursor: pointer; flex: 1;">🌙 Dark</button>
+                                </div>
+                            </div>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Items Per Page</label>
+                                <input type="number" id="settingsItemsPerPage" min="10" max="500" value="100" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 5px;">
+                            </div>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Default Sort Column</label>
+                                <select id="settingsDefaultSort" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 5px;">
+                                    <option value="last_updated">Last Updated</option>
+                                    <option value="address">Address (A-Z)</option>
+                                    <option value="score">Score (High to Low)</option>
+                                    <option value="created_at">Recently Added</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Notifications Section -->
+                        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h3 style="margin-top: 0; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">🔔 Notifications</h3>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                                    <input type="checkbox" id="settingsNotificationsEnabled" checked>
+                                    <span style="margin-left: 10px;">Enable notifications</span>
+                                </label>
+                            </div>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                                    <input type="checkbox" id="settingsNotifyNewLeads" checked>
+                                    <span style="margin-left: 10px;">Notify about new leads</span>
+                                </label>
+                            </div>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                                    <input type="checkbox" id="settingsNotifyInspections">
+                                    <span style="margin-left: 10px;">Notify about scheduled inspections</span>
+                                </label>
+                            </div>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email Digest Frequency</label>
+                                <select id="settingsNotifyFrequency" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 5px;">
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="disabled">Disabled</option>
+                                </select>
+                            </div>
+
+                            <button id="testNotificationBtn" style="padding: 8px 15px; background-color: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer;">Test Notification</button>
+                        </div>
+
+                        <!-- Export History Section -->
+                        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h3 style="margin-top: 0; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">📥 Export History</h3>
+
+                            <div id="exportHistoryContainer" style="max-height: 300px; overflow-y: auto;">
+                                <p style="color: var(--text-light); text-align: center; padding: 20px;">Loading export history...</p>
+                            </div>
+                        </div>
+
+                        <!-- Account Section -->
+                        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h3 style="margin-top: 0; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">👤 Account</h3>
+
+                            <div id="accountInfo" style="margin-bottom: 20px; padding: 15px; background-color: var(--primary-light); border-radius: 5px;">
+                                <p style="margin: 5px 0;"><strong>Username:</strong> <span id="accountUsername">-</span></p>
+                                <p style="margin: 5px 0;"><strong>Email:</strong> <span id="accountEmail">-</span></p>
+                                <p style="margin: 5px 0;"><strong>Member Since:</strong> <span id="accountCreated">-</span></p>
+                            </div>
+
+                            <button id="changePasswordBtn" style="padding: 8px 15px; background-color: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px;">Change Password</button>
+                            <button id="logoutAllBtn" style="padding: 8px 15px; background-color: var(--warning); color: white; border: none; border-radius: 5px; cursor: pointer;">Logout All Sessions</button>
+                        </div>
+
+                        <!-- Save Button -->
+                        <div style="text-align: center; margin-top: 30px;">
+                            <button id="saveSettingsBtn" style="padding: 10px 30px; background-color: var(--success); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Save All Settings</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1033,6 +1171,7 @@
                 if (viewName === 'leads') loadLeads();
                 if (viewName === 'users') loadUsers();
                 if (viewName === 'inspections') loadInspections();
+                if (viewName === 'settings') loadSettings();
             });
         });
 
@@ -1428,6 +1567,124 @@
             if (score >= 20) return 'badge-cool';
             return 'badge-cold';
         }
+
+        // ─────────────────────────────────────────────────────
+        // SETTINGS PAGE FUNCTIONS
+        // ─────────────────────────────────────────────────────
+
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/settings', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const data = await response.json();
+                const user = data.user;
+                const prefs = data.preferences;
+                const exports = data.exports;
+
+                // Load theme
+                const savedTheme = localStorage.getItem('theme') || 'light';
+                applyTheme(savedTheme);
+
+                // Populate account info
+                document.getElementById('accountUsername').textContent = user.username;
+                document.getElementById('accountEmail').textContent = user.email;
+                document.getElementById('accountCreated').textContent = new Date(user.created_at).toLocaleDateString();
+
+                // Load preferences
+                document.getElementById('settingsItemsPerPage').value = prefs.items_per_page || 100;
+                document.getElementById('settingsDefaultSort').value = prefs.default_sort || 'last_updated';
+                document.getElementById('settingsNotificationsEnabled').checked = prefs.notifications_enabled;
+                document.getElementById('settingsNotifyNewLeads').checked = prefs.notify_new_leads;
+                document.getElementById('settingsNotifyInspections').checked = prefs.notify_inspections;
+                document.getElementById('settingsNotifyFrequency').value = prefs.notify_frequency || 'daily';
+
+                // Load export history
+                const exportContainer = document.getElementById('exportHistoryContainer');
+                if (exports.length === 0) {
+                    exportContainer.innerHTML = '<p style="color: var(--text-light); text-align: center; padding: 20px;">No exports yet</p>';
+                } else {
+                    exportContainer.innerHTML = exports.map(exp => `
+                        <div style="padding: 10px; border-bottom: 1px solid var(--border);">
+                            <p style="margin: 0; font-weight: 500;">${exp.export_name || 'Export'}</p>
+                            <p style="margin: 5px 0; font-size: 0.9em; color: var(--text-light);">
+                                ${exp.record_count} records • ${new Date(exp.created_at).toLocaleString()}
+                            </p>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                console.error('Error loading settings:', e);
+            }
+        }
+
+        function applyTheme(theme) {
+            const isDark = theme === 'dark';
+            if (isDark) {
+                document.body.classList.add('dark-theme');
+                document.getElementById('themeDarkBtn').style.borderColor = 'var(--primary)';
+                document.getElementById('themeLightBtn').style.borderColor = 'var(--border)';
+            } else {
+                document.body.classList.remove('dark-theme');
+                document.getElementById('themeLightBtn').style.borderColor = 'var(--primary)';
+                document.getElementById('themeDarkBtn').style.borderColor = 'var(--border)';
+            }
+            localStorage.setItem('theme', theme);
+        }
+
+        async function saveSettings() {
+            try {
+                const theme = document.body.classList.contains('dark-theme') ? 'dark' : 'light';
+
+                const prefs = {
+                    theme: theme,
+                    items_per_page: parseInt(document.getElementById('settingsItemsPerPage').value),
+                    default_sort: document.getElementById('settingsDefaultSort').value,
+                    notifications_enabled: document.getElementById('settingsNotificationsEnabled').checked,
+                    notify_new_leads: document.getElementById('settingsNotifyNewLeads').checked,
+                    notify_inspections: document.getElementById('settingsNotifyInspections').checked,
+                    notify_frequency: document.getElementById('settingsNotifyFrequency').value
+                };
+
+                const response = await fetch('/api/settings/preferences', {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${currentAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(prefs)
+                });
+
+                if (response.ok) {
+                    alert('Settings saved successfully!');
+                } else {
+                    alert('Failed to save settings');
+                }
+            } catch (e) {
+                console.error('Error saving settings:', e);
+                alert('Error saving settings');
+            }
+        }
+
+        // Theme buttons
+        document.addEventListener('DOMContentLoaded', () => {
+            if (document.getElementById('themeLightBtn')) {
+                document.getElementById('themeLightBtn').addEventListener('click', () => applyTheme('light'));
+                document.getElementById('themeDarkBtn').addEventListener('click', () => applyTheme('dark'));
+                document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+                document.getElementById('testNotificationBtn').addEventListener('click', () => {
+                    alert('Notification test sent! (feature coming soon)');
+                });
+                document.getElementById('changePasswordBtn').addEventListener('click', () => {
+                    alert('Password change feature coming soon');
+                });
+                document.getElementById('logoutAllBtn').addEventListener('click', () => {
+                    if (confirm('Are you sure? All your sessions will be logged out.')) {
+                        alert('Logout all sessions feature coming soon');
+                    }
+                });
+            }
+        });
 
         // Initial load
         if (!currentAccessToken) {
