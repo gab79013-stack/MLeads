@@ -1550,12 +1550,12 @@ def get_lead_notes(lead_id):
             conn.close()
             return jsonify([]), 200
 
-        # Get notes
+        # Get notes (exclude soft-deleted)
         c.execute("""
-            SELECT ln.id, ln.note, ln.created_at, u.username
+            SELECT ln.id, ln.note, ln.created_at, ln.updated_at, u.username
             FROM lead_notes ln
             JOIN users u ON ln.user_id = u.id
-            WHERE ln.lead_id = ?
+            WHERE ln.lead_id = ? AND (ln.is_deleted = 0 OR ln.is_deleted IS NULL)
             ORDER BY ln.created_at DESC
         """, (lead_id,))
 
@@ -1564,7 +1564,8 @@ def get_lead_notes(lead_id):
                 "id": row[0],
                 "note": row[1],
                 "created_at": row[2],
-                "user": row[3]
+                "updated_at": row[3],
+                "user": row[4]
             }
             for row in c.fetchall()
         ]
@@ -1632,6 +1633,230 @@ def create_lead_note(lead_id):
         logger.error(f"Error creating note: {e}")
         conn.close()
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/leads/<path:lead_id>/notes/<int:note_id>', methods=['PUT'])
+@require_auth
+def update_lead_note(lead_id, note_id):
+    """Update a note on a lead."""
+    user_id = g.user_id
+
+    if not check_permission(user_id, "leads", "contact"):
+        return jsonify({"error": "Permission denied"}), 403
+
+    data = request.get_json() or {}
+    note_text = data.get('note', '').strip()
+
+    if not note_text:
+        return jsonify({"error": "Note cannot be empty"}), 400
+
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        # Verify note exists and belongs to correct lead
+        c.execute("""
+            SELECT user_id FROM lead_notes
+            WHERE id = ? AND lead_id = ?
+        """, (note_id, lead_id))
+
+        note_row = c.fetchone()
+        if not note_row:
+            conn.close()
+            return jsonify({"error": "Note not found"}), 404
+
+        # Update note
+        c.execute("""
+            UPDATE lead_notes
+            SET note = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND lead_id = ?
+        """, (note_text, note_id, lead_id))
+
+        conn.commit()
+        conn.close()
+
+        # Log action
+        log_audit(user_id, "update_note", "lead", lead_id, f"Updated note {note_id}")
+
+        return jsonify({
+            "id": note_id,
+            "note": note_text,
+            "updated_at": datetime.utcnow().isoformat()
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error updating note: {e}")
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/leads/<path:lead_id>/notes/<int:note_id>', methods=['DELETE'])
+@require_auth
+def delete_lead_note(lead_id, note_id):
+    """Delete a note from a lead (soft delete)."""
+    user_id = g.user_id
+
+    if not check_permission(user_id, "leads", "contact"):
+        return jsonify({"error": "Permission denied"}), 403
+
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        # Verify note exists
+        c.execute("""
+            SELECT id FROM lead_notes
+            WHERE id = ? AND lead_id = ?
+        """, (note_id, lead_id))
+
+        if not c.fetchone():
+            conn.close()
+            return jsonify({"error": "Note not found"}), 404
+
+        # Soft delete
+        c.execute("""
+            UPDATE lead_notes
+            SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND lead_id = ?
+        """, (note_id, lead_id))
+
+        conn.commit()
+        conn.close()
+
+        # Log action
+        log_audit(user_id, "delete_note", "lead", lead_id, f"Deleted note {note_id}")
+
+        return jsonify({"status": "deleted", "note_id": note_id}), 200
+
+    except Exception as e:
+        logger.error(f"Error deleting note: {e}")
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────
+# Saved Lead Views Endpoints
+# ─────────────────────────────────────────────────────────
+
+@app.route('/api/leads/views', methods=['GET'])
+@require_auth
+def get_lead_views():
+    """Get user's saved lead filter views."""
+    from utils.web_db import get_user_lead_views
+
+    user_id = g.user_id
+    views = get_user_lead_views(user_id)
+
+    return jsonify(views), 200
+
+
+@app.route('/api/leads/views', methods=['POST'])
+@require_auth
+def create_lead_view():
+    """Create a new saved lead filter view."""
+    from utils.web_db import save_lead_view
+
+    user_id = g.user_id
+    data = request.get_json() or {}
+
+    name = data.get('name', '').strip()
+    filters = data.get('filters', {})
+    is_default = data.get('is_default', False)
+
+    if not name:
+        return jsonify({"error": "View name is required"}), 400
+
+    view_id = save_lead_view(user_id, name, filters, is_default)
+
+    if not view_id:
+        return jsonify({"error": "View name already exists"}), 409
+
+    # Log action
+    log_audit(user_id, "create_view", "lead_view", str(view_id),
+             f"Created view: {name}")
+
+    return jsonify({
+        "id": view_id,
+        "name": name,
+        "filters": filters,
+        "is_default": is_default
+    }), 201
+
+
+@app.route('/api/leads/views/<int:view_id>', methods=['PUT'])
+@require_auth
+def update_lead_view(view_id):
+    """Update a saved lead view."""
+    user_id = g.user_id
+    data = request.get_json() or {}
+
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        # Verify view exists and belongs to user
+        c.execute("""
+            SELECT name FROM lead_views
+            WHERE id = ? AND user_id = ?
+        """, (view_id, user_id))
+
+        if not c.fetchone():
+            conn.close()
+            return jsonify({"error": "View not found"}), 404
+
+        # Update fields
+        updates = []
+        values = []
+
+        if 'name' in data:
+            updates.append("name = ?")
+            values.append(data['name'])
+
+        if 'filters' in data:
+            import json
+            updates.append("filters = ?")
+            values.append(json.dumps(data['filters']))
+
+        if 'is_default' in data:
+            updates.append("is_default = ?")
+            values.append(int(data['is_default']))
+
+        if updates:
+            values.extend([view_id, user_id])
+            query = f"UPDATE lead_views SET {', '.join(updates)} WHERE id = ? AND user_id = ?"
+            c.execute(query, values)
+
+        conn.commit()
+        conn.close()
+
+        # Log action
+        log_audit(user_id, "update_view", "lead_view", str(view_id),
+                 f"Updated view {view_id}")
+
+        return jsonify({"status": "updated", "view_id": view_id}), 200
+
+    except Exception as e:
+        logger.error(f"Error updating view: {e}")
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/leads/views/<int:view_id>', methods=['DELETE'])
+@require_auth
+def delete_lead_view(view_id):
+    """Delete a saved lead view."""
+    from utils.web_db import delete_lead_view
+
+    user_id = g.user_id
+
+    if delete_lead_view(view_id, user_id):
+        # Log action
+        log_audit(user_id, "delete_view", "lead_view", str(view_id),
+                 f"Deleted view {view_id}")
+
+        return jsonify({"status": "deleted", "view_id": view_id}), 200
+    else:
+        return jsonify({"error": "View not found"}), 404
 
 
 # ─────────────────────────────────────────────────────────
