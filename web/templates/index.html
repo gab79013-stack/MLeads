@@ -27,6 +27,53 @@
             --bg-white: #ffffff;
         }
 
+        /* Dark theme */
+        body.dark-theme {
+            --text-dark: #e5e7eb;
+            --text-light: #9ca3af;
+            --border: #374151;
+            --bg-light: #111827;
+            --bg-white: #1f2937;
+            --primary-light: #1e3a8a;
+        }
+
+        body.dark-theme {
+            background: var(--bg-light) !important;
+            color: var(--text-dark);
+        }
+
+        body.dark-theme .sidebar,
+        body.dark-theme .modal-content,
+        body.dark-theme .side-panel,
+        body.dark-theme input[type="text"],
+        body.dark-theme input[type="email"],
+        body.dark-theme input[type="password"],
+        body.dark-theme input[type="number"],
+        body.dark-theme select,
+        body.dark-theme textarea {
+            background: var(--bg-white);
+            color: var(--text-dark);
+            border-color: var(--border);
+        }
+
+        body.dark-theme .main-content {
+            background: var(--bg-light);
+        }
+
+        body.dark-theme table {
+            background: var(--bg-white);
+            color: var(--text-dark);
+        }
+
+        body.dark-theme table thead {
+            background: var(--primary-dark);
+            color: white;
+        }
+
+        body.dark-theme table tbody tr:hover {
+            background: var(--primary-light);
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: var(--bg-light);
@@ -865,10 +912,101 @@
 
                 <!-- SETTINGS VIEW -->
                 <div class="view" id="settings-view">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">⚙️</div>
-                        <h3>Settings</h3>
-                        <p>Settings coming soon...</p>
+                    <div style="max-width: 800px; margin: 0 auto; padding: 20px;">
+                        <h1 style="margin-bottom: 30px;">Settings</h1>
+
+                        <!-- Appearance Section -->
+                        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h3 style="margin-top: 0; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">🎨 Appearance</h3>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Theme</label>
+                                <div style="display: flex; gap: 10px;">
+                                    <button id="themeLightBtn" style="padding: 8px 15px; border: 2px solid var(--border); border-radius: 5px; background: white; cursor: pointer; flex: 1;">☀️ Light</button>
+                                    <button id="themeDarkBtn" style="padding: 8px 15px; border: 2px solid var(--border); border-radius: 5px; background: white; cursor: pointer; flex: 1;">🌙 Dark</button>
+                                </div>
+                            </div>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Items Per Page</label>
+                                <input type="number" id="settingsItemsPerPage" min="10" max="500" value="100" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 5px;">
+                            </div>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Default Sort Column</label>
+                                <select id="settingsDefaultSort" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 5px;">
+                                    <option value="last_updated">Last Updated</option>
+                                    <option value="address">Address (A-Z)</option>
+                                    <option value="score">Score (High to Low)</option>
+                                    <option value="created_at">Recently Added</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Notifications Section -->
+                        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h3 style="margin-top: 0; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">🔔 Notifications</h3>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                                    <input type="checkbox" id="settingsNotificationsEnabled" checked>
+                                    <span style="margin-left: 10px;">Enable notifications</span>
+                                </label>
+                            </div>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                                    <input type="checkbox" id="settingsNotifyNewLeads" checked>
+                                    <span style="margin-left: 10px;">Notify about new leads</span>
+                                </label>
+                            </div>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                                    <input type="checkbox" id="settingsNotifyInspections">
+                                    <span style="margin-left: 10px;">Notify about scheduled inspections</span>
+                                </label>
+                            </div>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email Digest Frequency</label>
+                                <select id="settingsNotifyFrequency" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 5px;">
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="disabled">Disabled</option>
+                                </select>
+                            </div>
+
+                            <button id="testNotificationBtn" style="padding: 8px 15px; background-color: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer;">Test Notification</button>
+                        </div>
+
+                        <!-- Export History Section -->
+                        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h3 style="margin-top: 0; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">📥 Export History</h3>
+
+                            <div id="exportHistoryContainer" style="max-height: 300px; overflow-y: auto;">
+                                <p style="color: var(--text-light); text-align: center; padding: 20px;">Loading export history...</p>
+                            </div>
+                        </div>
+
+                        <!-- Account Section -->
+                        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h3 style="margin-top: 0; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">👤 Account</h3>
+
+                            <div id="accountInfo" style="margin-bottom: 20px; padding: 15px; background-color: var(--primary-light); border-radius: 5px;">
+                                <p style="margin: 5px 0;"><strong>Username:</strong> <span id="accountUsername">-</span></p>
+                                <p style="margin: 5px 0;"><strong>Email:</strong> <span id="accountEmail">-</span></p>
+                                <p style="margin: 5px 0;"><strong>Member Since:</strong> <span id="accountCreated">-</span></p>
+                            </div>
+
+                            <button id="changePasswordBtn" style="padding: 8px 15px; background-color: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px;">Change Password</button>
+                            <button id="logoutAllBtn" style="padding: 8px 15px; background-color: var(--warning); color: white; border: none; border-radius: 5px; cursor: pointer;">Logout All Sessions</button>
+                        </div>
+
+                        <!-- Save Button -->
+                        <div style="text-align: center; margin-top: 30px;">
+                            <button id="saveSettingsBtn" style="padding: 10px 30px; background-color: var(--success); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Save All Settings</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -910,7 +1048,7 @@
         </div>
     </div>
 
-    <!-- MODAL -->
+    <!-- MODAL: Add/Create User -->
     <div class="modal" id="userModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -944,6 +1082,74 @@
         </div>
     </div>
 
+    <!-- MODAL: Edit User -->
+    <div class="modal" id="editUserModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Edit User</div>
+                <button class="modal-close" id="editUserModalClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="editUserForm">
+                    <input type="hidden" id="editUserId">
+                    <div class="form-group">
+                        <label>Username (Read-only)</label>
+                        <input type="text" id="editUsername" readonly style="background-color: #f0f0f0;">
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="editUserEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="editUserFullName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="editUserStatus">
+                            <option value="1">Active</option>
+                            <option value="0">Inactive</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal btn-cancel" id="editUserCancelBtn">Cancel</button>
+                <button class="btn-modal btn-submit" id="editUserSubmitBtn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Delete User -->
+    <div class="modal" id="deleteUserModal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <div class="modal-title">Delete User</div>
+                <button class="modal-close" id="deleteUserModalClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="deleteUserId">
+                <p style="margin-bottom: 15px; color: var(--text-dark);">
+                    Are you sure you want to delete user <strong id="deleteUserName"></strong>?
+                </p>
+                <div style="background-color: var(--primary-light); padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+                    <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                        <input type="radio" name="deleteType" value="soft" checked>
+                        <span style="margin-left: 8px;">Soft Delete (Deactivate) - User can be reactivated</span>
+                    </label>
+                    <label style="display: flex; align-items: center;">
+                        <input type="radio" name="deleteType" value="hard">
+                        <span style="margin-left: 8px;">Hard Delete (Permanent) - All data removed</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal btn-cancel" id="deleteUserCancelBtn">Cancel</button>
+                <button class="btn-modal btn-danger" id="deleteUserConfirmBtn" style="background-color: var(--danger);">Delete User</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentAccessToken = localStorage.getItem('access_token');
         let currentLead = null;
@@ -965,6 +1171,7 @@
                 if (viewName === 'leads') loadLeads();
                 if (viewName === 'users') loadUsers();
                 if (viewName === 'inspections') loadInspections();
+                if (viewName === 'settings') loadSettings();
             });
         });
 
@@ -983,8 +1190,9 @@
             document.getElementById('sidePanel').classList.remove('open');
         });
 
-        // Modal
+        // Modal: Add User
         document.getElementById('addUserBtn').addEventListener('click', () => {
+            document.getElementById('userForm').reset();
             document.getElementById('userModal').classList.add('open');
         });
         document.getElementById('modalClose').addEventListener('click', () => {
@@ -993,6 +1201,24 @@
         document.getElementById('modalCancelBtn').addEventListener('click', () => {
             document.getElementById('userModal').classList.remove('open');
         });
+
+        // Modal: Edit User
+        document.getElementById('editUserModalClose').addEventListener('click', () => {
+            document.getElementById('editUserModal').classList.remove('open');
+        });
+        document.getElementById('editUserCancelBtn').addEventListener('click', () => {
+            document.getElementById('editUserModal').classList.remove('open');
+        });
+        document.getElementById('editUserSubmitBtn').addEventListener('click', saveUserChanges);
+
+        // Modal: Delete User
+        document.getElementById('deleteUserModalClose').addEventListener('click', () => {
+            document.getElementById('deleteUserModal').classList.remove('open');
+        });
+        document.getElementById('deleteUserCancelBtn').addEventListener('click', () => {
+            document.getElementById('deleteUserModal').classList.remove('open');
+        });
+        document.getElementById('deleteUserConfirmBtn').addEventListener('click', confirmDeleteUser);
 
         document.getElementById('modalSubmitBtn').addEventListener('click', async () => {
             const username = document.getElementById('formUsername').value;
@@ -1108,50 +1334,230 @@
                 const response = await fetch('/api/admin/users', {
                     headers: { 'Authorization': `Bearer ${currentAccessToken}` }
                 });
-                const data = await response.json();
-                const users = data.users || [];
+                const users = await response.json();
                 const tbody = document.getElementById('usersTableBody');
+                if (users.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No users</td></tr>';
+                    return;
+                }
                 tbody.innerHTML = users.map(user => `
                     <tr>
                         <td>${user.username}</td>
                         <td>${user.email}</td>
                         <td>${user.full_name || '-'}</td>
-                        <td><span class="badge badge-cool">Active</span></td>
+                        <td>${user.roles.join(', ')}</td>
+                        <td>${user.is_active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-danger">Inactive</span>'}</td>
+                        <td>
+                            <button onclick="editUser(${user.id})" style="background-color: var(--primary); color: white; padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer; margin-right: 5px;">Edit</button>
+                            <button onclick="deleteUser(${user.id})" style="background-color: var(--danger); color: white; padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer;">Delete</button>
+                        </td>
                     </tr>
                 `).join('');
             } catch (e) {
-                console.error(e);
+                console.error('Error loading users:', e);
             }
         }
 
         async function loadInspections() {
             try {
-                const response = await fetch('/api/scheduled_inspections', {
+                // Get jurisdiction from user's first city or default to berkeley
+                const userResponse = await fetch('/api/user', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const user = await userResponse.json();
+                const jurisdiction = user.cities && user.cities[0] ? user.cities[0].name.toLowerCase() : 'berkeley';
+
+                const response = await fetch(`/api/scheduled_inspections?jurisdiction=${jurisdiction}`, {
                     headers: { 'Authorization': `Bearer ${currentAccessToken}` }
                 });
                 const data = await response.json();
                 const inspections = data.inspections || [];
                 const tbody = document.getElementById('inspectionsTableBody');
                 if (inspections.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No inspections</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No inspections for ' + jurisdiction + '</td></tr>';
                     return;
                 }
                 tbody.innerHTML = inspections.map(insp => `
                     <tr>
                         <td>${insp.address}</td>
                         <td>${insp.jurisdiction}</td>
-                        <td>${insp.inspection_type}</td>
+                        <td>${insp.inspection_type || '-'}</td>
                         <td>${insp.inspection_date}</td>
                         <td>${(insp.gc_presence_probability * 100).toFixed(0)}%</td>
                     </tr>
                 `).join('');
             } catch (e) {
-                console.error(e);
+                console.error('Error loading inspections:', e);
             }
         }
 
-        function showLeadPanel(addressKey) {
-            document.getElementById('sidePanel').classList.add('open');
+        async function showLeadPanel(addressKey) {
+            try {
+                // Fetch lead details
+                const leadResponse = await fetch(`/api/leads/${addressKey}`, {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const lead = await leadResponse.json();
+
+                // Fetch contact history
+                const historyResponse = await fetch(`/api/leads/${addressKey}/contact-history`, {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const history = await historyResponse.json();
+
+                // Fetch notes
+                const notesResponse = await fetch(`/api/leads/${addressKey}/notes`, {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const notes = await notesResponse.json();
+
+                // Populate lead info section
+                document.getElementById('panelAddress').textContent = lead.address || '-';
+                document.getElementById('panelCity').textContent = lead.city || '-';
+                document.getElementById('panelScore').innerHTML = `<span class="badge ${getScoreBadge(lead.score)}">${lead.score}</span>`;
+                document.getElementById('panelValue').textContent = lead.value ? `$${lead.value.toLocaleString()}` : '-';
+
+                // Populate contact info section
+                document.getElementById('panelContractor').textContent = lead.contractor || '-';
+                document.getElementById('panelPhone').textContent = lead.contact_phone || '-';
+                document.getElementById('panelEmail').textContent = lead.contact_email || '-';
+
+                // Populate project details section
+                document.getElementById('panelSource').textContent = lead.source || '-';
+                document.getElementById('panelInspection').textContent = lead.next_inspection_date || '-';
+                document.getElementById('panelInspectionSource').textContent = lead.inspection_source || '-';
+
+                // Store current lead for contact tracking
+                currentLead = { id: addressKey, address: lead.address };
+
+                // Update mark contacted button
+                const markContactedBtn = document.getElementById('markContactedBtn');
+                markContactedBtn.onclick = () => markLeadAsContacted(addressKey);
+
+                // Open panel
+                document.getElementById('sidePanel').classList.add('open');
+
+            } catch (e) {
+                console.error('Error loading lead details:', e);
+                alert('Failed to load lead details');
+            }
+        }
+
+        async function markLeadAsContacted(leadId) {
+            try {
+                const response = await fetch(`/api/leads/${leadId}/contact`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ contact_type: 'CALL', notes: 'Contacted from dashboard' })
+                });
+
+                if (response.ok) {
+                    alert('Lead marked as contacted');
+                    loadLeads();
+                } else {
+                    alert('Failed to mark lead as contacted');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function editUser(userId) {
+            try {
+                // Fetch user details
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const user = await response.json();
+
+                // Populate form
+                document.getElementById('editUserId').value = user.id;
+                document.getElementById('editUsername').value = user.username;
+                document.getElementById('editUserEmail').value = user.email;
+                document.getElementById('editUserFullName').value = user.full_name || '';
+                document.getElementById('editUserStatus').value = user.is_active ? '1' : '0';
+
+                // Open modal
+                document.getElementById('editUserModal').classList.add('open');
+            } catch (e) {
+                console.error('Error loading user:', e);
+                alert('Failed to load user details');
+            }
+        }
+
+        async function saveUserChanges() {
+            const userId = document.getElementById('editUserId').value;
+            const email = document.getElementById('editUserEmail').value;
+            const fullName = document.getElementById('editUserFullName').value;
+            const isActive = document.getElementById('editUserStatus').value === '1';
+
+            try {
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${currentAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email,
+                        full_name: fullName,
+                        is_active: isActive
+                    })
+                });
+
+                if (response.ok) {
+                    document.getElementById('editUserModal').classList.remove('open');
+                    loadUsers();
+                    alert('User updated successfully');
+                } else {
+                    alert('Failed to update user');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+                alert('Error updating user');
+            }
+        }
+
+        function deleteUser(userId) {
+            try {
+                // Fetch user details for confirmation
+                fetch(`/api/admin/users/${userId}`, {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                }).then(r => r.json()).then(user => {
+                    document.getElementById('deleteUserId').value = user.id;
+                    document.getElementById('deleteUserName').textContent = user.username;
+                    document.getElementById('deleteUserModal').classList.add('open');
+                });
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function confirmDeleteUser() {
+            const userId = document.getElementById('deleteUserId').value;
+            const deleteType = document.querySelector('input[name="deleteType"]:checked').value;
+            const permanent = deleteType === 'hard';
+
+            try {
+                const response = await fetch(`/api/admin/users/${userId}?permanent=${permanent}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+
+                if (response.ok) {
+                    document.getElementById('deleteUserModal').classList.remove('open');
+                    loadUsers();
+                    alert(`User ${permanent ? 'permanently deleted' : 'deactivated'} successfully`);
+                } else {
+                    alert('Failed to delete user');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+                alert('Error deleting user');
+            }
         }
 
         function getScoreBadge(score) {
@@ -1161,6 +1567,124 @@
             if (score >= 20) return 'badge-cool';
             return 'badge-cold';
         }
+
+        // ─────────────────────────────────────────────────────
+        // SETTINGS PAGE FUNCTIONS
+        // ─────────────────────────────────────────────────────
+
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/settings', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const data = await response.json();
+                const user = data.user;
+                const prefs = data.preferences;
+                const exports = data.exports;
+
+                // Load theme
+                const savedTheme = localStorage.getItem('theme') || 'light';
+                applyTheme(savedTheme);
+
+                // Populate account info
+                document.getElementById('accountUsername').textContent = user.username;
+                document.getElementById('accountEmail').textContent = user.email;
+                document.getElementById('accountCreated').textContent = new Date(user.created_at).toLocaleDateString();
+
+                // Load preferences
+                document.getElementById('settingsItemsPerPage').value = prefs.items_per_page || 100;
+                document.getElementById('settingsDefaultSort').value = prefs.default_sort || 'last_updated';
+                document.getElementById('settingsNotificationsEnabled').checked = prefs.notifications_enabled;
+                document.getElementById('settingsNotifyNewLeads').checked = prefs.notify_new_leads;
+                document.getElementById('settingsNotifyInspections').checked = prefs.notify_inspections;
+                document.getElementById('settingsNotifyFrequency').value = prefs.notify_frequency || 'daily';
+
+                // Load export history
+                const exportContainer = document.getElementById('exportHistoryContainer');
+                if (exports.length === 0) {
+                    exportContainer.innerHTML = '<p style="color: var(--text-light); text-align: center; padding: 20px;">No exports yet</p>';
+                } else {
+                    exportContainer.innerHTML = exports.map(exp => `
+                        <div style="padding: 10px; border-bottom: 1px solid var(--border);">
+                            <p style="margin: 0; font-weight: 500;">${exp.export_name || 'Export'}</p>
+                            <p style="margin: 5px 0; font-size: 0.9em; color: var(--text-light);">
+                                ${exp.record_count} records • ${new Date(exp.created_at).toLocaleString()}
+                            </p>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                console.error('Error loading settings:', e);
+            }
+        }
+
+        function applyTheme(theme) {
+            const isDark = theme === 'dark';
+            if (isDark) {
+                document.body.classList.add('dark-theme');
+                document.getElementById('themeDarkBtn').style.borderColor = 'var(--primary)';
+                document.getElementById('themeLightBtn').style.borderColor = 'var(--border)';
+            } else {
+                document.body.classList.remove('dark-theme');
+                document.getElementById('themeLightBtn').style.borderColor = 'var(--primary)';
+                document.getElementById('themeDarkBtn').style.borderColor = 'var(--border)';
+            }
+            localStorage.setItem('theme', theme);
+        }
+
+        async function saveSettings() {
+            try {
+                const theme = document.body.classList.contains('dark-theme') ? 'dark' : 'light';
+
+                const prefs = {
+                    theme: theme,
+                    items_per_page: parseInt(document.getElementById('settingsItemsPerPage').value),
+                    default_sort: document.getElementById('settingsDefaultSort').value,
+                    notifications_enabled: document.getElementById('settingsNotificationsEnabled').checked,
+                    notify_new_leads: document.getElementById('settingsNotifyNewLeads').checked,
+                    notify_inspections: document.getElementById('settingsNotifyInspections').checked,
+                    notify_frequency: document.getElementById('settingsNotifyFrequency').value
+                };
+
+                const response = await fetch('/api/settings/preferences', {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${currentAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(prefs)
+                });
+
+                if (response.ok) {
+                    alert('Settings saved successfully!');
+                } else {
+                    alert('Failed to save settings');
+                }
+            } catch (e) {
+                console.error('Error saving settings:', e);
+                alert('Error saving settings');
+            }
+        }
+
+        // Theme buttons
+        document.addEventListener('DOMContentLoaded', () => {
+            if (document.getElementById('themeLightBtn')) {
+                document.getElementById('themeLightBtn').addEventListener('click', () => applyTheme('light'));
+                document.getElementById('themeDarkBtn').addEventListener('click', () => applyTheme('dark'));
+                document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+                document.getElementById('testNotificationBtn').addEventListener('click', () => {
+                    alert('Notification test sent! (feature coming soon)');
+                });
+                document.getElementById('changePasswordBtn').addEventListener('click', () => {
+                    alert('Password change feature coming soon');
+                });
+                document.getElementById('logoutAllBtn').addEventListener('click', () => {
+                    if (confirm('Are you sure? All your sessions will be logged out.')) {
+                        alert('Logout all sessions feature coming soon');
+                    }
+                });
+            }
+        });
 
         // Initial load
         if (!currentAccessToken) {
