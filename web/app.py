@@ -438,9 +438,9 @@ def get_lead(lead_id):
     """, (lead_id,))
 
     row = c.fetchone()
-    conn.close()
 
     if not row:
+        conn.close()
         return jsonify({"error": "Lead not found"}), 404
 
     row_dict = dict(row)
@@ -466,8 +466,27 @@ def get_lead(lead_id):
         'contact_email': lead_data.get('contact_email', ''),
         'owner': lead_data.get('owner', ''),
         'scoring_reasons': scoring.get('reasons', []),
+        'next_inspection_date': lead_data.get('next_scheduled_inspection_date'),
+        'inspection_source': lead_data.get('inspection_source', 'none'),
     }
 
+    # Try to find upcoming inspection from public calendar
+    try:
+        c.execute("""
+            SELECT inspection_date, inspection_type, jurisdiction
+            FROM scheduled_inspections
+            WHERE address = ? AND inspection_date >= date('now')
+            ORDER BY inspection_date ASC
+            LIMIT 1
+        """, (row_dict['address'],))
+        insp_row = c.fetchone()
+        if insp_row:
+            lead['next_inspection_date'] = insp_row[0]
+            lead['inspection_source'] = 'public_calendar'
+    except Exception as e:
+        logger.debug(f"Could not fetch scheduled inspection: {e}")
+
+    conn.close()
     return jsonify(lead), 200
 
 
