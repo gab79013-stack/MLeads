@@ -71,8 +71,13 @@ def index():
 
 @app.route('/login.html', methods=['GET'])
 def login_page():
-    """Serve the login page (same as dashboard, login handled by JS)."""
-    return index()
+    """Serve the login page."""
+    login_path = os.path.join(os.path.dirname(__file__), 'templates', 'login.html')
+    try:
+        with open(login_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return jsonify({"error": "Login page not found"}), 404
 
 
 @app.route('/<path:filename>', methods=['GET'])
