@@ -244,6 +244,118 @@ def init_web_db():
     """)
 
     # ─────────────────────────────────────────────────────
+    # Phase 2: User Preferences & Settings
+    # ─────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS user_preferences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER UNIQUE NOT NULL,
+            theme TEXT DEFAULT 'light',
+            notifications_enabled BOOLEAN DEFAULT 1,
+            notify_new_leads BOOLEAN DEFAULT 1,
+            notify_inspections BOOLEAN DEFAULT 0,
+            notify_frequency TEXT DEFAULT 'daily',
+            email_digest BOOLEAN DEFAULT 1,
+            items_per_page INTEGER DEFAULT 100,
+            default_sort TEXT DEFAULT 'last_updated',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    # ─────────────────────────────────────────────────────
+    # Phase 2: Saved Lead Views (filter templates)
+    # ─────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_views (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            filters TEXT NOT NULL,
+            is_default BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, name),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    # ─────────────────────────────────────────────────────
+    # Phase 2: Bulk Operations tracking
+    # ─────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS bulk_operations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            operation_type TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            total_items INTEGER,
+            processed_items INTEGER DEFAULT 0,
+            payload TEXT NOT NULL,
+            result TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    # ─────────────────────────────────────────────────────
+    # Phase 2: Export logs
+    # ─────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS export_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            export_name TEXT,
+            columns TEXT NOT NULL,
+            filter_criteria TEXT,
+            record_count INTEGER,
+            file_path TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    # ─────────────────────────────────────────────────────
+    # Phase 2: Activity Feed (comprehensive logging)
+    # ─────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS activity_feed (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            action_type TEXT NOT NULL,
+            target_id TEXT,
+            target_type TEXT,
+            description TEXT,
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    # ─────────────────────────────────────────────────────
+    # Alter existing tables for Phase 2
+    # ─────────────────────────────────────────────────────
+
+    # Add last_login to users
+    try:
+        c.execute("SELECT last_login FROM users LIMIT 1")
+    except sqlite3.OperationalError:
+        c.execute("ALTER TABLE users ADD COLUMN last_login TIMESTAMP")
+
+    # Add updated_at and is_deleted to lead_notes
+    try:
+        c.execute("SELECT updated_at FROM lead_notes LIMIT 1")
+    except sqlite3.OperationalError:
+        c.execute("ALTER TABLE lead_notes ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+
+    try:
+        c.execute("SELECT is_deleted FROM lead_notes LIMIT 1")
+    except sqlite3.OperationalError:
+        c.execute("ALTER TABLE lead_notes ADD COLUMN is_deleted BOOLEAN DEFAULT 0")
+
+    # ─────────────────────────────────────────────────────
     # Create indexes for performance
     # ─────────────────────────────────────────────────────
     c.execute("CREATE INDEX IF NOT EXISTS idx_user_roles ON user_roles(user_id)")
@@ -261,6 +373,15 @@ def init_web_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_consolidated_leads_city ON consolidated_leads(city)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_property_signals_address ON property_signals(address_key)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_property_signals_agent ON property_signals(agent_key)")
+
+    # Phase 2 indexes
+    c.execute("CREATE INDEX IF NOT EXISTS idx_user_preferences_user_id ON user_preferences(user_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_lead_views_user_id ON lead_views(user_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_bulk_operations_user_id ON bulk_operations(user_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_bulk_operations_status ON bulk_operations(status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_activity_feed_user_id ON activity_feed(user_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_activity_feed_created_at ON activity_feed(created_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_export_logs_user_id ON export_logs(user_id)")
 
     # ─────────────────────────────────────────────────────
     # Insert default roles
@@ -631,3 +752,256 @@ def cleanup_old_inspections(older_than_days: int = 60) -> int:
 
     finally:
         conn.close()
+
+
+# ═════════════════════════════════════════════════════════════
+# PHASE 2: USER PREFERENCES & SETTINGS
+# ═════════════════════════════════════════════════════════════
+
+def get_user_preferences(user_id: int) -> dict:
+    """Get user preferences or create defaults."""
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM user_preferences WHERE user_id = ?", (user_id,))
+    row = c.fetchone()
+    conn.close()
+
+    if row:
+        return dict(row)
+
+    # Return defaults
+    return {
+        'theme': 'light',
+        'notifications_enabled': True,
+        'notify_new_leads': True,
+        'notify_inspections': False,
+        'notify_frequency': 'daily',
+        'email_digest': True,
+        'items_per_page': 100,
+        'default_sort': 'last_updated',
+    }
+
+
+def update_user_preferences(user_id: int, preferences: dict) -> bool:
+    """Update user preferences."""
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        # Check if preferences exist
+        c.execute("SELECT id FROM user_preferences WHERE user_id = ?", (user_id,))
+        exists = c.fetchone()
+
+        if exists:
+            # Update
+            updates = []
+            values = []
+            for key, value in preferences.items():
+                if key not in ['id', 'user_id', 'created_at']:
+                    updates.append(f"{key} = ?")
+                    values.append(value)
+
+            if updates:
+                values.append(user_id)
+                query = f"UPDATE user_preferences SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
+                c.execute(query, values)
+        else:
+            # Create new
+            c.execute("""
+                INSERT INTO user_preferences
+                (user_id, theme, notifications_enabled, notify_new_leads, notify_inspections,
+                 notify_frequency, email_digest, items_per_page, default_sort)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                user_id,
+                preferences.get('theme', 'light'),
+                preferences.get('notifications_enabled', True),
+                preferences.get('notify_new_leads', True),
+                preferences.get('notify_inspections', False),
+                preferences.get('notify_frequency', 'daily'),
+                preferences.get('email_digest', True),
+                preferences.get('items_per_page', 100),
+                preferences.get('default_sort', 'last_updated'),
+            ))
+
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error updating preferences: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+# ═════════════════════════════════════════════════════════════
+# PHASE 2: SAVED LEAD VIEWS
+# ═════════════════════════════════════════════════════════════
+
+def save_lead_view(user_id: int, name: str, filters: dict, is_default: bool = False) -> int:
+    """Save a filtered lead view."""
+    import json
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        c.execute("""
+            INSERT INTO lead_views (user_id, name, filters, is_default)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, name, json.dumps(filters), is_default))
+
+        view_id = c.lastrowid
+        conn.commit()
+        return view_id
+    except sqlite3.IntegrityError:
+        return None
+    finally:
+        conn.close()
+
+
+def get_user_lead_views(user_id: int) -> list:
+    """Get all saved lead views for a user."""
+    import json
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT id, name, filters, is_default, created_at
+        FROM lead_views WHERE user_id = ? ORDER BY is_default DESC, created_at DESC
+    """, (user_id,))
+
+    views = []
+    for row in c.fetchall():
+        view = dict(row)
+        try:
+            view['filters'] = json.loads(view['filters'])
+        except:
+            view['filters'] = {}
+        views.append(view)
+
+    conn.close()
+    return views
+
+
+def delete_lead_view(view_id: int, user_id: int) -> bool:
+    """Delete a lead view (verify ownership)."""
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    c.execute("DELETE FROM lead_views WHERE id = ? AND user_id = ?", (view_id, user_id))
+    conn.commit()
+    deleted = c.rowcount > 0
+    conn.close()
+
+    return deleted
+
+
+# ═════════════════════════════════════════════════════════════
+# PHASE 2: ACTIVITY LOGGING
+# ═════════════════════════════════════════════════════════════
+
+def log_activity(user_id: int, action_type: str, target_id: str = None,
+                 target_type: str = None, description: str = None, details: dict = None) -> bool:
+    """Log an activity to the activity feed."""
+    import json
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        c.execute("""
+            INSERT INTO activity_feed
+            (user_id, action_type, target_id, target_type, description, details)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, action_type, target_id, target_type, description,
+              json.dumps(details) if details else None))
+
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to log activity: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def get_activity_feed(user_id: int = None, action_type: str = None,
+                      days: int = 7, limit: int = 50, offset: int = 0) -> list:
+    """Get activity feed with optional filters."""
+    import json
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    query = "SELECT * FROM activity_feed WHERE created_at >= DATE('now', '-' || ? || ' days')"
+    params = [days]
+
+    if user_id:
+        query += " AND user_id = ?"
+        params.append(user_id)
+
+    if action_type:
+        query += " AND action_type = ?"
+        params.append(action_type)
+
+    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+
+    c.execute(query, params)
+
+    activities = []
+    for row in c.fetchall():
+        activity = dict(row)
+        try:
+            if activity.get('details'):
+                activity['details'] = json.loads(activity['details'])
+        except:
+            pass
+        activities.append(activity)
+
+    conn.close()
+    return activities
+
+
+# ═════════════════════════════════════════════════════════════
+# PHASE 2: BULK OPERATIONS TRACKING
+# ═════════════════════════════════════════════════════════════
+
+def create_bulk_operation(user_id: int, operation_type: str, total_items: int,
+                          payload: dict) -> int:
+    """Create a bulk operation record."""
+    import json
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    c.execute("""
+        INSERT INTO bulk_operations
+        (user_id, operation_type, total_items, payload, status)
+        VALUES (?, ?, ?, ?, 'pending')
+    """, (user_id, operation_type, total_items, json.dumps(payload)))
+
+    op_id = c.lastrowid
+    conn.commit()
+    conn.close()
+
+    return op_id
+
+
+def update_bulk_operation(operation_id: int, processed: int, status: str,
+                          result: dict = None) -> bool:
+    """Update progress of a bulk operation."""
+    import json
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    completed_at = "CURRENT_TIMESTAMP" if status == 'completed' else "NULL"
+
+    c.execute(f"""
+        UPDATE bulk_operations
+        SET processed_items = ?, status = ?, result = ?, completed_at = {completed_at}
+        WHERE id = ?
+    """, (processed, status, json.dumps(result) if result else None, operation_id))
+
+    conn.commit()
+    updated = c.rowcount > 0
+    conn.close()
+
+    return updated
