@@ -69,6 +69,20 @@ def index():
         return jsonify({"error": "Dashboard not found"}), 404
 
 
+@app.route('/login.html', methods=['GET'])
+def login_page():
+    """Serve the login page (same as dashboard, login handled by JS)."""
+    return index()
+
+
+@app.route('/<path:filename>', methods=['GET'])
+def catch_all(filename):
+    """Catch all routes and serve dashboard for SPA routing."""
+    if filename.endswith('.json') or filename.startswith('api'):
+        return jsonify({"error": "Not found"}), 404
+    return index()
+
+
 # ─────────────────────────────────────────────────────────
 # Health Check
 # ─────────────────────────────────────────────────────────
