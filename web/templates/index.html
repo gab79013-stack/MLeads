@@ -910,7 +910,7 @@
         </div>
     </div>
 
-    <!-- MODAL -->
+    <!-- MODAL: Add/Create User -->
     <div class="modal" id="userModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -940,6 +940,74 @@
             <div class="modal-footer">
                 <button class="btn-modal btn-cancel" id="modalCancelBtn">Cancel</button>
                 <button class="btn-modal btn-submit" id="modalSubmitBtn">Create User</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Edit User -->
+    <div class="modal" id="editUserModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Edit User</div>
+                <button class="modal-close" id="editUserModalClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="editUserForm">
+                    <input type="hidden" id="editUserId">
+                    <div class="form-group">
+                        <label>Username (Read-only)</label>
+                        <input type="text" id="editUsername" readonly style="background-color: #f0f0f0;">
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="editUserEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="editUserFullName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="editUserStatus">
+                            <option value="1">Active</option>
+                            <option value="0">Inactive</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal btn-cancel" id="editUserCancelBtn">Cancel</button>
+                <button class="btn-modal btn-submit" id="editUserSubmitBtn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Delete User -->
+    <div class="modal" id="deleteUserModal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <div class="modal-title">Delete User</div>
+                <button class="modal-close" id="deleteUserModalClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="deleteUserId">
+                <p style="margin-bottom: 15px; color: var(--text-dark);">
+                    Are you sure you want to delete user <strong id="deleteUserName"></strong>?
+                </p>
+                <div style="background-color: var(--primary-light); padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+                    <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                        <input type="radio" name="deleteType" value="soft" checked>
+                        <span style="margin-left: 8px;">Soft Delete (Deactivate) - User can be reactivated</span>
+                    </label>
+                    <label style="display: flex; align-items: center;">
+                        <input type="radio" name="deleteType" value="hard">
+                        <span style="margin-left: 8px;">Hard Delete (Permanent) - All data removed</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal btn-cancel" id="deleteUserCancelBtn">Cancel</button>
+                <button class="btn-modal btn-danger" id="deleteUserConfirmBtn" style="background-color: var(--danger);">Delete User</button>
             </div>
         </div>
     </div>
@@ -983,8 +1051,9 @@
             document.getElementById('sidePanel').classList.remove('open');
         });
 
-        // Modal
+        // Modal: Add User
         document.getElementById('addUserBtn').addEventListener('click', () => {
+            document.getElementById('userForm').reset();
             document.getElementById('userModal').classList.add('open');
         });
         document.getElementById('modalClose').addEventListener('click', () => {
@@ -993,6 +1062,24 @@
         document.getElementById('modalCancelBtn').addEventListener('click', () => {
             document.getElementById('userModal').classList.remove('open');
         });
+
+        // Modal: Edit User
+        document.getElementById('editUserModalClose').addEventListener('click', () => {
+            document.getElementById('editUserModal').classList.remove('open');
+        });
+        document.getElementById('editUserCancelBtn').addEventListener('click', () => {
+            document.getElementById('editUserModal').classList.remove('open');
+        });
+        document.getElementById('editUserSubmitBtn').addEventListener('click', saveUserChanges);
+
+        // Modal: Delete User
+        document.getElementById('deleteUserModalClose').addEventListener('click', () => {
+            document.getElementById('deleteUserModal').classList.remove('open');
+        });
+        document.getElementById('deleteUserCancelBtn').addEventListener('click', () => {
+            document.getElementById('deleteUserModal').classList.remove('open');
+        });
+        document.getElementById('deleteUserConfirmBtn').addEventListener('click', confirmDeleteUser);
 
         document.getElementById('modalSubmitBtn').addEventListener('click', async () => {
             const username = document.getElementById('formUsername').value;
@@ -1111,7 +1198,7 @@
                 const users = await response.json();
                 const tbody = document.getElementById('usersTableBody');
                 if (users.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No users</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No users</td></tr>';
                     return;
                 }
                 tbody.innerHTML = users.map(user => `
@@ -1121,7 +1208,10 @@
                         <td>${user.full_name || '-'}</td>
                         <td>${user.roles.join(', ')}</td>
                         <td>${user.is_active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-danger">Inactive</span>'}</td>
-                        <td><button onclick="editUser(${user.id})">Edit</button></td>
+                        <td>
+                            <button onclick="editUser(${user.id})" style="background-color: var(--primary); color: white; padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer; margin-right: 5px;">Edit</button>
+                            <button onclick="deleteUser(${user.id})" style="background-color: var(--danger); color: white; padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer;">Delete</button>
+                        </td>
                     </tr>
                 `).join('');
             } catch (e) {
@@ -1236,13 +1326,98 @@
             }
         }
 
-        function editUser(userId) {
-            alert('Edit user feature coming soon. User ID: ' + userId);
+        async function editUser(userId) {
+            try {
+                // Fetch user details
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const user = await response.json();
+
+                // Populate form
+                document.getElementById('editUserId').value = user.id;
+                document.getElementById('editUsername').value = user.username;
+                document.getElementById('editUserEmail').value = user.email;
+                document.getElementById('editUserFullName').value = user.full_name || '';
+                document.getElementById('editUserStatus').value = user.is_active ? '1' : '0';
+
+                // Open modal
+                document.getElementById('editUserModal').classList.add('open');
+            } catch (e) {
+                console.error('Error loading user:', e);
+                alert('Failed to load user details');
+            }
+        }
+
+        async function saveUserChanges() {
+            const userId = document.getElementById('editUserId').value;
+            const email = document.getElementById('editUserEmail').value;
+            const fullName = document.getElementById('editUserFullName').value;
+            const isActive = document.getElementById('editUserStatus').value === '1';
+
+            try {
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${currentAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email,
+                        full_name: fullName,
+                        is_active: isActive
+                    })
+                });
+
+                if (response.ok) {
+                    document.getElementById('editUserModal').classList.remove('open');
+                    loadUsers();
+                    alert('User updated successfully');
+                } else {
+                    alert('Failed to update user');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+                alert('Error updating user');
+            }
         }
 
         function deleteUser(userId) {
-            if (confirm('Are you sure you want to delete this user?')) {
-                alert('Delete user feature coming soon. User ID: ' + userId);
+            try {
+                // Fetch user details for confirmation
+                fetch(`/api/admin/users/${userId}`, {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                }).then(r => r.json()).then(user => {
+                    document.getElementById('deleteUserId').value = user.id;
+                    document.getElementById('deleteUserName').textContent = user.username;
+                    document.getElementById('deleteUserModal').classList.add('open');
+                });
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function confirmDeleteUser() {
+            const userId = document.getElementById('deleteUserId').value;
+            const deleteType = document.querySelector('input[name="deleteType"]:checked').value;
+            const permanent = deleteType === 'hard';
+
+            try {
+                const response = await fetch(`/api/admin/users/${userId}?permanent=${permanent}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+
+                if (response.ok) {
+                    document.getElementById('deleteUserModal').classList.remove('open');
+                    loadUsers();
+                    alert(`User ${permanent ? 'permanently deleted' : 'deactivated'} successfully`);
+                } else {
+                    alert('Failed to delete user');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+                alert('Error deleting user');
             }
         }
 
