@@ -176,6 +176,20 @@ def init_web_db():
     """)
 
     # ─────────────────────────────────────────────────────
+    # Lead Notes (internal notes on leads)
+    # ─────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            note TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    # ─────────────────────────────────────────────────────
     # Scheduled Inspections (public calendar data & predictions)
     # ─────────────────────────────────────────────────────
     c.execute("""

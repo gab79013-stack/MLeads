@@ -37,6 +37,25 @@ logger = logging.getLogger("web_api")
 
 
 # ─────────────────────────────────────────────────────────
+# Utility Functions
+# ─────────────────────────────────────────────────────────
+
+def log_audit(user_id, action, resource_type, resource_id, details=""):
+    """Log an action to the audit log."""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, action, resource_type, resource_id, details))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"Failed to log audit: {e}")
+
+
+# ─────────────────────────────────────────────────────────
 # Error Handlers
 # ─────────────────────────────────────────────────────────
 
@@ -1025,6 +1044,335 @@ def trigger_cleanup():
         }), 200
     except Exception as e:
         logger.error(f"Error during cleanup: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────
+# Admin - Users Management Endpoints
+# ─────────────────────────────────────────────────────────
+
+@app.route('/api/admin/users', methods=['GET'])
+@require_admin
+def list_all_users():
+    """List all users with their roles and access (admin only)."""
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        # Get all users
+        c.execute("""
+            SELECT u.id, u.username, u.email, u.full_name, u.is_active, u.expires_at, u.created_at
+            FROM users u
+            ORDER BY u.username
+        """)
+
+        users = []
+        for row in c.fetchall():
+            row_dict = dict(row)
+            user_id = row_dict['id']
+
+            # Get roles
+            c.execute("""
+                SELECT r.name FROM roles r
+                JOIN user_roles ur ON r.id = ur.role_id
+                WHERE ur.user_id = ?
+            """, (user_id,))
+            roles = [r[0] for r in c.fetchall()]
+
+            # Get city access
+            c.execute("""
+                SELECT c.id, c.name FROM cities c
+                JOIN user_city_access uca ON c.id = uca.city_id
+                WHERE uca.user_id = ?
+            """, (user_id,))
+            cities = [{"id": r[0], "name": r[1]} for r in c.fetchall()]
+
+            # Get agent access
+            c.execute("""
+                SELECT a.id, a.name FROM agents a
+                JOIN user_agent_access uaa ON a.id = uaa.agent_id
+                WHERE uaa.user_id = ?
+            """, (user_id,))
+            agents = [{"id": r[0], "name": r[1]} for r in c.fetchall()]
+
+            users.append({
+                "id": row_dict['id'],
+                "username": row_dict['username'],
+                "email": row_dict['email'],
+                "full_name": row_dict['full_name'],
+                "is_active": bool(row_dict['is_active']),
+                "expires_at": row_dict['expires_at'],
+                "created_at": row_dict['created_at'],
+                "roles": roles,
+                "cities": cities,
+                "agents": agents
+            })
+
+        conn.close()
+        return jsonify(users), 200
+
+    except Exception as e:
+        logger.error(f"Error listing users: {e}")
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/admin/users/<int:user_id>', methods=['GET'])
+@require_admin
+def get_user_detail(user_id):
+    """Get detailed user information (admin only)."""
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        c.execute("""
+            SELECT id, username, email, full_name, is_active, expires_at, created_at
+            FROM users
+            WHERE id = ?
+        """, (user_id,))
+
+        row = c.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"error": "User not found"}), 404
+
+        row_dict = dict(row)
+
+        # Get roles
+        c.execute("""
+            SELECT r.id, r.name FROM roles r
+            JOIN user_roles ur ON r.id = ur.role_id
+            WHERE ur.user_id = ?
+        """, (user_id,))
+        roles = [{"id": r[0], "name": r[1]} for r in c.fetchall()]
+
+        # Get cities
+        c.execute("""
+            SELECT c.id, c.name FROM cities c
+            JOIN user_city_access uca ON c.id = uca.city_id
+            WHERE uca.user_id = ?
+        """, (user_id,))
+        cities = [{"id": r[0], "name": r[1]} for r in c.fetchall()]
+
+        # Get agents
+        c.execute("""
+            SELECT a.id, a.name FROM agents a
+            JOIN user_agent_access uaa ON a.id = uaa.agent_id
+            WHERE uaa.user_id = ?
+        """, (user_id,))
+        agents = [{"id": r[0], "name": r[1]} for r in c.fetchall()]
+
+        conn.close()
+
+        return jsonify({
+            "id": row_dict['id'],
+            "username": row_dict['username'],
+            "email": row_dict['email'],
+            "full_name": row_dict['full_name'],
+            "is_active": bool(row_dict['is_active']),
+            "expires_at": row_dict['expires_at'],
+            "created_at": row_dict['created_at'],
+            "roles": roles,
+            "cities": cities,
+            "agents": agents
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error getting user: {e}")
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────
+# Admin - Reference Data Endpoints
+# ─────────────────────────────────────────────────────────
+
+@app.route('/api/admin/cities', methods=['GET'])
+@require_auth
+def list_all_cities():
+    """List all cities."""
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        c.execute("SELECT id, name, state, county FROM cities ORDER BY name")
+        cities = [dict(row) for row in c.fetchall()]
+        conn.close()
+        return jsonify(cities), 200
+    except Exception as e:
+        logger.error(f"Error listing cities: {e}")
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/admin/agents', methods=['GET'])
+@require_auth
+def list_all_agents():
+    """List all agents."""
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        c.execute("SELECT id, name FROM agents ORDER BY name")
+        agents = [dict(row) for row in c.fetchall()]
+        conn.close()
+        return jsonify(agents), 200
+    except Exception as e:
+        logger.error(f"Error listing agents: {e}")
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────
+# Leads - Notes & Contact History
+# ─────────────────────────────────────────────────────────
+
+@app.route('/api/leads/<path:lead_id>/contact-history', methods=['GET'])
+@require_auth
+def get_lead_contact_history(lead_id):
+    """Get contact history for a lead."""
+    user_id = g.user_id
+
+    if not check_permission(user_id, "leads", "view"):
+        return jsonify({"error": "Permission denied"}), 403
+
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        # Get all contacts with user info
+        c.execute("""
+            SELECT lc.id, lc.contact_type, lc.notes, lc.created_at, u.username
+            FROM lead_contacts lc
+            JOIN users u ON lc.user_id = u.id
+            WHERE lc.lead_id = ?
+            ORDER BY lc.created_at DESC
+        """, (lead_id,))
+
+        history = [
+            {
+                "id": row[0],
+                "contact_type": row[1],
+                "notes": row[2],
+                "created_at": row[3],
+                "user": row[4]
+            }
+            for row in c.fetchall()
+        ]
+
+        conn.close()
+        return jsonify(history), 200
+
+    except Exception as e:
+        logger.error(f"Error getting contact history: {e}")
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/leads/<path:lead_id>/notes', methods=['GET'])
+@require_auth
+def get_lead_notes(lead_id):
+    """Get all notes for a lead."""
+    user_id = g.user_id
+
+    if not check_permission(user_id, "leads", "view"):
+        return jsonify({"error": "Permission denied"}), 403
+
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        # Check if notes table exists, if not return empty
+        c.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name='lead_notes'
+        """)
+
+        if not c.fetchone():
+            conn.close()
+            return jsonify([]), 200
+
+        # Get notes
+        c.execute("""
+            SELECT ln.id, ln.note, ln.created_at, u.username
+            FROM lead_notes ln
+            JOIN users u ON ln.user_id = u.id
+            WHERE ln.lead_id = ?
+            ORDER BY ln.created_at DESC
+        """, (lead_id,))
+
+        notes = [
+            {
+                "id": row[0],
+                "note": row[1],
+                "created_at": row[2],
+                "user": row[3]
+            }
+            for row in c.fetchall()
+        ]
+
+        conn.close()
+        return jsonify(notes), 200
+
+    except Exception as e:
+        logger.error(f"Error getting notes: {e}")
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/leads/<path:lead_id>/notes', methods=['POST'])
+@require_auth
+def create_lead_note(lead_id):
+    """Add a note to a lead."""
+    user_id = g.user_id
+
+    if not check_permission(user_id, "leads", "contact"):
+        return jsonify({"error": "Permission denied"}), 403
+
+    data = request.get_json() or {}
+    note = data.get('note', '').strip()
+
+    if not note:
+        return jsonify({"error": "Note cannot be empty"}), 400
+
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        # Create table if not exists
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS lead_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lead_id TEXT NOT NULL,
+                user_id INTEGER NOT NULL,
+                note TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
+        """)
+
+        # Insert note
+        c.execute("""
+            INSERT INTO lead_notes (lead_id, user_id, note)
+            VALUES (?, ?, ?)
+        """, (lead_id, user_id, note))
+
+        note_id = c.lastrowid
+        conn.commit()
+        conn.close()
+
+        # Log action
+        log_audit(user_id, "create_note", "lead", lead_id, f"Note: {note[:50]}")
+
+        return jsonify({
+            "id": note_id,
+            "note": note,
+            "created_at": datetime.utcnow().isoformat()
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Error creating note: {e}")
+        conn.close()
         return jsonify({"error": str(e)}), 500
 
 
