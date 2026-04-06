@@ -11,7 +11,7 @@ REST API endpoints for:
 import os
 import logging
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, send_file
 from flask_cors import CORS
 
 from utils.web_db import (
@@ -52,6 +52,21 @@ def not_found(e):
 @app.errorhandler(500)
 def server_error(e):
     return jsonify({"error": "Server error"}), 500
+
+
+# ─────────────────────────────────────────────────────────
+# Dashboard & Static Files
+# ─────────────────────────────────────────────────────────
+
+@app.route('/', methods=['GET'])
+def index():
+    """Serve the main dashboard HTML."""
+    template_path = os.path.join(os.path.dirname(__file__), 'templates', 'index.html')
+    try:
+        with open(template_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return jsonify({"error": "Dashboard not found"}), 404
 
 
 # ─────────────────────────────────────────────────────────
