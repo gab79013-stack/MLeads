@@ -1041,6 +1041,16 @@
                 <div class="panel-field"><div class="panel-label">Next Inspection</div><div class="panel-value" id="panelInspection"></div></div>
                 <div class="panel-field"><div class="panel-label">Inspection Source</div><div class="panel-value" id="panelInspectionSource"></div></div>
             </div>
+
+            <div class="panel-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div class="panel-section-title">Notes</div>
+                    <button id="addNoteBtn" style="padding: 4px 8px; background-color: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">+ Add</button>
+                </div>
+                <div id="panelNotesList" style="max-height: 200px; overflow-y: auto;">
+                    <p style="color: var(--text-light); font-size: 12px; text-align: center;">No notes yet</p>
+                </div>
+            </div>
         </div>
         <div class="panel-actions">
             <button class="btn-action btn-primary" id="markContactedBtn">Mark as Contacted</button>
@@ -1399,18 +1409,6 @@
                 });
                 const lead = await leadResponse.json();
 
-                // Fetch contact history
-                const historyResponse = await fetch(`/api/leads/${addressKey}/contact-history`, {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
-                const history = await historyResponse.json();
-
-                // Fetch notes
-                const notesResponse = await fetch(`/api/leads/${addressKey}/notes`, {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
-                const notes = await notesResponse.json();
-
                 // Populate lead info section
                 document.getElementById('panelAddress').textContent = lead.address || '-';
                 document.getElementById('panelCity').textContent = lead.city || '-';
@@ -1433,6 +1431,12 @@
                 // Update mark contacted button
                 const markContactedBtn = document.getElementById('markContactedBtn');
                 markContactedBtn.onclick = () => markLeadAsContacted(addressKey);
+
+                // Load and display notes
+                loadLeadNotes(addressKey);
+
+                // Update add note button
+                document.getElementById('addNoteBtn').onclick = () => addNote(addressKey);
 
                 // Open panel
                 document.getElementById('sidePanel').classList.add('open');
@@ -1459,6 +1463,103 @@
                     loadLeads();
                 } else {
                     alert('Failed to mark lead as contacted');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function loadLeadNotes(leadId) {
+            try {
+                const response = await fetch(`/api/leads/${leadId}/notes`, {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const notes = await response.json();
+                const container = document.getElementById('panelNotesList');
+
+                if (notes.length === 0) {
+                    container.innerHTML = '<p style="color: var(--text-light); font-size: 12px; text-align: center;">No notes yet</p>';
+                    return;
+                }
+
+                container.innerHTML = notes.map(note => `
+                    <div style="padding: 8px; background-color: var(--primary-light); border-radius: 4px; margin-bottom: 8px;">
+                        <div style="font-size: 12px; color: var(--text-dark); margin-bottom: 4px;">${note.note}</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--text-light);">
+                            <span>${note.user} • ${new Date(note.created_at).toLocaleDateString()}</span>
+                            <div>
+                                <button onclick="editNote('${currentLead.id}', ${note.id}, '${note.note.replace(/'/g, "\\'")}'" style="background: none; border: none; color: var(--primary); cursor: pointer; font-size: 11px; margin-right: 5px;">Edit</button>
+                                <button onclick="deleteNote('${currentLead.id}', ${note.id})" style="background: none; border: none; color: var(--danger); cursor: pointer; font-size: 11px;">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Error loading notes:', e);
+            }
+        }
+
+        async function addNote(leadId) {
+            const noteText = prompt('Enter note:');
+            if (!noteText || !noteText.trim()) return;
+
+            try {
+                const response = await fetch(`/api/leads/${leadId}/notes`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ note: noteText })
+                });
+
+                if (response.ok) {
+                    loadLeadNotes(leadId);
+                } else {
+                    alert('Failed to add note');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function editNote(leadId, noteId, currentText) {
+            const newText = prompt('Edit note:', currentText);
+            if (!newText || !newText.trim()) return;
+
+            try {
+                const response = await fetch(`/api/leads/${leadId}/notes/${noteId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${currentAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ note: newText })
+                });
+
+                if (response.ok) {
+                    loadLeadNotes(leadId);
+                } else {
+                    alert('Failed to update note');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function deleteNote(leadId, noteId) {
+            if (!confirm('Delete this note?')) return;
+
+            try {
+                const response = await fetch(`/api/leads/${leadId}/notes/${noteId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+
+                if (response.ok) {
+                    loadLeadNotes(leadId);
+                } else {
+                    alert('Failed to delete note');
                 }
             } catch (e) {
                 console.error('Error:', e);
