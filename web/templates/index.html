@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Insulleads Dashboard</title>
+    <title>MLeads Dashboard</title>
     <style>
         * {
             margin: 0;
@@ -11,176 +11,310 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --primary: #0070d2;
+            --primary-dark: #003d82;
+            --primary-light: #e7f1f9;
+            --danger: #ea001e;
+            --success: #04844b;
+            --warning: #ff9900;
+            --cool: #54698d;
+            --warm: #ffb81c;
+            --text-dark: #1f2937;
+            --text-light: #6b7280;
+            --border: #e5e7eb;
+            --bg-light: #f9fafb;
+            --bg-white: #ffffff;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #f5f7fa;
-            color: #333;
-        }
-
-        .navbar {
-            background: white;
-            border-bottom: 1px solid #e1e8ed;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }
-
-        .navbar h1 {
-            font-size: 1.5rem;
-            color: #1f2937;
-        }
-
-        .navbar-right {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .user-info {
-            text-align: right;
-            font-size: 0.9rem;
-        }
-
-        .user-info p {
-            color: #6b7280;
-        }
-
-        .logout-btn {
-            padding: 0.5rem 1rem;
-            background: #ef4444;
-            color: white;
-            border: none;
-            border-radius: 0.375rem;
-            cursor: pointer;
-            font-size: 0.9rem;
-        }
-
-        .logout-btn:hover {
-            background: #dc2626;
+            background: var(--bg-light);
+            color: var(--text-dark);
+            line-height: 1.5;
         }
 
         .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
         }
 
+        /* ─── SIDEBAR ─── */
+        .sidebar {
+            width: 60px;
+            background: var(--primary-dark);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            transition: width 0.3s ease;
+            position: relative;
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .sidebar.expanded {
+            width: 250px;
+            align-items: flex-start;
+            padding-left: 15px;
+        }
+
+        .sidebar-toggle {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 10px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .sidebar-toggle:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-item {
+            width: 100%;
+            padding: 12px 10px;
+            color: rgba(255, 255, 255, 0.7);
+            border: none;
+            background: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 14px;
+            transition: all 0.2s;
+            margin-bottom: 5px;
+            border-radius: 6px;
+            text-align: left;
+        }
+
+        .nav-item:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-item.active {
+            color: white;
+            background: var(--primary);
+        }
+
+        .nav-icon {
+            font-size: 20px;
+            min-width: 20px;
+        }
+
+        .nav-label {
+            display: none;
+            white-space: nowrap;
+        }
+
+        .sidebar.expanded .nav-label {
+            display: inline;
+        }
+
+        /* ─── MAIN CONTENT ─── */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ─── HEADER ─── */
+        .header {
+            background: var(--bg-white);
+            border-bottom: 1px solid var(--border);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+        }
+
+        .header-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+        }
+
+        .logout-btn {
+            background: var(--danger);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: #c80015;
+        }
+
+        /* ─── CONTENT AREA ─── */
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px;
+        }
+
+        .view {
+            display: none;
+        }
+
+        .view.active {
+            display: block;
+        }
+
+        /* ─── STATS GRID ─── */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
+            gap: 20px;
+            margin-bottom: 40px;
         }
 
         .stat-card {
-            background: white;
-            padding: 1.5rem;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            border-left: 4px solid #3b82f6;
+            background: var(--bg-white);
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid var(--primary);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
         .stat-value {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #1f2937;
-            margin-bottom: 0.5rem;
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 5px;
         }
 
         .stat-label {
-            font-size: 0.875rem;
-            color: #6b7280;
+            font-size: 12px;
+            color: var(--text-light);
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
+        /* ─── FILTERS ─── */
         .filters {
-            background: white;
-            padding: 1.5rem;
-            border-radius: 0.5rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }
-
-        .filters h3 {
-            margin-bottom: 1rem;
-            color: #1f2937;
-        }
-
-        .filter-row {
+            background: var(--bg-white);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1rem;
+            gap: 15px;
+            align-items: end;
         }
 
         .filter-group {
             display: flex;
             flex-direction: column;
+            gap: 5px;
         }
 
-        .filter-group label {
-            font-size: 0.875rem;
-            font-weight: 500;
-            margin-bottom: 0.5rem;
-            color: #374151;
+        .filter-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-dark);
+            text-transform: uppercase;
         }
 
-        .filter-group select,
-        .filter-group input {
-            padding: 0.5rem;
-            border: 1px solid #d1d5db;
-            border-radius: 0.375rem;
-            font-size: 0.9rem;
+        select, input[type="text"], input[type="number"] {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+            background: var(--bg-white);
+            color: var(--text-dark);
         }
 
-        .filter-group input:focus,
-        .filter-group select:focus {
+        select:focus, input:focus {
             outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
         }
 
-        .button-group {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .btn {
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 0.375rem;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-
-        .btn-primary {
-            background: #3b82f6;
+        .btn-search {
+            background: var(--primary);
             color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.2s;
         }
 
-        .btn-primary:hover {
-            background: #2563eb;
+        .btn-search:hover {
+            background: var(--primary-dark);
         }
 
-        .btn-secondary {
-            background: #e5e7eb;
-            color: #1f2937;
+        .btn-reset {
+            background: var(--border);
+            color: var(--text-dark);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
         }
 
-        .btn-secondary:hover {
+        .btn-reset:hover {
             background: #d1d5db;
         }
 
-        .leads-table {
-            background: white;
-            border-radius: 0.5rem;
+        /* ─── TABLE ─── */
+        .table-container {
+            background: var(--bg-white);
+            border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
         table {
@@ -189,594 +323,852 @@
         }
 
         thead {
-            background: #f9fafb;
-            border-bottom: 1px solid #e5e7eb;
+            background: var(--bg-light);
+            border-bottom: 2px solid var(--border);
         }
 
         th {
-            padding: 1rem;
+            padding: 15px;
             text-align: left;
-            font-size: 0.875rem;
-            font-weight: 600;
-            color: #374151;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-dark);
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
         td {
-            padding: 1rem;
-            border-bottom: 1px solid #f3f4f6;
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
         }
 
         tbody tr:hover {
-            background: #f9fafb;
+            background: var(--primary-light);
         }
 
-        .score-badge {
+        .badge {
             display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 0.375rem;
-            font-size: 0.875rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
             font-weight: 600;
-            color: white;
         }
 
-        .score-hot {
-            background: #ef4444;
+        .badge-hot {
+            background: #fce7e6;
+            color: var(--danger);
         }
 
-        .score-warm {
-            background: #f97316;
+        .badge-warm {
+            background: #fff4e5;
+            color: #d97706;
         }
 
-        .score-medium {
-            background: #eab308;
-            color: #333;
+        .badge-medium {
+            background: #e0e7ff;
+            color: #4338ca;
         }
 
-        .score-cool {
-            background: #06b6d4;
+        .badge-cool {
+            background: #e8eef7;
+            color: var(--cool);
         }
 
-        .score-cold {
-            background: #6b7280;
-        }
-
-        .lead-address {
-            font-weight: 500;
-            color: #1f2937;
-            cursor: pointer;
-        }
-
-        .lead-address:hover {
-            color: #3b82f6;
-        }
-
-        .pagination {
-            display: flex;
-            justify-content: center;
-            gap: 0.5rem;
-            margin-top: 2rem;
-        }
-
-        .pagination button {
-            padding: 0.5rem 0.75rem;
-            border: 1px solid #d1d5db;
-            background: white;
-            cursor: pointer;
-            border-radius: 0.375rem;
-            font-size: 0.875rem;
-        }
-
-        .pagination button.active {
-            background: #3b82f6;
-            color: white;
-            border-color: #3b82f6;
-        }
-
-        .pagination button:hover:not(.active) {
+        .badge-cold {
             background: #f3f4f6;
+            color: #6b7280;
         }
 
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.4);
+        .contact-info {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
         }
 
-        .modal.active {
+        .contact-item {
             display: flex;
             align-items: center;
-            justify-content: center;
+            gap: 5px;
+            font-size: 13px;
         }
 
-        .modal-content {
-            background-color: white;
-            padding: 2rem;
-            border-radius: 0.5rem;
-            max-width: 600px;
-            width: 90%;
-            max-height: 90vh;
+        .icon-small {
+            font-size: 12px;
+        }
+
+        .inspection-badge {
+            background: #dbeafe;
+            color: #0369a1;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .lead-row {
+            cursor: pointer;
+        }
+
+        .lead-row td:first-child {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        /* ─── SIDE PANEL ─── */
+        .side-panel {
+            position: fixed;
+            right: -400px;
+            top: 60px;
+            width: 400px;
+            height: calc(100vh - 60px);
+            background: var(--bg-white);
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.15);
+            transition: right 0.3s ease;
             overflow-y: auto;
-            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+            z-index: 999;
         }
 
-        .modal-header {
+        .side-panel.open {
+            right: 0;
+        }
+
+        .panel-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1.5rem;
         }
 
-        .modal-header h2 {
-            color: #1f2937;
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
         }
 
-        .close-btn {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #6b7280;
-            cursor: pointer;
+        .panel-close {
             background: none;
             border: none;
-            padding: 0;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--text-light);
         }
 
-        .close-btn:hover {
-            color: #1f2937;
+        .panel-content {
+            padding: 20px;
         }
 
-        .modal-field {
-            margin-bottom: 1.5rem;
+        .panel-section {
+            margin-bottom: 25px;
         }
 
-        .modal-field label {
-            display: block;
-            font-weight: 500;
-            margin-bottom: 0.5rem;
-            color: #374151;
+        .panel-section-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-light);
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
         }
 
-        .modal-field p {
-            color: #4b5563;
-            line-height: 1.6;
+        .panel-field {
+            margin-bottom: 12px;
         }
 
-        .loading {
+        .panel-label {
+            font-size: 12px;
+            color: var(--text-light);
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+
+        .panel-value {
+            font-size: 14px;
+            color: var(--text-dark);
+        }
+
+        .panel-actions {
+            display: flex;
+            gap: 10px;
+            padding: 20px;
+            border-top: 1px solid var(--border);
+            position: sticky;
+            bottom: 0;
+            background: var(--bg-white);
+        }
+
+        .btn-action {
+            flex: 1;
+            padding: 10px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: var(--border);
+            color: var(--text-dark);
+        }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+
+        /* ─── MODAL ─── */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.open {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-white);
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-light);
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: var(--text-dark);
+        }
+
+        .form-group input {
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .modal-footer {
+            padding: 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .btn-modal {
+            padding: 10px 20px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .btn-submit {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-submit:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-cancel {
+            background: var(--border);
+            color: var(--text-dark);
+        }
+
+        .btn-cancel:hover {
+            background: #d1d5db;
+        }
+
+        /* ─── USERS TABLE ─── */
+        .btn-add-user {
+            background: var(--success);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-bottom: 20px;
+            transition: background 0.2s;
+        }
+
+        .btn-add-user:hover {
+            background: #036340;
+        }
+
+        /* ─── EMPTY STATE ─── */
+        .empty-state {
             text-align: center;
-            padding: 2rem;
-            color: #6b7280;
+            padding: 40px;
+            color: var(--text-light);
         }
 
-        .error {
-            background: #fee2e2;
-            color: #991b1b;
-            padding: 1rem;
-            border-radius: 0.375rem;
-            margin-bottom: 1rem;
-            border-left: 4px solid #ef4444;
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
         }
 
-        .success {
-            background: #dcfce7;
-            color: #166534;
-            padding: 1rem;
-            border-radius: 0.375rem;
-            margin-bottom: 1rem;
-            border-left: 4px solid #22c55e;
-        }
-
+        /* ─── RESPONSIVE ─── */
         @media (max-width: 768px) {
-            .navbar {
-                flex-direction: column;
-                gap: 1rem;
+            .sidebar {
+                width: 60px;
             }
 
-            .filter-row {
+            .sidebar.expanded {
+                width: 60px;
+            }
+
+            .nav-label {
+                display: none !important;
+            }
+
+            .side-panel {
+                width: 100%;
+                right: -100%;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .filters {
                 grid-template-columns: 1fr;
             }
 
             table {
-                font-size: 0.875rem;
+                font-size: 12px;
             }
 
-            th, td {
-                padding: 0.75rem 0.5rem;
+            td, th {
+                padding: 10px;
             }
 
             .modal-content {
-                padding: 1rem;
+                width: 95%;
             }
         }
     </style>
 </head>
 <body>
-    <div class="navbar">
-        <h1>📊 Insulleads Dashboard</h1>
-        <div class="navbar-right">
-            <div class="user-info">
-                <p id="username">Loading...</p>
-            </div>
-            <button class="logout-btn" onclick="logout()">Logout</button>
-        </div>
-    </div>
-
     <div class="container">
-        <!-- Stats -->
-        <div class="stats-grid" id="stats-grid">
-            <div class="stat-card">
-                <div class="stat-value" id="stat-total">-</div>
-                <div class="stat-label">Total Leads</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="stat-new">-</div>
-                <div class="stat-label">New Leads</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="stat-contacted">-</div>
-                <div class="stat-label">Contacted</div>
-            </div>
+        <!-- SIDEBAR -->
+        <div class="sidebar" id="sidebar">
+            <button class="sidebar-toggle" id="sidebarToggle">☰</button>
+            <button class="nav-item active" data-view="dashboard">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">Dashboard</span>
+            </button>
+            <button class="nav-item" data-view="leads">
+                <span class="nav-icon">👥</span>
+                <span class="nav-label">Leads</span>
+            </button>
+            <button class="nav-item" data-view="users">
+                <span class="nav-icon">👤</span>
+                <span class="nav-label">Users</span>
+            </button>
+            <button class="nav-item" data-view="inspections">
+                <span class="nav-icon">📅</span>
+                <span class="nav-label">Inspections</span>
+            </button>
+            <button class="nav-item" data-view="settings">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-label">Settings</span>
+            </button>
         </div>
 
-        <!-- Filters -->
-        <div class="filters">
-            <h3>Filters</h3>
-            <div class="filter-row">
-                <div class="filter-group">
-                    <label for="filter-city">City</label>
-                    <select id="filter-city" onchange="loadLeads()">
-                        <option value="">All Cities</option>
-                    </select>
+        <!-- MAIN CONTENT -->
+        <div class="main-content">
+            <!-- HEADER -->
+            <div class="header">
+                <div class="header-title">🔍 MLeads Dashboard</div>
+                <div class="header-right">
+                    <div class="user-info">
+                        <div class="avatar" id="userAvatar">A</div>
+                        <span id="userName">admin</span>
+                    </div>
+                    <button class="logout-btn" id="logoutBtn">Logout</button>
                 </div>
-                <div class="filter-group">
-                    <label for="filter-agent">Agent</label>
-                    <select id="filter-agent" onchange="loadLeads()">
-                        <option value="">All Agents</option>
-                    </select>
+            </div>
+
+            <!-- CONTENT -->
+            <div class="content">
+                <!-- DASHBOARD VIEW -->
+                <div class="view active" id="dashboard-view">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="totalLeads">0</div>
+                            <div class="stat-label">Total Leads</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="newLeads">0</div>
+                            <div class="stat-label">New Leads</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="contacted">0</div>
+                            <div class="stat-label">Contacted</div>
+                        </div>
+                    </div>
+
+                    <h3 style="margin-top: 30px; margin-bottom: 20px; color: var(--text-dark);">Recent Leads</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Address</th>
+                                    <th>Contact</th>
+                                    <th>Score</th>
+                                    <th>Contractor</th>
+                                    <th>Next Inspection</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dashboardLeadsBody">
+                                <tr><td colspan="5" style="text-align: center; color: var(--text-light);">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="filter-group">
-                    <label for="filter-status">Status</label>
-                    <select id="filter-status" onchange="loadLeads()">
-                        <option value="all">All</option>
-                        <option value="new">New</option>
-                        <option value="contacted">Contacted</option>
-                    </select>
+
+                <!-- LEADS VIEW -->
+                <div class="view" id="leads-view">
+                    <div class="filters">
+                        <div class="filter-group">
+                            <label class="filter-label">City</label>
+                            <select id="filterCity"><option value="">All Cities</option></select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Agent</label>
+                            <select id="filterAgent"><option value="">All Agents</option></select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Min Score</label>
+                            <input type="number" id="filterMinScore" min="0" max="100" value="0">
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: flex-end;">
+                            <button class="btn-search" id="searchBtn">Search</button>
+                            <button class="btn-reset" id="resetBtn">Reset</button>
+                        </div>
+                    </div>
+
+                    <div class="table-container" style="margin-top: 20px;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Address</th>
+                                    <th>City</th>
+                                    <th>Contact</th>
+                                    <th>Score</th>
+                                    <th>Agent</th>
+                                    <th>Next Inspection</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leadsTableBody">
+                                <tr><td colspan="6" class="empty-state">No leads found</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="filter-group">
-                    <label for="filter-score">Min Score</label>
-                    <input type="number" id="filter-score" min="0" max="100" placeholder="0-100" onchange="loadLeads()">
+
+                <!-- USERS VIEW -->
+                <div class="view" id="users-view">
+                    <button class="btn-add-user" id="addUserBtn">+ Add User</button>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Email</th>
+                                    <th>Full Name</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <tr><td colspan="4" style="text-align: center; color: var(--text-light);">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="filter-group">
-                    <label for="filter-value">Min Value</label>
-                    <input type="number" id="filter-value" min="0" placeholder="$0" onchange="loadLeads()">
+
+                <!-- INSPECTIONS VIEW -->
+                <div class="view" id="inspections-view">
+                    <h3 style="margin-bottom: 20px; color: var(--text-dark);">Scheduled Inspections</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Address</th>
+                                    <th>Jurisdiction</th>
+                                    <th>Inspection Type</th>
+                                    <th>Date</th>
+                                    <th>GC Probability</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inspectionsTableBody">
+                                <tr><td colspan="5" style="text-align: center; color: var(--text-light);">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="button-group" style="align-self: flex-end;">
-                    <button class="btn btn-primary" onclick="loadLeads()">Search</button>
-                    <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+
+                <!-- SETTINGS VIEW -->
+                <div class="view" id="settings-view">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚙️</div>
+                        <h3>Settings</h3>
+                        <p>Settings coming soon...</p>
+                    </div>
                 </div>
             </div>
         </div>
-
-        <!-- Leads Table -->
-        <div class="leads-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 40%;">Address</th>
-                        <th style="width: 15%;">City</th>
-                        <th style="width: 10%;">Score</th>
-                        <th style="width: 15%;">Source</th>
-                        <th style="width: 20%;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="leads-tbody">
-                    <tr>
-                        <td colspan="5" style="text-align: center; padding: 2rem;">
-                            <div class="loading">Loading leads...</div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Pagination -->
-        <div class="pagination" id="pagination"></div>
     </div>
 
-    <!-- Lead Detail Modal -->
-    <div class="modal" id="lead-modal">
+    <!-- SIDE PANEL -->
+    <div class="side-panel" id="sidePanel">
+        <div class="panel-header">
+            <div class="panel-title">Lead Details</div>
+            <button class="panel-close" id="panelClose">&times;</button>
+        </div>
+        <div class="panel-content">
+            <div class="panel-section">
+                <div class="panel-section-title">Lead Info</div>
+                <div class="panel-field"><div class="panel-label">Address</div><div class="panel-value" id="panelAddress"></div></div>
+                <div class="panel-field"><div class="panel-label">City</div><div class="panel-value" id="panelCity"></div></div>
+                <div class="panel-field"><div class="panel-label">Score</div><div class="panel-value" id="panelScore"></div></div>
+                <div class="panel-field"><div class="panel-label">Estimated Value</div><div class="panel-value" id="panelValue"></div></div>
+            </div>
+
+            <div class="panel-section">
+                <div class="panel-section-title">Contact Info</div>
+                <div class="panel-field"><div class="panel-label">Contractor</div><div class="panel-value" id="panelContractor"></div></div>
+                <div class="panel-field"><div class="panel-label">Phone</div><div class="panel-value" id="panelPhone"></div></div>
+                <div class="panel-field"><div class="panel-label">Email</div><div class="panel-value" id="panelEmail"></div></div>
+            </div>
+
+            <div class="panel-section">
+                <div class="panel-section-title">Project Details</div>
+                <div class="panel-field"><div class="panel-label">Source</div><div class="panel-value" id="panelSource"></div></div>
+                <div class="panel-field"><div class="panel-label">Next Inspection</div><div class="panel-value" id="panelInspection"></div></div>
+                <div class="panel-field"><div class="panel-label">Inspection Source</div><div class="panel-value" id="panelInspectionSource"></div></div>
+            </div>
+        </div>
+        <div class="panel-actions">
+            <button class="btn-action btn-primary" id="markContactedBtn">Mark as Contacted</button>
+            <button class="btn-action btn-secondary" id="panelCloseBtn">Close</button>
+        </div>
+    </div>
+
+    <!-- MODAL -->
+    <div class="modal" id="userModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Lead Details</h2>
-                <button class="close-btn" onclick="closeModal()">&times;</button>
+                <div class="modal-title">Add New User</div>
+                <button class="modal-close" id="modalClose">&times;</button>
             </div>
-            <div id="modal-body"></div>
-            <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
-                <button class="btn btn-primary" onclick="logContact()">Log Contact</button>
-                <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+            <div class="modal-body">
+                <form id="userForm">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="formUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="formEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="formPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="formFullName" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal btn-cancel" id="modalCancelBtn">Cancel</button>
+                <button class="btn-modal btn-submit" id="modalSubmitBtn">Create User</button>
             </div>
         </div>
     </div>
 
     <script>
-        let currentPage = 1;
+        let currentAccessToken = localStorage.getItem('access_token');
         let currentLead = null;
 
-        // Initialize
-        async function init() {
+        // Sidebar toggle
+        document.getElementById('sidebarToggle').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('expanded');
+        });
+
+        // Navigation
+        document.querySelectorAll('.nav-item').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const viewName = btn.dataset.view;
+                document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+                document.getElementById(`${viewName}-view`).classList.add('active');
+                if (viewName === 'dashboard') loadDashboard();
+                if (viewName === 'leads') loadLeads();
+                if (viewName === 'users') loadUsers();
+                if (viewName === 'inspections') loadInspections();
+            });
+        });
+
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            window.location.href = '/login.html';
+        });
+
+        // Side panel
+        document.getElementById('panelClose').addEventListener('click', () => {
+            document.getElementById('sidePanel').classList.remove('open');
+        });
+        document.getElementById('panelCloseBtn').addEventListener('click', () => {
+            document.getElementById('sidePanel').classList.remove('open');
+        });
+
+        // Modal
+        document.getElementById('addUserBtn').addEventListener('click', () => {
+            document.getElementById('userModal').classList.add('open');
+        });
+        document.getElementById('modalClose').addEventListener('click', () => {
+            document.getElementById('userModal').classList.remove('open');
+        });
+        document.getElementById('modalCancelBtn').addEventListener('click', () => {
+            document.getElementById('userModal').classList.remove('open');
+        });
+
+        document.getElementById('modalSubmitBtn').addEventListener('click', async () => {
+            const username = document.getElementById('formUsername').value;
+            const email = document.getElementById('formEmail').value;
+            const password = document.getElementById('formPassword').value;
+            const fullName = document.getElementById('formFullName').value;
+
             try {
-                const user = await fetch('/api/user', {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
-                }).then(r => r.json());
+                const response = await fetch('/api/admin/users', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, email, password, full_name: fullName })
+                });
 
-                if (user.error) {
-                    window.location.href = '/login.html';
-                    return;
+                if (response.ok) {
+                    document.getElementById('userModal').classList.remove('open');
+                    document.getElementById('userForm').reset();
+                    loadUsers();
                 }
-
-                document.getElementById('username').textContent = user.username;
-
-                // Populate city filter
-                const citySelect = document.getElementById('filter-city');
-                user.cities.forEach(city => {
-                    const option = document.createElement('option');
-                    option.value = city.id;
-                    option.textContent = city.name;
-                    citySelect.appendChild(option);
-                });
-
-                // Populate agent filter
-                const agentSelect = document.getElementById('filter-agent');
-                user.agents.forEach(agent => {
-                    const option = document.createElement('option');
-                    option.value = agent.name;
-                    option.textContent = agent.name;
-                    agentSelect.appendChild(option);
-                });
-
-                // Load initial data
-                await Promise.all([loadLeads(), loadStats()]);
             } catch (e) {
-                console.error('Init error:', e);
+                console.error(e);
+            }
+        });
+
+        // Search/Reset
+        document.getElementById('searchBtn').addEventListener('click', loadLeads);
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            document.getElementById('filterCity').value = '';
+            document.getElementById('filterAgent').value = '';
+            document.getElementById('filterMinScore').value = '0';
+            loadLeads();
+        });
+
+        // Data loading
+        async function loadDashboard() {
+            try {
+                const response = await fetch('/api/leads', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const data = await response.json();
+                document.getElementById('totalLeads').textContent = data.total || 0;
+                document.getElementById('newLeads').textContent = data.total || 0;
+                document.getElementById('contacted').textContent = '0';
+
+                const leads = data.leads || [];
+                const tbody = document.getElementById('dashboardLeadsBody');
+                tbody.innerHTML = leads.slice(0, 5).map(lead => `
+                    <tr class="lead-row" onclick="showLeadPanel('${lead.address_key}')">
+                        <td>${lead.address}</td>
+                        <td>
+                            <div class="contact-info">
+                                ${lead.phone ? `<div class="contact-item"><span class="icon-small">📞</span>${lead.phone}</div>` : ''}
+                                ${lead.email ? `<div class="contact-item"><span class="icon-small">📧</span>${lead.email}</div>` : ''}
+                            </div>
+                        </td>
+                        <td><span class="badge ${getScoreBadge(lead.score)}">${lead.score}</span></td>
+                        <td>${lead.contractor || '-'}</td>
+                        <td>${lead.next_inspection_date ? `<span class="inspection-badge">📅 ${lead.next_inspection_date}</span>` : '-'}</td>
+                    </tr>
+                `).join('') || '<tr><td colspan="5" style="text-align: center;">No leads</td></tr>';
+            } catch (e) {
+                console.error(e);
             }
         }
 
         async function loadLeads() {
-            const city = document.getElementById('filter-city').value;
-            const agent = document.getElementById('filter-agent').value;
-            const status = document.getElementById('filter-status').value;
-            const minScore = document.getElementById('filter-score').value;
-            const minValue = document.getElementById('filter-value').value;
-
-            let url = `/api/leads?page=${currentPage}`;
-            if (city) url += `&city_id=${city}`;
-            if (agent) url += `&agent=${agent}`;
-            if (status !== 'all') url += `&status=${status}`;
-            if (minScore) url += `&min_score=${minScore}`;
-            if (minValue) url += `&min_value=${minValue}`;
-
             try {
-                const data = await fetch(url, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
-                }).then(r => r.json());
+                const city = document.getElementById('filterCity').value;
+                const agent = document.getElementById('filterAgent').value;
+                const minScore = document.getElementById('filterMinScore').value;
+                const params = new URLSearchParams();
+                if (city) params.append('city_id', city);
+                if (agent) params.append('agent', agent);
+                if (minScore) params.append('min_score', minScore);
 
-                if (data.error) {
-                    showError(data.error);
+                const response = await fetch(`/api/leads?${params}`, {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const data = await response.json();
+                const leads = data.leads || [];
+                const tbody = document.getElementById('leadsTableBody');
+
+                if (leads.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No leads found</td></tr>';
                     return;
                 }
 
-                renderLeads(data.leads);
-                renderPagination(data.pages, currentPage);
-            } catch (e) {
-                showError('Failed to load leads');
-            }
-        }
-
-        function renderLeads(leads) {
-            const tbody = document.getElementById('leads-tbody');
-
-            if (leads.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem;">No leads found</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = leads.map(lead => {
-                const score = lead.score || 0;
-                let scoreClass = 'score-cold';
-                if (score >= 80) scoreClass = 'score-hot';
-                else if (score >= 60) scoreClass = 'score-warm';
-                else if (score >= 40) scoreClass = 'score-medium';
-                else if (score >= 20) scoreClass = 'score-cool';
-
-                return `
-                    <tr>
-                        <td><span class="lead-address" onclick="viewLead('${lead.id}')">${lead.address || 'N/A'}</span></td>
-                        <td>${lead.city || '-'}</td>
-                        <td><span class="score-badge ${scoreClass}">${score}</span></td>
-                        <td>${lead.source || '-'}</td>
+                tbody.innerHTML = leads.map(lead => `
+                    <tr class="lead-row" onclick="showLeadPanel('${lead.address_key}')">
+                        <td>${lead.address}</td>
+                        <td>${lead.city}</td>
                         <td>
-                            <button class="btn btn-primary" onclick="viewLead('${lead.id}')" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;">View</button>
-                            ${lead.contacted ? '<span style="color: #22c55e;">✓ Contacted</span>' : ''}
+                            <div class="contact-info">
+                                ${lead.phone ? `<div class="contact-item"><span class="icon-small">📞</span>${lead.phone}</div>` : ''}
+                                ${lead.email ? `<div class="contact-item"><span class="icon-small">📧</span>${lead.email}</div>` : ''}
+                            </div>
                         </td>
+                        <td><span class="badge ${getScoreBadge(lead.score)}">${lead.score}</span></td>
+                        <td>${lead.agent_sources || '-'}</td>
+                        <td>${lead.next_inspection_date ? `<span class="inspection-badge">📅 ${lead.next_inspection_date}</span>` : '-'}</td>
                     </tr>
-                `;
-            }).join('');
-        }
-
-        function renderPagination(pages, current) {
-            const paginationDiv = document.getElementById('pagination');
-
-            if (pages <= 1) {
-                paginationDiv.innerHTML = '';
-                return;
-            }
-
-            let html = '';
-            if (current > 1) {
-                html += `<button onclick="goToPage(${current - 1})">← Previous</button>`;
-            }
-
-            for (let i = 1; i <= pages; i++) {
-                if (i === current) {
-                    html += `<button class="active">${i}</button>`;
-                } else {
-                    html += `<button onclick="goToPage(${i})">${i}</button>`;
-                }
-            }
-
-            if (current < pages) {
-                html += `<button onclick="goToPage(${current + 1})">Next →</button>`;
-            }
-
-            paginationDiv.innerHTML = html;
-        }
-
-        function goToPage(page) {
-            currentPage = page;
-            loadLeads();
-            window.scrollTo(0, 0);
-        }
-
-        async function loadStats() {
-            try {
-                const data = await fetch('/api/stats', {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
-                }).then(r => r.json());
-
-                document.getElementById('stat-total').textContent = data.total_leads;
-                document.getElementById('stat-new').textContent = data.new_leads;
-                document.getElementById('stat-contacted').textContent = data.contacted_leads;
+                `).join('');
             } catch (e) {
-                console.error('Failed to load stats:', e);
+                console.error(e);
             }
         }
 
-        async function viewLead(leadId) {
+        async function loadUsers() {
             try {
-                const lead = await fetch(`/api/leads/${leadId}`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
-                }).then(r => r.json());
-
-                currentLead = lead;
-
-                const body = document.getElementById('modal-body');
-                body.innerHTML = `
-                    <div class="modal-field">
-                        <label>Address</label>
-                        <p>${lead.address || 'N/A'}</p>
-                    </div>
-                    <div class="modal-field">
-                        <label>City</label>
-                        <p>${lead.city || 'N/A'}</p>
-                    </div>
-                    <div class="modal-field">
-                        <label>Score</label>
-                        <p>${lead.score || 0}</p>
-                    </div>
-                    <div class="modal-field">
-                        <label>Estimated Value</label>
-                        <p>$${(lead.value || 0).toLocaleString()}</p>
-                    </div>
-                    <div class="modal-field">
-                        <label>Source</label>
-                        <p>${lead.source || 'N/A'}</p>
-                    </div>
-                    <div class="modal-field">
-                        <label>Description</label>
-                        <p>${lead.description || 'N/A'}</p>
-                    </div>
-                    ${lead.source_url ? `
-                    <div class="modal-field">
-                        <label>Source Link</label>
-                        <p><a href="${lead.source_url}" target="_blank">View on source website →</a></p>
-                    </div>
-                    ` : ''}
-                `;
-
-                document.getElementById('lead-modal').classList.add('active');
-            } catch (e) {
-                showError('Failed to load lead details');
-            }
-        }
-
-        function closeModal() {
-            document.getElementById('lead-modal').classList.remove('active');
-        }
-
-        async function logContact() {
-            if (!currentLead) return;
-
-            try {
-                await fetch(`/api/leads/${currentLead.id}/contact`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ type: 'contacted' })
+                const response = await fetch('/api/admin/users', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
                 });
-
-                showSuccess('Contact logged!');
-                closeModal();
-                loadLeads();
-                loadStats();
+                const data = await response.json();
+                const users = data.users || [];
+                const tbody = document.getElementById('usersTableBody');
+                tbody.innerHTML = users.map(user => `
+                    <tr>
+                        <td>${user.username}</td>
+                        <td>${user.email}</td>
+                        <td>${user.full_name || '-'}</td>
+                        <td><span class="badge badge-cool">Active</span></td>
+                    </tr>
+                `).join('');
             } catch (e) {
-                showError('Failed to log contact');
+                console.error(e);
             }
         }
 
-        function resetFilters() {
-            document.getElementById('filter-city').value = '';
-            document.getElementById('filter-agent').value = '';
-            document.getElementById('filter-status').value = 'all';
-            document.getElementById('filter-score').value = '';
-            document.getElementById('filter-value').value = '';
-            currentPage = 1;
-            loadLeads();
+        async function loadInspections() {
+            try {
+                const response = await fetch('/api/scheduled_inspections', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const data = await response.json();
+                const inspections = data.inspections || [];
+                const tbody = document.getElementById('inspectionsTableBody');
+                if (inspections.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No inspections</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = inspections.map(insp => `
+                    <tr>
+                        <td>${insp.address}</td>
+                        <td>${insp.jurisdiction}</td>
+                        <td>${insp.inspection_type}</td>
+                        <td>${insp.inspection_date}</td>
+                        <td>${(insp.gc_presence_probability * 100).toFixed(0)}%</td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error(e);
+            }
         }
 
-        function logout() {
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
+        function showLeadPanel(addressKey) {
+            document.getElementById('sidePanel').classList.add('open');
+        }
+
+        function getScoreBadge(score) {
+            if (score >= 80) return 'badge-hot';
+            if (score >= 60) return 'badge-warm';
+            if (score >= 40) return 'badge-medium';
+            if (score >= 20) return 'badge-cool';
+            return 'badge-cold';
+        }
+
+        // Initial load
+        if (!currentAccessToken) {
             window.location.href = '/login.html';
+        } else {
+            loadDashboard();
+            setInterval(loadDashboard, 30000);
         }
-
-        function showError(msg) {
-            const container = document.querySelector('.container');
-            const div = document.createElement('div');
-            div.className = 'error';
-            div.textContent = msg;
-            container.insertBefore(div, container.firstChild);
-            setTimeout(() => div.remove(), 5000);
-        }
-
-        function showSuccess(msg) {
-            const container = document.querySelector('.container');
-            const div = document.createElement('div');
-            div.className = 'success';
-            div.textContent = msg;
-            container.insertBefore(div, container.firstChild);
-            setTimeout(() => div.remove(), 3000);
-        }
-
-        // Auto-close modal when clicking outside
-        window.onclick = function(event) {
-            const modal = document.getElementById('lead-modal');
-            if (event.target === modal) {
-                closeModal();
-            }
-        }
-
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', init);
-
-        // Reload stats every 30 seconds
-        setInterval(loadStats, 30000);
     </script>
 </body>
 </html>
