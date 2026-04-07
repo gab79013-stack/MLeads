@@ -8,6 +8,23 @@ Incluye **dashboard multi-usuario** con control de acceso por ciudad/agente, acc
 
 ---
 
+## ⚡ Quick Start (Instalación en 30 segundos)
+
+### En Ubuntu/Debian (recomendado para Azure VM):
+```bash
+curl -s https://raw.githubusercontent.com/gab79013-stack/MLeads/main/quick-install.sh | sudo bash
+```
+
+**Eso es todo.** El script:
+- Instala todas las dependencias
+- Configura la base de datos
+- Inicia el servidor automáticamente
+- Accede a http://localhost
+
+[Ver documentación de instalación completa →](INSTALL_UBUNTU.md)
+
+---
+
 ## Agentes
 
 | Agente | Fuentes | Ciudades | Intervalo | Oportunidad |
