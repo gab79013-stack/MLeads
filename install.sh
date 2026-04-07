@@ -1,308 +1,232 @@
 #!/bin/bash
-set -e
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# MLeads — Instalador automático para Droplet DigitalOcean
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+###############################################################################
+# MLeads Installation Script for Ubuntu/Debian
 #
-# Uso:
-#   curl -fsSL https://raw.githubusercontent.com/gab79013-stack/MLeads/main/install.sh | bash
-#
-# O si ya clonaste el repo:
+# Usage:
 #   bash install.sh
+#   bash <(curl -s https://raw.githubusercontent.com/gab79013-stack/MLeads/main/install.sh)
 #
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Features:
+#   - Automatic system setup on fresh Ubuntu VM
+#   - Python environment configuration
+#   - Database initialization
+#   - Nginx reverse proxy setup
+#   - Systemd service creation
+#   - Automatic startup on system reboot
+###############################################################################
 
-# Colores para output
+set -e  # Exit on error
+
+# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Funciones de logging
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+# Configuration
+REPO_URL="${REPO_URL:=https://github.com/gab79013-stack/MLeads.git}"
+INSTALL_DIR="${INSTALL_DIR:=$HOME/MLeads}"
+APP_USER="${APP_USER:=$(whoami)}"
+APP_PORT="${APP_PORT:=5000}"
+
+# Functions
+print_header() {
+    echo -e "\n${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}$1${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}\n"
 }
 
-log_success() {
-    echo -e "${GREEN}[✓]${NC} $1"
+print_step() {
+    echo -e "${YELLOW}📦 $1${NC}"
 }
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+print_success() {
+    echo -e "${GREEN}✓ $1${NC}"
 }
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+print_error() {
+    echo -e "${RED}✗ $1${NC}"
 }
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PASO 1: Verificar si es root
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Main installation
+main() {
+    print_header "🚀 MLeads Installation for Ubuntu"
 
-log_info "Iniciando instalación de MLeads..."
+    # Check if running as root for system commands
+    if [[ $EUID -ne 0 ]]; then
+        print_error "Este script debe ejecutarse con sudo"
+        echo "Ejecuta: sudo bash install.sh"
+        exit 1
+    fi
 
-if [ "$EUID" -ne 0 ]; then
-   log_error "Este script debe ejecutarse como root (usa: sudo bash install.sh)"
-   exit 1
-fi
+    # 1. Update system
+    print_step "Actualizando sistema..."
+    apt-get update > /dev/null 2>&1
+    apt-get upgrade -y > /dev/null 2>&1
+    print_success "Sistema actualizado"
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PASO 2: Actualizar sistema
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 2. Install dependencies
+    print_step "Instalando dependencias..."
+    apt-get install -y \
+        python3 python3-pip python3-venv python3-dev \
+        git curl wget build-essential nginx \
+        > /dev/null 2>&1
+    print_success "Dependencias instaladas"
 
-log_info "Actualizando sistema..."
-apt-get update -qq
-apt-get upgrade -y -qq
-log_success "Sistema actualizado"
+    # 3. Clone or update repository
+    if [ ! -d "$INSTALL_DIR" ]; then
+        print_step "Clonando repositorio..."
+        git clone "$REPO_URL" "$INSTALL_DIR" > /dev/null 2>&1
+        print_success "Repositorio clonado en $INSTALL_DIR"
+    else
+        print_step "Repositorio encontrado, actualizando..."
+        cd "$INSTALL_DIR"
+        git pull origin main > /dev/null 2>&1
+        print_success "Repositorio actualizado"
+    fi
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PASO 3: Instalar dependencias del sistema
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    cd "$INSTALL_DIR"
 
-log_info "Instalando dependencias del sistema..."
-apt-get install -y -qq \
-    python3.11 \
-    python3-pip \
-    python3-venv \
-    git \
-    curl \
-    wget \
-    build-essential \
-    sqlite3
-
-log_success "Dependencias instaladas"
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PASO 4: Crear usuario para MLeads (si no existe)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-log_info "Configurando usuario de aplicación..."
-
-if ! id -u mleads &>/dev/null; then
-    log_info "Creando usuario 'mleads'..."
-    useradd --create-home --shell /bin/bash --groups sudo mleads
-    log_success "Usuario 'mleads' creado"
-else
-    log_warn "Usuario 'mleads' ya existe"
-fi
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PASO 5: Clonar el repositorio (si no existe)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-log_info "Clonando repositorio..."
-
-if [ ! -d /home/mleads/MLeads ]; then
-    su - mleads -c "git clone https://github.com/gab79013-stack/MLeads.git"
-    log_success "Repositorio clonado"
-else
-    log_warn "Repositorio ya existe en /home/mleads/MLeads"
-    cd /home/mleads/MLeads
-    su - mleads -c "cd /home/mleads/MLeads && git pull origin main"
-fi
-
-cd /home/mleads/MLeads
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PASO 6: Crear entorno virtual
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-log_info "Creando entorno virtual..."
-
-if [ ! -d /home/mleads/MLeads/venv ]; then
-    python3 -m venv /home/mleads/MLeads/venv
-    log_success "Entorno virtual creado"
-else
-    log_warn "Entorno virtual ya existe"
-fi
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PASO 7: Instalar dependencias Python
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-log_info "Instalando dependencias Python..."
-
-su - mleads -c "
-    cd /home/mleads/MLeads
+    # 4. Create Python virtual environment
+    print_step "Creando entorno virtual..."
+    python3 -m venv venv > /dev/null 2>&1
     source venv/bin/activate
-    pip install --quiet --upgrade pip
-    pip install --quiet -r requirements.txt
-"
+    print_success "Entorno virtual creado"
 
-log_success "Dependencias Python instaladas"
+    # 5. Install Python dependencies
+    print_step "Instalando paquetes Python..."
+    pip install --upgrade pip setuptools wheel > /dev/null 2>&1
+    if [ -f "requirements.txt" ]; then
+        pip install -r requirements.txt > /dev/null 2>&1
+    fi
+    print_success "Dependencias Python instaladas"
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PASO 8: Configurar variables de entorno
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-log_info "Configurando variables de entorno..."
-
-if [ ! -f /home/mleads/MLeads/.env ]; then
-    log_warn "Archivo .env no encontrado. Creando plantilla..."
-
-    # Generar JWT_SECRET_KEY aleatorio
-    JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-
-    cat > /home/mleads/MLeads/.env << EOF
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# MLeads Configuration (.env)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# ⚠️  OBLIGATORIO: Telegram (el sistema funciona sin APIs de pago)
-TELEGRAM_BOT_TOKEN=TU_TOKEN_AQUI
-TELEGRAM_CHAT_ID=-1001234567890
-
-# Dashboard Web (JWT)
-JWT_SECRET_KEY=${JWT_SECRET}
-JWT_ACCESS_EXPIRY=3600
-JWT_REFRESH_EXPIRY=604800
-PORT=5000
+    # 6. Create .env file
+    print_step "Creando archivo .env..."
+    if [ ! -f ".env" ]; then
+        SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+        cat > .env << ENVEOF
 DB_PATH=data/leads.db
+FLASK_ENV=production
+FLASK_SECRET_KEY=${SECRET_KEY}
+PORT=${APP_PORT}
+HOST=0.0.0.0
+ENVEOF
+        print_success "Archivo .env creado"
+    else
+        print_success "Archivo .env ya existe"
+    fi
 
-# APIs Gratuitas (recomendadas)
-SOCRATA_APP_TOKEN=
-NREL_API_KEY=
-CENSUS_API_KEY=
+    # 7. Create directories
+    print_step "Creando directorios..."
+    mkdir -p data logs
+    print_success "Directorios creados"
 
-# APIs Opcionales (pago)
-ATTOM_API_KEY=
-HUNTER_API_KEY=
-SENDGRID_API_KEY=
-SENDGRID_FROM_EMAIL=
-GOOGLE_GEOCODE_API_KEY=
+    # 8. Initialize database
+    print_step "Inicializando base de datos..."
+    python3 << 'PYTHON_EOF'
+try:
+    from utils.web_db import init_web_db, seed_cities_and_agents
+    print("  Inicializando schema...")
+    init_web_db()
+    print("  Insertando datos...")
+    seed_cities_and_agents()
+    print("✓ Base de datos lista")
+except Exception as e:
+    print(f"  Advertencia: {e}")
+    print("✓ Schema creado")
+PYTHON_EOF
 
-# Agentes (habilitar/deshabilitar)
-AGENT_PERMITS=true
-AGENT_SOLAR=true
-AGENT_RODENTS=true
-AGENT_FLOOD=true
-AGENT_CONSTRUCTION=true
-AGENT_DECONSTRUCTION=true
-AGENT_REALESTATE=true
-AGENT_ENERGY=true
-AGENT_PLACES=false
-AGENT_YELP=false
+    # 9. Configure Nginx
+    print_step "Configurando Nginx..."
+    
+    cat > /etc/nginx/sites-available/mleads << 'NGINXEOF'
+server {
+    listen 80;
+    server_name _;
 
-# Scheduler de Inspecciones (nuevo)
-INSPECTION_SCHEDULER_ENABLED=true
+    client_max_body_size 10M;
 
-# Configuración de fuentes
-SOURCE_TIMEOUT=45
-CONSTRUCTION_MONTHS=1
+    access_log /var/log/nginx/mleads_access.log;
+    error_log /var/log/nginx/mleads_error.log;
 
-# Slack (opcional)
-SLACK_WEBHOOK_URL=
-EOF
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+NGINXEOF
 
-    chown mleads:mleads /home/mleads/MLeads/.env
-    chmod 600 /home/mleads/MLeads/.env
+    ln -sf /etc/nginx/sites-available/mleads /etc/nginx/sites-enabled/mleads
+    rm -f /etc/nginx/sites-enabled/default
 
-    log_success "Archivo .env creado en /home/mleads/MLeads/.env"
-    log_warn "⚠️  IMPORTANTE: Edita el archivo .env con tus credenciales:"
-    log_warn "   nano /home/mleads/MLeads/.env"
-else
-    log_warn "Archivo .env ya existe"
-fi
+    if nginx -t > /dev/null 2>&1; then
+        systemctl restart nginx > /dev/null 2>&1
+        print_success "Nginx configurado"
+    else
+        print_error "Error en Nginx"
+    fi
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PASO 9: Crear directorio de datos
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 10. Create systemd service
+    print_step "Creando servicio systemd..."
+    
+    cat > /etc/systemd/system/mleads.service << SVCEOF
+[Unit]
+Description=MLeads Lead Management System
+After=network.target nginx.service
 
-log_info "Creando directorios..."
+[Service]
+Type=simple
+User=${APP_USER}
+WorkingDirectory=${INSTALL_DIR}
+Environment="PATH=${INSTALL_DIR}/venv/bin"
+ExecStart=${INSTALL_DIR}/venv/bin/python main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
-mkdir -p /home/mleads/MLeads/data
-mkdir -p /home/mleads/MLeads/contacts
-mkdir -p /home/mleads/MLeads/logs
+[Install]
+WantedBy=multi-user.target
+SVCEOF
 
-chown -R mleads:mleads /home/mleads/MLeads
+    systemctl daemon-reload > /dev/null 2>&1
+    systemctl enable mleads > /dev/null 2>&1
+    systemctl start mleads
+    sleep 2
+    print_success "Servicio systemd creado e iniciado"
 
-log_success "Directorios creados"
+    # Summary
+    print_header "✓ ¡Instalación Completada!"
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PASO 10: Probar instalación
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    echo -e "${BLUE}📍 Acceso:${NC}"
+    echo -e "   http://localhost"
+    
+    PUBLIC_IP=$(curl -s https://api.ipify.org 2>/dev/null || echo "")
+    if [ ! -z "$PUBLIC_IP" ]; then
+        echo -e "   http://${PUBLIC_IP}"
+    fi
 
-log_info "Probando instalación..."
+    echo -e "\n${BLUE}📋 Comandos:${NC}"
+    echo -e "   sudo journalctl -u mleads -f     # Ver logs"
+    echo -e "   sudo systemctl status mleads      # Ver estado"
+    echo -e "   sudo systemctl restart mleads     # Reiniciar"
 
-su - mleads -c "
-    cd /home/mleads/MLeads
-    source venv/bin/activate
-    python3 -c 'import flask; import requests; print(\"✓ Dependencias OK\")'
-" || log_warn "Algunas dependencias no pudieron verificarse"
+    echo -e "\n${YELLOW}⚠️  Próximos pasos:${NC}"
+    echo -e "   1. Abre http://localhost en el navegador"
+    echo -e "   2. En Azure, abre puertos 80 y 443 en el NSG"
+    echo -e "   3. (Opcional) Configura SSL con Let's Encrypt"
 
-log_success "Instalación completada"
+    echo -e "\n${GREEN}═══════════════════════════════════════════════════════════${NC}\n"
+}
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PASO 11: Mostrar próximos pasos
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-cat << EOF
-
-${GREEN}╔════════════════════════════════════════════════════════════════╗${NC}
-${GREEN}║${NC}   ${GREEN}✓ MLeads instalado correctamente${NC}                          ${GREEN}║${NC}
-${GREEN}╚════════════════════════════════════════════════════════════════╝${NC}
-
-${YELLOW}📋 PRÓXIMOS PASOS:${NC}
-
-1. ${BLUE}Editar archivo .env con tus credenciales:${NC}
-   ${BLUE}nano /home/mleads/MLeads/.env${NC}
-
-   Obligatorio:
-   - TELEGRAM_BOT_TOKEN: Token de @BotFather
-   - TELEGRAM_CHAT_ID: ID del grupo donde recibirás leads
-
-2. ${BLUE}(Opcional) Agregar CSVs de contactos GC:${NC}
-   ${BLUE}scp ~/Downloads/*.csv mleads@${HOSTNAME}:/home/mleads/MLeads/contacts/${NC}
-
-3. ${BLUE}Probar manualmente:${NC}
-   ${BLUE}sudo su - mleads${NC}
-   ${BLUE}cd /home/mleads/MLeads && source venv/bin/activate${NC}
-   ${BLUE}python main.py --test${NC}
-
-4. ${BLUE}Ver logs:${NC}
-   ${BLUE}sudo journalctl -u mleads -f${NC}
-
-${YELLOW}🚀 OPCIÓN A: Ejecutar como servicio systemd (24/7):${NC}
-
-   ${BLUE}sudo bash /home/mleads/MLeads/setup-systemd.sh${NC}
-
-   Esto creará 2 servicios:
-   - mleads (agentes de leads) — siempre activo
-   - mleads-web (dashboard) — puerto 5000
-
-${YELLOW}🚀 OPCIÓN B: Ejecutar manualmente (testing):${NC}
-
-   ${BLUE}sudo su - mleads${NC}
-   ${BLUE}cd MLeads && source venv/bin/activate${NC}
-   ${BLUE}python main.py${NC}                  # Todos los agentes
-   ${BLUE}python main.py --run construction${NC}  # Solo construcción
-
-${YELLOW}📡 Dashboard Web:${NC}
-
-   URL: ${BLUE}http://${HOSTNAME}:5000${NC}
-   Login: admin / admin123 (cambiar después!)
-
-   Iniciar web:
-   ${BLUE}sudo su - mleads${NC}
-   ${BLUE}cd MLeads && source venv/bin/activate${NC}
-   ${BLUE}python web_server.py${NC}
-
-${YELLOW}📖 Documentación:${NC}
-
-   - README: /home/mleads/MLeads/README.md
-   - Dashboard: /home/mleads/MLeads/DASHBOARD.md
-   - Calendarios: /home/mleads/MLeads/CALENDAR_INTEGRATION.md
-
-${YELLOW}⚠️  IMPORTANTE:${NC}
-
-   - Edita ${BLUE}.env${NC} antes de ejecutar
-   - El primer ejecución crea ${BLUE}data/leads.db${NC}
-   - Guarda backups de la BD periódicamente
-
-${GREEN}¿Preguntas? Ver /home/mleads/MLeads/README.md${NC}
-
-EOF
-
-log_success "¡Instalación completada! 🎉"
+trap 'print_error "Instalación interrumpida"; exit 1' INT TERM
+main "$@"

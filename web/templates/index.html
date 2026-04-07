@@ -847,6 +847,18 @@
                         <div style="display: flex; gap: 10px; align-items: flex-end;">
                             <button class="btn-search" id="searchBtn">Search</button>
                             <button class="btn-reset" id="resetBtn">Reset</button>
+                            <button id="saveViewBtn" style="background-color: var(--warning); color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer;">💾 Save View</button>
+                        </div>
+                    </div>
+
+                    <!-- Saved Views -->
+                    <div style="margin-top: 15px; padding: 10px; background-color: var(--primary-light); border-radius: 6px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <span style="font-weight: 600; font-size: 14px;">📌 Saved Views</span>
+                            <span id="viewsCount" style="font-size: 12px; color: var(--text-light);">0</span>
+                        </div>
+                        <div id="savedViewsList" style="display: flex; flex-direction: column; gap: 5px;">
+                            <p style="font-size: 12px; color: var(--text-light); text-align: center;">No saved views yet</p>
                         </div>
                     </div>
 
@@ -856,6 +868,7 @@
                                 <tr>
                                     <th>Address</th>
                                     <th>City</th>
+                                    <th>Service</th>
                                     <th>Contact</th>
                                     <th>Score</th>
                                     <th>Agent</th>
@@ -863,7 +876,7 @@
                                 </tr>
                             </thead>
                             <tbody id="leadsTableBody">
-                                <tr><td colspan="6" class="empty-state">No leads found</td></tr>
+                                <tr><td colspan="7" class="empty-state">No leads found</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -891,7 +904,22 @@
 
                 <!-- INSPECTIONS VIEW -->
                 <div class="view" id="inspections-view">
-                    <h3 style="margin-bottom: 20px; color: var(--text-dark);">Scheduled Inspections</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3 style="margin: 0; color: var(--text-dark);">Scheduled Inspections</h3>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <div style="display: flex; gap: 8px;">
+                                <select id="inspectionDaysFilter" style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 5px; font-size: 13px;">
+                                    <option value="">All Dates</option>
+                                    <option value="7">Next 7 Days</option>
+                                    <option value="14">Next 14 Days</option>
+                                    <option value="30">Next 30 Days</option>
+                                    <option value="60">Next 60 Days</option>
+                                </select>
+                                <button id="refreshInspectionsBtn" style="padding: 6px 12px; background-color: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 13px;">🔄 Refresh</button>
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-light);" id="lastFetchedTime">Last fetched: --</div>
+                        </div>
+                    </div>
                     <div class="table-container">
                         <table>
                             <thead>
@@ -900,11 +928,12 @@
                                     <th>Jurisdiction</th>
                                     <th>Inspection Type</th>
                                     <th>Date</th>
+                                    <th>Days Until</th>
                                     <th>GC Probability</th>
                                 </tr>
                             </thead>
                             <tbody id="inspectionsTableBody">
-                                <tr><td colspan="5" style="text-align: center; color: var(--text-light);">Loading...</td></tr>
+                                <tr><td colspan="6" style="text-align: center; color: var(--text-light);">Loading...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1037,9 +1066,20 @@
 
             <div class="panel-section">
                 <div class="panel-section-title">Project Details</div>
+                <div class="panel-field"><div class="panel-label">Service Type</div><div class="panel-value" id="panelServiceType"></div></div>
                 <div class="panel-field"><div class="panel-label">Source</div><div class="panel-value" id="panelSource"></div></div>
                 <div class="panel-field"><div class="panel-label">Next Inspection</div><div class="panel-value" id="panelInspection"></div></div>
                 <div class="panel-field"><div class="panel-label">Inspection Source</div><div class="panel-value" id="panelInspectionSource"></div></div>
+            </div>
+
+            <div class="panel-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div class="panel-section-title">Notes</div>
+                    <button id="addNoteBtn" style="padding: 4px 8px; background-color: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">+ Add</button>
+                </div>
+                <div id="panelNotesList" style="max-height: 200px; overflow-y: auto;">
+                    <p style="color: var(--text-light); font-size: 12px; text-align: center;">No notes yet</p>
+                </div>
             </div>
         </div>
         <div class="panel-actions">
@@ -1168,12 +1208,49 @@
                 document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
                 document.getElementById(`${viewName}-view`).classList.add('active');
                 if (viewName === 'dashboard') loadDashboard();
-                if (viewName === 'leads') loadLeads();
+                if (viewName === 'leads') { loadLeads(); loadSavedViews(); }
                 if (viewName === 'users') loadUsers();
                 if (viewName === 'inspections') loadInspections();
                 if (viewName === 'settings') loadSettings();
             });
         });
+
+        // Inspection view filters and controls
+        const inspectionDaysFilter = document.getElementById('inspectionDaysFilter');
+        if (inspectionDaysFilter) {
+            inspectionDaysFilter.addEventListener('change', loadInspections);
+        }
+
+        const refreshInspectionsBtn = document.getElementById('refreshInspectionsBtn');
+        if (refreshInspectionsBtn) {
+            refreshInspectionsBtn.addEventListener('click', async () => {
+                refreshInspectionsBtn.disabled = true;
+                refreshInspectionsBtn.textContent = '⏳ Fetching...';
+                try {
+                    const response = await fetch('/api/admin/scheduler/fetch-now', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                    });
+                    if (response.ok) {
+                        await loadInspections();
+                        // Update last fetched time
+                        const now = new Date();
+                        const timeStr = now.toLocaleTimeString();
+                        document.getElementById('lastFetchedTime').textContent = `Last fetched: ${timeStr}`;
+                        refreshInspectionsBtn.textContent = '🔄 Refresh';
+                    } else {
+                        alert('Failed to refresh inspections');
+                        refreshInspectionsBtn.textContent = '🔄 Refresh';
+                    }
+                } catch (e) {
+                    console.error('Error refreshing inspections:', e);
+                    alert('Error refreshing inspections');
+                    refreshInspectionsBtn.textContent = '🔄 Refresh';
+                } finally {
+                    refreshInspectionsBtn.disabled = false;
+                }
+            });
+        }
 
         // Logout
         document.getElementById('logoutBtn').addEventListener('click', () => {
@@ -1305,22 +1382,25 @@
                 const tbody = document.getElementById('leadsTableBody');
 
                 if (leads.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No leads found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No leads found</td></tr>';
                     return;
                 }
 
                 tbody.innerHTML = leads.map(lead => `
-                    <tr class="lead-row" onclick="showLeadPanel('${lead.address_key}')">
+                    <tr class="lead-row" onclick="showLeadPanel('${lead.id}')">
                         <td>${lead.address}</td>
                         <td>${lead.city}</td>
                         <td>
+                            ${lead.service_emoji ? `<span title="${lead.service_label}">${lead.service_emoji} ${lead.service_label}</span>` : '-'}
+                        </td>
+                        <td>
                             <div class="contact-info">
-                                ${lead.phone ? `<div class="contact-item"><span class="icon-small">📞</span>${lead.phone}</div>` : ''}
-                                ${lead.email ? `<div class="contact-item"><span class="icon-small">📧</span>${lead.email}</div>` : ''}
+                                ${lead.contact_phone ? `<div class="contact-item"><span class="icon-small">📞</span>${lead.contact_phone}</div>` : ''}
+                                ${lead.contact_email ? `<div class="contact-item"><span class="icon-small">📧</span>${lead.contact_email}</div>` : ''}
                             </div>
                         </td>
                         <td><span class="badge ${getScoreBadge(lead.score)}">${lead.score}</span></td>
-                        <td>${lead.agent_sources || '-'}</td>
+                        <td>${lead.source || '-'}</td>
                         <td>${lead.next_inspection_date ? `<span class="inspection-badge">📅 ${lead.next_inspection_date}</span>` : '-'}</td>
                     </tr>
                 `).join('');
@@ -1360,6 +1440,9 @@
 
         async function loadInspections() {
             try {
+                // Get filter values
+                const daysFilter = document.getElementById('inspectionDaysFilter').value;
+
                 // Get jurisdiction from user's first city or default to berkeley
                 const userResponse = await fetch('/api/user', {
                     headers: { 'Authorization': `Bearer ${currentAccessToken}` }
@@ -1367,25 +1450,57 @@
                 const user = await userResponse.json();
                 const jurisdiction = user.cities && user.cities[0] ? user.cities[0].name.toLowerCase() : 'berkeley';
 
-                const response = await fetch(`/api/scheduled_inspections?jurisdiction=${jurisdiction}`, {
+                let url = `/api/scheduled_inspections?jurisdiction=${jurisdiction}`;
+                if (daysFilter) {
+                    url += `&days=${daysFilter}`;
+                }
+
+                const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${currentAccessToken}` }
                 });
                 const data = await response.json();
                 const inspections = data.inspections || [];
                 const tbody = document.getElementById('inspectionsTableBody');
+
                 if (inspections.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No inspections for ' + jurisdiction + '</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No inspections found</td></tr>';
                     return;
                 }
-                tbody.innerHTML = inspections.map(insp => `
-                    <tr>
-                        <td>${insp.address}</td>
-                        <td>${insp.jurisdiction}</td>
-                        <td>${insp.inspection_type || '-'}</td>
-                        <td>${insp.inspection_date}</td>
-                        <td>${(insp.gc_presence_probability * 100).toFixed(0)}%</td>
-                    </tr>
-                `).join('');
+
+                // Helper function to calculate days until inspection
+                function daysUntil(inspectionDate) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const insp = new Date(inspectionDate);
+                    insp.setHours(0, 0, 0, 0);
+                    const diff = insp - today;
+                    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+                }
+
+                // Helper function for GC probability color
+                function getGCProbColor(prob) {
+                    if (prob >= 0.8) return '#04844b';  // green
+                    if (prob >= 0.6) return '#ffb81c';  // warm
+                    return '#6b7280';  // gray
+                }
+
+                tbody.innerHTML = inspections.map(insp => {
+                    const daysDiff = daysUntil(insp.inspection_date);
+                    const probPercent = (insp.gc_presence_probability * 100).toFixed(0);
+                    const probColor = getGCProbColor(insp.gc_presence_probability);
+                    const daysDisplay = daysDiff < 0 ? 'Overdue' : daysDiff === 0 ? 'Today' : daysDiff === 1 ? 'Tomorrow' : `${daysDiff}d`;
+
+                    return `
+                        <tr onclick="showLeadPanel('${insp.address}');" style="cursor: pointer;">
+                            <td>${insp.address}</td>
+                            <td>${insp.jurisdiction}</td>
+                            <td>${insp.inspection_type || '-'}</td>
+                            <td>${insp.inspection_date}</td>
+                            <td><span style="background: ${probColor}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px;">${daysDisplay}</span></td>
+                            <td><span style="color: ${probColor}; font-weight: 500;">${probPercent}%</span></td>
+                        </tr>
+                    `;
+                }).join('');
             } catch (e) {
                 console.error('Error loading inspections:', e);
             }
@@ -1399,18 +1514,6 @@
                 });
                 const lead = await leadResponse.json();
 
-                // Fetch contact history
-                const historyResponse = await fetch(`/api/leads/${addressKey}/contact-history`, {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
-                const history = await historyResponse.json();
-
-                // Fetch notes
-                const notesResponse = await fetch(`/api/leads/${addressKey}/notes`, {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
-                const notes = await notesResponse.json();
-
                 // Populate lead info section
                 document.getElementById('panelAddress').textContent = lead.address || '-';
                 document.getElementById('panelCity').textContent = lead.city || '-';
@@ -1423,6 +1526,10 @@
                 document.getElementById('panelEmail').textContent = lead.contact_email || '-';
 
                 // Populate project details section
+                const serviceDisplay = lead.service_emoji && lead.service_label
+                    ? `${lead.service_emoji} ${lead.service_label}`
+                    : (lead.service_type || '-');
+                document.getElementById('panelServiceType').textContent = serviceDisplay;
                 document.getElementById('panelSource').textContent = lead.source || '-';
                 document.getElementById('panelInspection').textContent = lead.next_inspection_date || '-';
                 document.getElementById('panelInspectionSource').textContent = lead.inspection_source || '-';
@@ -1433,6 +1540,12 @@
                 // Update mark contacted button
                 const markContactedBtn = document.getElementById('markContactedBtn');
                 markContactedBtn.onclick = () => markLeadAsContacted(addressKey);
+
+                // Load and display notes
+                loadLeadNotes(addressKey);
+
+                // Update add note button
+                document.getElementById('addNoteBtn').onclick = () => addNote(addressKey);
 
                 // Open panel
                 document.getElementById('sidePanel').classList.add('open');
@@ -1459,6 +1572,103 @@
                     loadLeads();
                 } else {
                     alert('Failed to mark lead as contacted');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function loadLeadNotes(leadId) {
+            try {
+                const response = await fetch(`/api/leads/${leadId}/notes`, {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const notes = await response.json();
+                const container = document.getElementById('panelNotesList');
+
+                if (notes.length === 0) {
+                    container.innerHTML = '<p style="color: var(--text-light); font-size: 12px; text-align: center;">No notes yet</p>';
+                    return;
+                }
+
+                container.innerHTML = notes.map(note => `
+                    <div style="padding: 8px; background-color: var(--primary-light); border-radius: 4px; margin-bottom: 8px;">
+                        <div style="font-size: 12px; color: var(--text-dark); margin-bottom: 4px;">${note.note}</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--text-light);">
+                            <span>${note.user} • ${new Date(note.created_at).toLocaleDateString()}</span>
+                            <div>
+                                <button onclick="editNote('${currentLead.id}', ${note.id}, '${note.note.replace(/'/g, "\\'")}'" style="background: none; border: none; color: var(--primary); cursor: pointer; font-size: 11px; margin-right: 5px;">Edit</button>
+                                <button onclick="deleteNote('${currentLead.id}', ${note.id})" style="background: none; border: none; color: var(--danger); cursor: pointer; font-size: 11px;">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Error loading notes:', e);
+            }
+        }
+
+        async function addNote(leadId) {
+            const noteText = prompt('Enter note:');
+            if (!noteText || !noteText.trim()) return;
+
+            try {
+                const response = await fetch(`/api/leads/${leadId}/notes`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ note: noteText })
+                });
+
+                if (response.ok) {
+                    loadLeadNotes(leadId);
+                } else {
+                    alert('Failed to add note');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function editNote(leadId, noteId, currentText) {
+            const newText = prompt('Edit note:', currentText);
+            if (!newText || !newText.trim()) return;
+
+            try {
+                const response = await fetch(`/api/leads/${leadId}/notes/${noteId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${currentAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ note: newText })
+                });
+
+                if (response.ok) {
+                    loadLeadNotes(leadId);
+                } else {
+                    alert('Failed to update note');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        async function deleteNote(leadId, noteId) {
+            if (!confirm('Delete this note?')) return;
+
+            try {
+                const response = await fetch(`/api/leads/${leadId}/notes/${noteId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+
+                if (response.ok) {
+                    loadLeadNotes(leadId);
+                } else {
+                    alert('Failed to delete note');
                 }
             } catch (e) {
                 console.error('Error:', e);
@@ -1566,6 +1776,103 @@
             if (score >= 40) return 'badge-medium';
             if (score >= 20) return 'badge-cool';
             return 'badge-cold';
+        }
+
+        // ─────────────────────────────────────────────────────
+        // SAVED VIEWS FUNCTIONS
+        // ─────────────────────────────────────────────────────
+
+        async function loadSavedViews() {
+            try {
+                const response = await fetch('/api/leads/views', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                const views = await response.json();
+                const container = document.getElementById('savedViewsList');
+                const count = document.getElementById('viewsCount');
+
+                count.textContent = views.length;
+
+                if (views.length === 0) {
+                    container.innerHTML = '<p style="font-size: 12px; color: var(--text-light); text-align: center;">No saved views yet</p>';
+                    return;
+                }
+
+                container.innerHTML = views.map(view => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background-color: white; border-radius: 4px; font-size: 12px;">
+                        <button onclick="applySavedView('${view.name}', ${JSON.stringify(view.filters).replace(/"/g, '&quot;')})" style="background: none; border: none; color: var(--primary); cursor: pointer; text-align: left; flex: 1;">
+                            <span style="font-weight: 500;">${view.name}</span>
+                            ${view.is_default ? '<span style="margin-left: 5px; background-color: var(--warning); color: white; padding: 2px 4px; border-radius: 2px; font-size: 10px;">Default</span>' : ''}
+                        </button>
+                        <div>
+                            <button onclick="deleteView(${view.id})" style="background: none; border: none; color: var(--danger); cursor: pointer; font-size: 12px; padding: 2px 4px;">✕</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Error loading saved views:', e);
+            }
+        }
+
+        async function saveCurrentView() {
+            const viewName = prompt('Enter view name (e.g., "High Value Leads"):');
+            if (!viewName || !viewName.trim()) return;
+
+            const filters = {
+                city_id: document.getElementById('filterCity').value,
+                agent: document.getElementById('filterAgent').value,
+                min_score: document.getElementById('filterMinScore').value
+            };
+
+            try {
+                const response = await fetch('/api/leads/views', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: viewName,
+                        filters: filters,
+                        is_default: false
+                    })
+                });
+
+                if (response.ok) {
+                    alert('View saved successfully!');
+                    loadSavedViews();
+                } else {
+                    alert('Failed to save view');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+            }
+        }
+
+        function applySavedView(viewName, filters) {
+            document.getElementById('filterCity').value = filters.city_id || '';
+            document.getElementById('filterAgent').value = filters.agent || '';
+            document.getElementById('filterMinScore').value = filters.min_score || '0';
+            loadLeads();
+        }
+
+        async function deleteView(viewId) {
+            if (!confirm('Delete this saved view?')) return;
+
+            try {
+                const response = await fetch(`/api/leads/views/${viewId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+
+                if (response.ok) {
+                    loadSavedViews();
+                } else {
+                    alert('Failed to delete view');
+                }
+            } catch (e) {
+                console.error('Error:', e);
+            }
         }
 
         // ─────────────────────────────────────────────────────
@@ -1683,6 +1990,11 @@
                         alert('Logout all sessions feature coming soon');
                     }
                 });
+            }
+
+            // Saved views button
+            if (document.getElementById('saveViewBtn')) {
+                document.getElementById('saveViewBtn').addEventListener('click', saveCurrentView);
             }
         });
 
