@@ -357,18 +357,20 @@ cp .env.example .env
 nano .env
 ```
 
-**Minimo requerido** (el sistema funciona solo con Telegram):
-```
+> El archivo `.env.example` está **completo** y documentado: incluye todas las
+> variables que el sistema reconoce, agrupadas en 17 secciones (Telegram,
+> dashboard, agentes, intervalos, APIs, notificaciones, etc.). Léelo de
+> arriba a abajo — los comentarios explican qué hace cada variable.
+
+A continuación se resumen las variables agrupadas por importancia.
+
+#### 6.1 Mínimo requerido
+
+El sistema arranca con **solo Telegram** configurado:
+
+```bash
 TELEGRAM_BOT_TOKEN=123456789:ABCdef...
 TELEGRAM_CHAT_ID=-1001234567890
-```
-
-**Dashboard web** (opcional pero recomendado):
-```
-JWT_SECRET_KEY=tu-clave-secreta-larga-y-aleatoria
-JWT_ACCESS_EXPIRY=3600
-JWT_REFRESH_EXPIRY=604800
-PORT=5000
 ```
 
 Para obtener estos valores:
@@ -377,39 +379,140 @@ Para obtener estos valores:
 3. Visita `https://api.telegram.org/bot<TOKEN>/getUpdates`
 4. Busca `"chat":{"id":` — ese numero negativo es tu Chat ID
 
-**APIs opcionales** (agregar segun presupuesto):
-```
-# Gratuitas (recomendadas)
-SOCRATA_APP_TOKEN=           # Evita throttling — gratis en data.sfgov.org
-NREL_API_KEY=                # Potencial solar — gratis en developer.nrel.gov/signup
-CENSUS_API_KEY=              # Demografia — gratis en api.census.gov/data/key_signup.html
+#### 6.2 Dashboard web (opcional, recomendado)
 
-# Pago Tier 1 (~$300/mes)
-ATTOM_API_KEY=               # Datos de propiedad — $200/mes
-HUNTER_API_KEY=              # Email finder — $49/mes (100 gratis)
-SENDGRID_API_KEY=            # Email outreach — $15/mes
+```bash
+JWT_SECRET_KEY=tu-clave-secreta-larga-y-aleatoria   # python -c "import secrets; print(secrets.token_urlsafe(64))"
+JWT_ACCESS_EXPIRY=3600         # 1 hora
+JWT_REFRESH_EXPIRY=604800      # 7 días
+PORT=5001
+FLASK_DEBUG=false
+FLASK_ENV=production
+```
+
+#### 6.3 Activación de agentes y frecuencias
+
+```bash
+# Activar/desactivar agentes
+AGENT_PERMITS=true
+AGENT_SOLAR=true
+AGENT_RODENTS=true
+AGENT_FLOOD=true
+AGENT_CONSTRUCTION=true
+AGENT_DECONSTRUCTION=true
+AGENT_REALESTATE=true
+AGENT_ENERGY=true
+AGENT_PLACES=false             # Requiere GOOGLE_PLACES_API_KEY
+AGENT_YELP=false               # Requiere YELP_API_KEY
+
+# Intervalo de fetch de cada agente (minutos)
+INTERVAL_PERMITS=60
+INTERVAL_SOLAR=60
+INTERVAL_RODENTS=120
+INTERVAL_FLOOD=30
+INTERVAL_CONSTRUCTION=60
+INTERVAL_DECONSTRUCTION=120
+INTERVAL_REALESTATE=120
+INTERVAL_ENERGY=360
+INTERVAL_PLACES=1440
+INTERVAL_YELP=1440
+```
+
+#### 6.4 Tuning de rendimiento y filtros
+
+```bash
+SOURCE_TIMEOUT=45              # Timeout HTTP por fuente
+PARALLEL_CITIES=6              # Paralelismo por agente
+PARALLEL_SOLAR=6
+PARALLEL_311=5
+PARALLEL_INSPECT=6
+PARALLEL_REALESTATE=4
+PARALLEL_ENERGY=4
+PARALLEL_DECON=6
+
+MIN_PERMIT_VALUE=50000         # Filtro mínimo USD por permit
+MIN_DECON_VALUE=50000
+MIN_SALE_PRICE=400000
+PERMIT_MONTHS=3                # Histórico hacia atrás
+RODENT_MONTHS=2
+DECON_MONTHS=3
+CONSTRUCTION_MONTHS=1
+SALE_MONTHS=2
+ENERGY_MONTHS=6
+
+DEDUP_WINDOW_DAYS=30           # Ventana de dedup cross-agent
+HOT_ZONE_THRESHOLD=3           # Mínimo de leads para una hot zone
+HOT_ZONE_RADIUS_M=500
+HOT_ZONE_WINDOW_HRS=168        # 7 días
+
+CONTACTS_DIR=contacts          # Dónde buscar los CSVs
+FUZZY_THRESHOLD=0.72           # Estricto: 1.0 — laxo: 0.5
+```
+
+#### 6.5 Calendario de inspecciones
+
+```bash
+INSPECTION_FETCH_HOUR=9        # Hora del fetch diario (UTC)
+INSPECTION_CLEANUP_DAYS=60
+ENABLE_CONTRA_COSTA_FETCHER=true
+ENABLE_BERKELEY_FETCHER=true
+ENABLE_SAN_JOSE_FETCHER=true
+ENABLE_LEAD_SCORING=true
+ENABLE_INSPECTION_SCHEDULER=true
+```
+
+#### 6.6 APIs públicas (gratuitas, recomendadas)
+
+```bash
+SOCRATA_APP_TOKEN=             # Evita throttling — gratis en cualquier data.*.gov
+NREL_API_KEY=                  # Potencial solar — gratis en developer.nrel.gov/signup
+CENSUS_API_KEY=                # Demografía — gratis en api.census.gov/data/key_signup.html
+```
+
+#### 6.7 APIs Tier 1 (~$300/mes)
+
+```bash
+ATTOM_API_KEY=                 # Datos de propiedad — ~$200/mes
+HUNTER_API_KEY=                # Email finder — $49/mes (100 gratis)
+SENDGRID_API_KEY=              # Email outreach — $15/mes
 SENDGRID_FROM_EMAIL=leads@example.com
 SENDGRID_TO_EMAIL=tu@email.com
-GOOGLE_GEOCODE_API_KEY=      # Geocoding — ~$30/mes
+GOOGLE_GEOCODE_API_KEY=        # Geocoding — ~$30/mes
+```
 
-# Pago Tier 2 (~$200/mes adicional)
-GOOGLE_SOLAR_API_KEY=        # Solar por edificio — ~$50/mes
-TWILIO_ACCOUNT_SID=          # WhatsApp alerts — $50/mes
+#### 6.8 APIs Tier 2 (~$200/mes adicional)
+
+```bash
+GOOGLE_SOLAR_API_KEY=          # Solar por edificio — ~$0.40/req
+TWILIO_ACCOUNT_SID=            # WhatsApp alerts — ~$50/mes
 TWILIO_AUTH_TOKEN=
 TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
 TWILIO_WHATSAPP_TO=whatsapp:+1TUNUMERO
-APOLLO_API_KEY=              # Contact enrichment — gratis/49/mes
-THUMBTACK_API_KEY=           # Pest control leads — partner
+APOLLO_API_KEY=                # Contact enrichment — free / $49/mes
+THUMBTACK_API_KEY=             # Pest control leads — partner program
+```
 
-# Pago Tier 3 (~$300-500/mes adicional)
-BUILDZOOM_API_KEY=           # Tracking construccion — $100-300/mes
-AURORA_API_KEY=              # Proyectos solar — $100+/mes
-ENERGYSAGE_API_KEY=          # Compradores solar — partner
-GOOGLE_PLACES_API_KEY=       # Negocios cercanos — $200 credito gratis/mes
-YELP_API_KEY=                # Contratistas — 5000 calls/dia gratis
+#### 6.9 APIs Tier 3 (~$300-500/mes adicional)
 
-# Slack (opcional)
-SLACK_WEBHOOK_URL=
+```bash
+BUILDZOOM_API_KEY=             # Tracking construccion — $100-300/mes
+AURORA_API_KEY=                # Proyectos solar — $100+/mes
+ENERGYSAGE_API_KEY=            # Compradores solar — partner
+GOOGLE_PLACES_API_KEY=         # Negocios cercanos — $200 credito gratis/mes
+YELP_API_KEY=                  # Contratistas — 5000 calls/dia gratis
+```
+
+#### 6.10 Slack (opcional)
+
+```bash
+SLACK_WEBHOOK_URL=             # Webhook para canal interno del equipo
+```
+
+#### 6.11 Telegram — rate limiting (opcional)
+
+```bash
+TELEGRAM_MAX_MSG_MIN=20        # Máximo mensajes/minuto
+TELEGRAM_MAX_BURST=10          # Burst inicial permitido
 ```
 
 ### Paso 7: Agregar Contactos de GC
@@ -608,9 +711,16 @@ AGENT_ENERGY=true
 AGENT_PLACES=false     # Requiere Google Places API key
 AGENT_YELP=false       # Requiere Yelp API key
 
-# Calendario de Inspecciones (nuevo)
-INSPECTION_SCHEDULER_ENABLED=true  # Scheduler automático @ 9 AM
+# Calendario de Inspecciones
+ENABLE_INSPECTION_SCHEDULER=true   # Scheduler automático @ 9 AM
+ENABLE_CONTRA_COSTA_FETCHER=true
+ENABLE_BERKELEY_FETCHER=true
+ENABLE_SAN_JOSE_FETCHER=true
 ```
+
+Para una lista **completa** de variables de entorno (intervalos, tuning,
+filtros, todas las APIs), consulta `.env.example` — está organizado en
+17 secciones y cada variable está documentada inline.
 
 ### Nuevas Dependencias (Calendario)
 
