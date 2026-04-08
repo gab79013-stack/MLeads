@@ -200,3 +200,168 @@ def _parse_value(v) -> float:
         return float(re.sub(r"[^\d.]", "", str(v) or "") or "0")
     except Exception:
         return 0.0
+
+
+# ═════════════════════════════════════════════════════
+# Bidirectional bot helpers (Phase 3 — bot_users)
+# ═════════════════════════════════════════════════════
+#
+# The helpers above always post to TELEGRAM_CHAT_ID (the main channel or
+# ops group). The ones below are used by the interactive bot worker to
+# talk with individual users who opened a private chat with the bot.
+# They support:
+#   - Sending a message to an arbitrary chat_id
+#   - Attaching inline keyboards (buttons)
+#   - Answering callback queries (button press acks)
+#   - Long polling via getUpdates
+#   - Editing / deleting messages
+#
+# All helpers share the global rate-limiter to stay under Telegram's
+# global 30 msg/s limit.
+
+TELEGRAM_API_BASE = "https://api.telegram.org/bot{token}/{method}"
+
+
+def _api_url(method: str) -> str:
+    return TELEGRAM_API_BASE.format(token=_token(), method=method)
+
+
+def send_message_to(
+    chat_id,
+    text: str,
+    reply_markup: dict | None = None,
+    parse_mode: str | None = "Markdown",
+    disable_web_page_preview: bool = True,
+    max_retries: int = 3,
+) -> bool:
+    """
+    Send a message to a specific chat_id (vs TELEGRAM_CHAT_ID).
+    `reply_markup` may be an inline_keyboard dict for interactive buttons.
+    Falls back to plain text if Markdown parsing fails.
+    """
+    _wait_for_slot()
+    url = _api_url("sendMessage")
+    payload: dict = {
+        "chat_id": chat_id,
+        "text": text[:4096],
+        "disable_web_page_preview": disable_web_page_preview,
+    }
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+
+    for attempt in range(max_retries):
+        try:
+            resp = requests.post(url, json=payload, timeout=15)
+            if resp.status_code == 429:
+                retry_after = resp.json().get("parameters", {}).get("retry_after", 10)
+                time.sleep(retry_after + 1)
+                _wait_for_slot()
+                continue
+            if resp.status_code == 400 and parse_mode:
+                # Retry without Markdown in case the text has stray tokens
+                plain = payload.copy()
+                plain.pop("parse_mode", None)
+                resp2 = requests.post(url, json=plain, timeout=15)
+                if resp2.status_code == 200:
+                    return True
+                logger.error(f"Telegram send_message_to 400: {resp2.text[:200]}")
+                return False
+            resp.raise_for_status()
+            return True
+        except requests.exceptions.HTTPError as e:
+            if attempt < max_retries - 1:
+                time.sleep(2 * (attempt + 1))
+            else:
+                logger.error(f"Telegram send_message_to error: {e}")
+        except Exception as e:
+            logger.error(f"Telegram send_message_to error: {e}")
+            return False
+    return False
+
+
+def answer_callback_query(callback_id: str, text: str = "", show_alert: bool = False) -> bool:
+    """Acknowledge an inline-keyboard button press."""
+    try:
+        resp = requests.post(
+            _api_url("answerCallbackQuery"),
+            json={"callback_query_id": callback_id, "text": text[:200], "show_alert": show_alert},
+            timeout=10,
+        )
+        return resp.status_code == 200
+    except Exception as e:
+        logger.error(f"Telegram answer_callback_query error: {e}")
+        return False
+
+
+def edit_message_text(
+    chat_id,
+    message_id: int,
+    text: str,
+    reply_markup: dict | None = None,
+    parse_mode: str | None = "Markdown",
+) -> bool:
+    """Edit a previously sent message (e.g. to update the onboarding buttons)."""
+    try:
+        payload = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text[:4096],
+            "disable_web_page_preview": True,
+        }
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        resp = requests.post(_api_url("editMessageText"), json=payload, timeout=10)
+        if resp.status_code == 400:
+            # "message is not modified" is fine
+            return "not modified" in resp.text.lower()
+        return resp.status_code == 200
+    except Exception as e:
+        logger.error(f"Telegram edit_message_text error: {e}")
+        return False
+
+
+def get_updates(offset: int = 0, timeout: int = 25, allowed_updates: list | None = None) -> list:
+    """
+    Long-poll Telegram for new updates.
+    Returns the list of update dicts (may be empty).
+    """
+    try:
+        payload = {"offset": offset, "timeout": timeout}
+        if allowed_updates is not None:
+            payload["allowed_updates"] = allowed_updates
+        resp = requests.post(
+            _api_url("getUpdates"),
+            json=payload,
+            timeout=timeout + 10,
+        )
+        if resp.status_code != 200:
+            logger.warning(f"Telegram getUpdates non-200: {resp.status_code} {resp.text[:200]}")
+            return []
+        data = resp.json()
+        if not data.get("ok"):
+            logger.warning(f"Telegram getUpdates error: {data}")
+            return []
+        return data.get("result", []) or []
+    except requests.exceptions.Timeout:
+        return []
+    except Exception as e:
+        logger.error(f"Telegram get_updates error: {e}")
+        return []
+
+
+def delete_webhook() -> bool:
+    """Ensure no webhook is set (long polling mode)."""
+    try:
+        resp = requests.post(_api_url("deleteWebhook"), timeout=10)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
+def is_configured() -> bool:
+    """Return True if TELEGRAM_BOT_TOKEN is set."""
+    return bool(os.getenv("TELEGRAM_BOT_TOKEN"))
