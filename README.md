@@ -854,6 +854,22 @@ pm2 logs insulleads
 ```
 
 ### Actualizar el codigo
+
+**Opción A — Script automático (recomendado):**
+```bash
+cd /home/insulleads/Insulleads
+sudo ./update-server.sh                    # actualiza desde main
+sudo ./update-server.sh -b mi-rama         # actualiza desde otra rama
+sudo ./update-server.sh --no-deps          # salta pip install
+sudo ./update-server.sh --no-restart       # solo baja el código
+sudo ./update-server.sh --help             # ver todas las opciones
+```
+
+El script hace `git pull`, reinstala dependencias si cambió `requirements.txt`,
+avisa de variables nuevas en `.env.example` que falten en tu `.env`, reinicia
+los servicios systemd y verifica que arrancaron OK.
+
+**Opción B — Manual:**
 ```bash
 cd /home/insulleads/Insulleads
 git pull origin main
