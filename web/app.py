@@ -879,48 +879,6 @@ def update_user_expiration(user_id):
     }), 200
 
 
-@app.route('/api/admin/users/<int:user_id>/access', methods=['PUT'])
-@require_admin
-def update_user_access(user_id):
-    """Update user's city/agent access (admin only)."""
-    data = request.get_json() or {}
-    city_ids = data.get('city_ids', [])
-    agent_ids = data.get('agent_ids', [])
-
-    conn = get_db_connection()
-    c = conn.cursor()
-
-    # Clear existing access
-    c.execute("DELETE FROM user_city_access WHERE user_id = ?", (user_id,))
-    c.execute("DELETE FROM user_agent_access WHERE user_id = ?", (user_id,))
-
-    # Set new access (validate IDs exist)
-    for city_id in city_ids:
-        c.execute("SELECT id FROM cities WHERE id = ?", (city_id,))
-        if c.fetchone():
-            c.execute("""
-                INSERT INTO user_city_access (user_id, city_id)
-                VALUES (?, ?)
-            """, (user_id, city_id))
-        else:
-            logger.warning(f"City ID {city_id} does not exist, skipping")
-
-    for agent_id in agent_ids:
-        c.execute("SELECT id FROM agents WHERE id = ?", (agent_id,))
-        if c.fetchone():
-            c.execute("""
-                INSERT INTO user_agent_access (user_id, agent_id)
-                VALUES (?, ?)
-            """, (user_id, agent_id))
-        else:
-            logger.warning(f"Agent ID {agent_id} does not exist, skipping")
-
-    conn.commit()
-    conn.close()
-
-    return jsonify({"status": "access updated"}), 200
-
-
 # ─────────────────────────────────────────────────────────
 # Scheduled Inspections Endpoints
 # ─────────────────────────────────────────────────────────
