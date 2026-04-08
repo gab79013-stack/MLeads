@@ -140,6 +140,9 @@ Dashboard web con RBAC (Role-Based Access Control) para gestionar leads con mult
 - **JWT authentication** con tokens de acceso y refresh
 - **Audit logging** — seguimiento de toda la actividad
 - **Dashboard responsive** — funciona en desktop y movil
+- **Gestor de Bot Users** — vista dedicada para suscriptores del bot Telegram
+- **Trial visual** — badges con dias restantes y boton "+7d" para extender
+- **Creacion de usuarios con trial** desde el modal (no mas CLI para nuevos trials)
 
 ### Quick Start
 
@@ -299,6 +302,91 @@ sudo systemctl start insulleads-web
 ```
 
 > Para documentacion completa del dashboard, ver [DASHBOARD.md](DASHBOARD.md), [INTEGRATION.md](INTEGRATION.md), y [QUICKSTART.md](QUICKSTART.md).
+
+---
+
+## Bot Interactivo de Telegram (SaaS $99/mo)
+
+Ademas del bot "uno-a-muchos" que publica al canal de operaciones, MLeads incluye
+un **bot bidireccional** que cada cliente final usa en privado. Cuando alguien
+inicia chat con el bot:
+
+1. **Onboarding guiado** — el bot le pregunta que servicios le interesan
+   (framing, paint, solar, roofing, permits, etc.) con botones inline
+   y luego le pide su ciudad.
+2. **Radio de busqueda de 35 millas** — todos los leads que matcheen sus
+   servicios dentro de ese radio le llegan automaticamente.
+3. **Trial gratis de 7 dias** — se activa al completar el onboarding, o
+   automaticamente cuando el usuario se une al canal configurado en
+   `TELEGRAM_CHANNEL_ID`.
+4. **Suscripcion $99/mo via Stripe** — cuando expira el trial, el bot envia
+   el comando `/upgrade` con el link de Stripe Checkout.
+
+### Arquitectura
+
+```
+Telegram Bot API
+      │
+      │ (long polling)
+      ▼
+workers/telegram_bot.py  ◄──────── workers/inspection_scheduler.py
+      │                                        │
+      ▼                                        ▼
+utils/bot_users.py                  utils/web_db.py (SQLite)
+      │
+      ▼
+agents/base.py → send_batch() → _fanout_to_bot_users()
+                                    │
+                                    ▼
+             envia lead a los bot_users con services/city match
+```
+
+### Tablas nuevas
+
+- `bot_users` — un registro por chat privado (state, services JSON, city,
+  lat/lon, trial/paid timestamps, Stripe IDs, leads_sent_count)
+- `bot_state` — ultimo `update_id` procesado (dedup entre reinicios)
+- `bot_messages` — log bidireccional de mensajes (util para soporte)
+
+### Comandos del bot
+
+| Comando     | Efecto |
+|-------------|--------|
+| `/start`    | Inicia o reinicia el onboarding |
+| `/services` | Vuelve a elegir servicios |
+| `/city`     | Cambia la ciudad base |
+| `/status`   | Plan actual + expiracion + leads recibidos |
+| `/upgrade`  | Link de Stripe Checkout (si esta configurado) |
+| `/help`     | Lista de comandos |
+
+### Endpoints admin (requieren rol admin)
+
+```
+GET    /api/admin/bot-users                       Lista todos los bot_users
+GET    /api/admin/bot-users/stats                 Conteos + MRR estimado
+POST   /api/admin/bot-users/:id/trial             Extiende trial N dias
+POST   /api/admin/bot-users/:id/activate          Marca como paid por N dias
+POST   /api/admin/bot-users/:id/suspend           Desactiva (deja de recibir leads)
+POST   /api/stripe/webhook                        Webhook de Stripe (publico, firmado)
+```
+
+El dashboard tiene una pestana **"Bot Users"** con 4 KPIs (total, trial, paid,
+MRR), tabla con badges de estado y botones rapidos para extender/activar/suspender.
+
+### Configuracion minima
+
+1. Crea el bot con @BotFather (ya deberias tenerlo para `TELEGRAM_BOT_TOKEN`).
+2. En BotFather habilita **"Allow Groups?"** y **"Group Privacy → Disabled"**.
+3. Agrega el bot como admin del canal donde publicas leads y copia el chat_id
+   a `TELEGRAM_CHANNEL_ID` en `.env`.
+4. (Opcional, pero recomendado para monetizar) configura Stripe — ver seccion
+   18 de `.env.example`.
+5. Reinicia la app. El worker arranca solo si `TELEGRAM_BOT_TOKEN` esta seteado
+   y `BOT_WORKER_ENABLED=true`.
+
+> **Modo desarrollo**: si `STRIPE_API_KEY` queda vacio, el modulo `utils/billing.py`
+> entra en modo no-op; `/upgrade` responde con un mensaje de "contacta a soporte"
+> en vez de fallar. Util para probar el flujo completo antes de conectar Stripe.
 
 ---
 

@@ -13,11 +13,68 @@ Clase base para todos los agentes.
 import logging
 from abc import ABC, abstractmethod
 from utils.db import is_sent, mark_sent
-from utils.telegram import send_message
+from utils.telegram import send_message, send_message_to
 from utils.dedup import get_dedup_engine
 from utils.hot_zones import get_hot_zone_detector, format_hot_zone_alert
 
 logger = logging.getLogger(__name__)
+
+
+def _fanout_to_bot_users(lead: dict, agent_key: str, formatted_text: str | None = None) -> int:
+    """
+    Phase 3: deliver the lead to every bot_user whose services/city match.
+
+    Returns the number of successful deliveries. Silently no-ops if the
+    bot_users subsystem isn't available (e.g. during tests).
+    """
+    try:
+        from utils import bot_users as bu
+    except Exception:
+        return 0
+
+    try:
+        recipients = bu.find_recipients_for_lead(lead, agent_key)
+    except Exception as e:
+        logger.warning(f"[fanout] error finding recipients: {e}")
+        return 0
+
+    if not recipients:
+        return 0
+
+    if not formatted_text:
+        # Minimal fallback card — notify() is designed for the main channel
+        # with Markdown, so we reuse its output when possible. Here we just
+        # build a compact summary.
+        title = lead.get("title") or lead.get("address") or "New lead"
+        city = lead.get("city") or ""
+        contact = lead.get("contact_phone") or lead.get("contact_email") or ""
+        formatted_text = (
+            f"🔔 *{agent_key.upper()}* — new lead\n"
+            f"📍 {title}\n"
+            f"🏙️ {city}\n"
+            + (f"📞 {contact}\n" if contact else "")
+        )
+
+    sent = 0
+    for user in recipients:
+        try:
+            ok = send_message_to(user["chat_id"], formatted_text)
+            if ok:
+                bu.increment_lead_counter(user["id"])
+                bu.log_message(
+                    user["id"],
+                    user["chat_id"],
+                    "out",
+                    formatted_text,
+                    message_type="lead",
+                    lead_id=str(lead.get("id") or ""),
+                )
+                sent += 1
+        except Exception as e:
+            logger.warning(f"[fanout] delivery to {user.get('chat_id')} failed: {e}")
+    if sent:
+        logger.info(f"[fanout] {sent}/{len(recipients)} bot_users received lead {lead.get('id')}")
+    return sent
 
 
 class BaseAgent(ABC):
@@ -84,6 +141,11 @@ class BaseAgent(ABC):
                 self.notify(lead)
                 mark_sent(self.agent_key, lead["id"])
                 sent_count += 1
+                # Fan out to individual bot_users whose preferences match.
+                try:
+                    _fanout_to_bot_users(lead, self.agent_key)
+                except Exception as fe:
+                    logger.warning(f"[{self.agent_key}] fanout failed: {fe}")
             except Exception as e:
                 logger.error(f"[{self.agent_key}] Error notificando {lead.get('id')}: {e}")
 

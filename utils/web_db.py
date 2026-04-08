@@ -362,6 +362,87 @@ def init_web_db():
     """)
 
     # ─────────────────────────────────────────────────────
+    # Phase 3: Telegram Bot Users
+    # ─────────────────────────────────────────────────────
+    # Users that interact with the Telegram bot directly. May or may not
+    # have a corresponding web `users` row. Used to:
+    #   - Store conversational state (onboarding flow)
+    #   - Remember service + city preferences (for lead filtering)
+    #   - Track trial/subscription status (auto-trial on channel join, $99/mo)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS bot_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id TEXT UNIQUE NOT NULL,
+            telegram_user_id TEXT,
+            username TEXT,
+            first_name TEXT,
+            last_name TEXT,
+            state TEXT DEFAULT 'new',
+            services TEXT DEFAULT '[]',
+            city TEXT,
+            latitude REAL,
+            longitude REAL,
+            radius_miles INTEGER DEFAULT 35,
+            subscription_status TEXT DEFAULT 'none',
+            trial_started_at TIMESTAMP,
+            trial_ends_at TIMESTAMP,
+            paid_until TIMESTAMP,
+            stripe_customer_id TEXT,
+            stripe_subscription_id TEXT,
+            joined_channel_at TIMESTAMP,
+            is_active BOOLEAN DEFAULT 1,
+            leads_sent_count INTEGER DEFAULT 0,
+            last_lead_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Migration helpers for existing databases
+    for col, ddl in [
+        ("services", "ALTER TABLE bot_users ADD COLUMN services TEXT DEFAULT '[]'"),
+        ("radius_miles", "ALTER TABLE bot_users ADD COLUMN radius_miles INTEGER DEFAULT 35"),
+        ("subscription_status", "ALTER TABLE bot_users ADD COLUMN subscription_status TEXT DEFAULT 'none'"),
+        ("trial_started_at", "ALTER TABLE bot_users ADD COLUMN trial_started_at TIMESTAMP"),
+        ("trial_ends_at", "ALTER TABLE bot_users ADD COLUMN trial_ends_at TIMESTAMP"),
+        ("paid_until", "ALTER TABLE bot_users ADD COLUMN paid_until TIMESTAMP"),
+        ("stripe_customer_id", "ALTER TABLE bot_users ADD COLUMN stripe_customer_id TEXT"),
+        ("stripe_subscription_id", "ALTER TABLE bot_users ADD COLUMN stripe_subscription_id TEXT"),
+        ("joined_channel_at", "ALTER TABLE bot_users ADD COLUMN joined_channel_at TIMESTAMP"),
+        ("leads_sent_count", "ALTER TABLE bot_users ADD COLUMN leads_sent_count INTEGER DEFAULT 0"),
+        ("last_lead_at", "ALTER TABLE bot_users ADD COLUMN last_lead_at TIMESTAMP"),
+    ]:
+        try:
+            c.execute(f"SELECT {col} FROM bot_users LIMIT 1")
+        except sqlite3.OperationalError:
+            c.execute(ddl)
+
+    # Track the last Telegram update_id we've processed so long-polling
+    # doesn't re-deliver old updates across restarts.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS bot_state (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Log of every message sent TO a bot_user (for billing/analytics/debug)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS bot_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bot_user_id INTEGER NOT NULL,
+            chat_id TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            message_type TEXT,
+            lead_id TEXT,
+            text TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(bot_user_id) REFERENCES bot_users(id)
+        )
+    """)
+
+    # ─────────────────────────────────────────────────────
     # Alter existing tables for Phase 2
     # ─────────────────────────────────────────────────────
 
@@ -417,6 +498,14 @@ def init_web_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_cities_county ON cities(county)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_cities_tier ON cities(tier_status)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_consolidated_leads_service ON consolidated_leads(primary_service_type)")
+
+    # Phase 3: Bot users
+    c.execute("CREATE INDEX IF NOT EXISTS idx_bot_users_chat ON bot_users(chat_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_bot_users_state ON bot_users(state)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_bot_users_subscription ON bot_users(subscription_status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_bot_users_active ON bot_users(is_active)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_bot_messages_user ON bot_messages(bot_user_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_bot_messages_created ON bot_messages(created_at)")
 
     # ─────────────────────────────────────────────────────
     # Insert default roles

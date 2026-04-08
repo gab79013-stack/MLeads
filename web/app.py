@@ -28,6 +28,9 @@ from web.auth import (
 from workers.inspection_scheduler import (
     start_inspection_scheduler, get_scheduler_status, fetch_inspections_now
 )
+from workers.telegram_bot import start_bot_worker
+from utils import bot_users as bu
+from utils import billing
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -1954,6 +1957,109 @@ def get_all_settings():
 
 
 # ─────────────────────────────────────────────────────────
+# Bot Users Admin API (Phase 3 — Telegram bot users)
+# ─────────────────────────────────────────────────────────
+
+@app.route('/api/admin/bot-users', methods=['GET'])
+@require_admin
+def list_bot_users_endpoint():
+    """List every bot_user with status, trial dates, services & city."""
+    try:
+        users = bu.list_bot_users(limit=1000)
+        return jsonify({
+            "users": users,
+            "stats": bu.get_stats(),
+            "trial_days": bu.TRIAL_DAYS,
+            "price_usd": bu.SUBSCRIPTION_PRICE_USD,
+        }), 200
+    except Exception as e:
+        logger.error(f"Error listing bot users: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/admin/bot-users/<int:bot_user_id>/trial', methods=['POST'])
+@require_admin
+def extend_bot_user_trial(bot_user_id):
+    """Extend (or restart) a bot_user's trial by N days."""
+    data = request.get_json() or {}
+    days = int(data.get("days", bu.TRIAL_DAYS))
+    user = bu.get_by_id(bot_user_id)
+    if not user:
+        return jsonify({"error": "Bot user not found"}), 404
+    updated = bu.start_trial(user["chat_id"], days=days)
+    log_audit(g.user_id, "bot_trial_extended", str(bot_user_id), "bot_user",
+              f"Extended trial by {days} days")
+    return jsonify(updated), 200
+
+
+@app.route('/api/admin/bot-users/<int:bot_user_id>/activate', methods=['POST'])
+@require_admin
+def activate_bot_user(bot_user_id):
+    """Manually mark a bot_user as paid for N days (useful for comps)."""
+    data = request.get_json() or {}
+    days = int(data.get("days", 30))
+    user = bu.get_by_id(bot_user_id)
+    if not user:
+        return jsonify({"error": "Bot user not found"}), 404
+    until = datetime.utcnow() + timedelta(days=days)
+    bu.mark_paid(user["chat_id"], until)
+    log_audit(g.user_id, "bot_user_activated", str(bot_user_id), "bot_user",
+              f"Manual paid-status for {days} days")
+    return jsonify(bu.get_by_id(bot_user_id)), 200
+
+
+@app.route('/api/admin/bot-users/<int:bot_user_id>/suspend', methods=['POST'])
+@require_admin
+def suspend_bot_user(bot_user_id):
+    """Suspend a bot_user so they stop receiving leads."""
+    user = bu.get_by_id(bot_user_id)
+    if not user:
+        return jsonify({"error": "Bot user not found"}), 404
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE bot_users SET is_active = 0, state = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (bu.STATE_SUSPENDED, bot_user_id),
+    )
+    conn.commit()
+    conn.close()
+    log_audit(g.user_id, "bot_user_suspended", str(bot_user_id), "bot_user", "")
+    return jsonify(bu.get_by_id(bot_user_id)), 200
+
+
+@app.route('/api/admin/bot-users/stats', methods=['GET'])
+@require_admin
+def bot_users_stats():
+    try:
+        return jsonify(bu.get_stats()), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────
+# Stripe webhook (Phase 4 — billing)
+# ─────────────────────────────────────────────────────────
+
+@app.route('/api/stripe/webhook', methods=['POST'])
+def stripe_webhook():
+    """
+    Receive Stripe webhook events. Verifies the signature and applies
+    paid/expired status to the corresponding bot_user.
+    """
+    payload = request.get_data()
+    signature = request.headers.get('Stripe-Signature', '')
+    event = billing.verify_webhook(payload, signature)
+    if not event:
+        return jsonify({"error": "invalid signature or billing not configured"}), 400
+    try:
+        handled = billing.handle_event(event)
+        return jsonify({"received": True, "handled": handled}), 200
+    except Exception as e:
+        logger.exception(f"Stripe webhook handler error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────
 # App Initialization
 # ─────────────────────────────────────────────────────────
 
@@ -1967,6 +2073,13 @@ def create_app():
         start_inspection_scheduler()
     except Exception as e:
         logger.warning(f"Failed to start inspection scheduler: {e}")
+
+    # Start the Telegram bot worker (long polling). No-op if the token
+    # isn't set or BOT_WORKER_ENABLED=false.
+    try:
+        start_bot_worker()
+    except Exception as e:
+        logger.warning(f"Failed to start Telegram bot worker: {e}")
 
     return app
 
