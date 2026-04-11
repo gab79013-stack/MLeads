@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>MLeads — Descubre Leads</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        :root {
+            --fg: #171717;
+            --fg-secondary: #6c7278;
+            --fg-muted: #9ca3af;
+            --bg-page: #f4f5f6;
+            --bg-surface: #ffffff;
+            --border: #e2e2e3;
+            --like: #22c55e;
+            --dislike: #ef4444;
+            --accent: #2490ef;
+            --shadow-card: 0 10px 30px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
+        }
+
+        html, body {
+            height: 100%;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-page);
+            color: var(--fg);
+            overflow: hidden;
+            overscroll-behavior: none;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100dvh;
+            padding: 16px;
+        }
+
+        .app-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 420px;
+            padding: 8px 4px 16px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 800;
+            font-size: 20px;
+            letter-spacing: -0.5px;
+        }
+
+        .brand-icon {
+            width: 34px; height: 34px;
+            border-radius: 9px;
+            background: #171717;
+            color: #fff;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .brand-icon svg { width: 18px; height: 18px; }
+
+        .counter {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--fg-secondary);
+            background: var(--bg-surface);
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+        }
+
+        .counter strong { color: var(--fg); }
+
+        .deck {
+            position: relative;
+            width: 100%;
+            max-width: 420px;
+            height: min(620px, calc(100dvh - 220px));
+            margin-top: 4px;
+        }
+
+        .card {
+            position: absolute;
+            inset: 0;
+            background: var(--bg-surface);
+            border-radius: 20px;
+            box-shadow: var(--shadow-card);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            cursor: grab;
+            user-select: none;
+            display: flex;
+            flex-direction: column;
+            touch-action: pan-y;
+            transition: transform 0.25s cubic-bezier(.2,.9,.3,1.3),
+                        opacity 0.25s ease,
+                        box-shadow 0.25s ease;
+            will-change: transform;
+        }
+
+        .card.dragging { transition: none; cursor: grabbing; }
+
+        .card.leaving-left  { transform: translate(-150%, 40px) rotate(-25deg) !important; opacity: 0; }
+        .card.leaving-right { transform: translate( 150%, 40px) rotate( 25deg) !important; opacity: 0; }
+
+        .card-stamp {
+            position: absolute;
+            top: 28px;
+            padding: 8px 18px;
+            border: 4px solid;
+            border-radius: 10px;
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            opacity: 0;
+            transform: rotate(-12deg);
+            transition: opacity 0.1s linear;
+            pointer-events: none;
+            text-transform: uppercase;
+        }
+
+        .card-stamp.like {
+            left: 24px;
+            color: var(--like);
+            border-color: var(--like);
+            transform: rotate(-15deg);
+        }
+
+        .card-stamp.nope {
+            right: 24px;
+            color: var(--dislike);
+            border-color: var(--dislike);
+            transform: rotate(15deg);
+        }
+
+        .card-hero {
+            padding: 24px 22px 18px;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #fff;
+            position: relative;
+        }
+
+        .hero-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .hero-score {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        .hero-score small {
+            font-size: 13px;
+            font-weight: 500;
+            opacity: 0.7;
+        }
+
+        .hero-grade {
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.25);
+        }
+
+        .hero-service {
+            margin-top: 16px;
+            font-size: 13px;
+            opacity: 0.85;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+        }
+
+        .card-body {
+            padding: 20px 22px;
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .address {
+            font-size: 18px;
+            font-weight: 700;
+            line-height: 1.3;
+            color: var(--fg);
+        }
+
+        .city {
+            font-size: 13px;
+            color: var(--fg-secondary);
+            font-weight: 500;
+            margin-top: 2px;
+        }
+
+        .description {
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--fg-secondary);
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: auto;
+            padding-top: 14px;
+            border-top: 1px solid var(--border);
+        }
+
+        .meta-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .meta-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--fg-muted);
+            font-weight: 600;
+        }
+
+        .meta-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--fg);
+        }
+
+        .reasons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .reason-chip {
+            font-size: 11px;
+            font-weight: 500;
+            padding: 4px 10px;
+            background: #f8f9fa;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            color: var(--fg-secondary);
+        }
+
+        .actions {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 28px;
+            margin-top: 24px;
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .action-btn {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--bg-surface);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 26px;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+        }
+
+        .action-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.1); }
+        .action-btn:active { transform: scale(0.95); }
+
+        .action-btn.dislike { color: var(--dislike); }
+        .action-btn.like    { color: var(--like); }
+
+        .action-btn svg { width: 28px; height: 28px; }
+
+        .empty-state, .loader {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            text-align: center;
+            padding: 32px;
+            background: var(--bg-surface);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .empty-state h3 {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+            color: var(--fg-secondary);
+            max-width: 260px;
+        }
+
+        .empty-state button {
+            margin-top: 8px;
+            padding: 10px 20px;
+            background: var(--fg);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        .spinner {
+            width: 36px; height: 36px;
+            border: 3px solid var(--border);
+            border-top-color: var(--fg);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Login modal */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 16px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-backdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal {
+            background: var(--bg-surface);
+            border-radius: 18px;
+            max-width: 380px;
+            width: 100%;
+            padding: 32px 28px;
+            text-align: center;
+            transform: translateY(20px);
+            transition: transform 0.25s ease;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.3);
+        }
+
+        .modal-backdrop.open .modal { transform: translateY(0); }
+
+        .modal h2 {
+            font-size: 22px;
+            font-weight: 800;
+            margin-bottom: 8px;
+            letter-spacing: -0.3px;
+        }
+
+        .modal p {
+            font-size: 14px;
+            color: var(--fg-secondary);
+            line-height: 1.5;
+            margin-bottom: 24px;
+        }
+
+        .oauth-btn {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--bg-surface);
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            transition: background 0.15s ease, transform 0.1s ease;
+        }
+
+        .oauth-btn:hover { background: #f8f9fa; }
+        .oauth-btn:active { transform: scale(0.98); }
+
+        .oauth-btn svg { width: 20px; height: 20px; }
+
+        .oauth-btn.google { color: #171717; }
+        .oauth-btn.facebook {
+            background: #1877f2;
+            border-color: #1877f2;
+            color: #fff;
+        }
+        .oauth-btn.facebook:hover { background: #166fe0; }
+
+        .modal-footer {
+            margin-top: 14px;
+            font-size: 12px;
+            color: var(--fg-muted);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #171717;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 500;
+            opacity: 0;
+            transition: opacity 0.2s ease, transform 0.25s ease;
+            z-index: 2000;
+            pointer-events: none;
+            max-width: 90vw;
+            text-align: center;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        @media (max-width: 420px) {
+            .deck { height: calc(100dvh - 210px); }
+            .action-btn { width: 58px; height: 58px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand">
+            <div class="brand-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+            </div>
+            <span>MLeads</span>
+        </div>
+        <div class="counter" id="counter">
+            <strong id="swipesCount">0</strong> / <span id="swipesLimit">10</span>
+        </div>
+    </header>
+
+    <section class="deck" id="deck">
+        <div class="loader" id="loader">
+            <div class="spinner"></div>
+            <p style="font-size:13px;color:var(--fg-secondary)">Cargando leads...</p>
+        </div>
+    </section>
+
+    <div class="actions">
+        <button class="action-btn dislike" id="btnDislike" aria-label="Descartar">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        </button>
+        <button class="action-btn like" id="btnLike" aria-label="Me interesa">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Login modal -->
+    <div class="modal-backdrop" id="loginModal">
+        <div class="modal">
+            <h2>¡Te estás enganchando!</h2>
+            <p>Has visto tus <strong>10 leads gratis</strong>. Inicia sesión para seguir descubriendo oportunidades sin límite.</p>
+
+            <button class="oauth-btn google" id="btnGoogle">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/>
+                </svg>
+                Continuar con Google
+            </button>
+
+            <button class="oauth-btn facebook" id="btnFacebook">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+                Continuar con Facebook
+            </button>
+
+            <p class="modal-footer">Sin spam. Solo usamos tu email para identificarte.</p>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // Injected by server from environment variables
+        window.GOOGLE_CLIENT_ID = "__GOOGLE_CLIENT_ID__";
+        window.FACEBOOK_APP_ID  = "__FACEBOOK_APP_ID__";
+    </script>
+    <script>
+        // ── Config ─────────────────────────────────────────
+        const GOOGLE_CLIENT_ID = window.GOOGLE_CLIENT_ID || '';
+        const FACEBOOK_APP_ID  = window.FACEBOOK_APP_ID  || '';
+
+        // ── Anonymous identity ─────────────────────────────
+        function getAnonId() {
+            let id = localStorage.getItem('mleads_anon_id');
+            if (!id) {
+                id = 'anon_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+                localStorage.setItem('mleads_anon_id', id);
+            }
+            return id;
+        }
+
+        function getAccessToken() {
+            return localStorage.getItem('access_token') || '';
+        }
+
+        function authHeaders() {
+            const h = { 'Content-Type': 'application/json' };
+            const t = getAccessToken();
+            if (t) h['Authorization'] = `Bearer ${t}`;
+            return h;
+        }
+
+        // ── State ──────────────────────────────────────────
+        const state = {
+            queue: [],
+            swipesCount: 0,
+            anonLimit: 10,
+            loading: false,
+            isAuthed: !!getAccessToken(),
+        };
+
+        // ── Toast helper ───────────────────────────────────
+        const toastEl = document.getElementById('toast');
+        let toastTimer = null;
+        function toast(msg) {
+            toastEl.textContent = msg;
+            toastEl.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
+        }
+
+        // ── API helpers ────────────────────────────────────
+        async function fetchFeed() {
+            if (state.loading) return;
+            state.loading = true;
+            try {
+                const url = new URL('/api/swipe/feed', location.origin);
+                if (!state.isAuthed) url.searchParams.set('anon_id', getAnonId());
+                url.searchParams.set('limit', '10');
+                const resp = await fetch(url, { headers: authHeaders() });
+                const data = await resp.json();
+
+                if (data.auth_required) {
+                    showLoginModal();
+                    return;
+                }
+
+                state.anonLimit = data.anon_limit || 10;
+                state.swipesCount = data.swipes_count || 0;
+                updateCounter();
+
+                state.queue = data.leads || [];
+                renderDeck();
+            } catch (e) {
+                console.error(e);
+                toast('Error cargando leads');
+            } finally {
+                state.loading = false;
+            }
+        }
+
+        async function postSwipe(leadId, action) {
+            try {
+                const body = { lead_id: leadId, action };
+                if (!state.isAuthed) body.anon_id = getAnonId();
+                const resp = await fetch('/api/swipe/action', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (data.swipes_count !== undefined) {
+                    state.swipesCount = data.swipes_count;
+                    updateCounter();
+                }
+                if (data.auth_required) {
+                    showLoginModal();
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // ── Rendering ──────────────────────────────────────
+        const deck = document.getElementById('deck');
+
+        function updateCounter() {
+            document.getElementById('swipesCount').textContent = state.swipesCount;
+            const limitEl = document.getElementById('swipesLimit');
+            const counterEl = document.getElementById('counter');
+            if (state.isAuthed) {
+                limitEl.textContent = '∞';
+                counterEl.firstChild.textContent = '';
+                limitEl.previousSibling.textContent = '';
+            } else {
+                limitEl.textContent = state.anonLimit;
+            }
+        }
+
+        function escapeHtml(s) {
+            if (s === null || s === undefined) return '';
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function fmtMoney(v) {
+            v = Number(v || 0);
+            if (!v) return '—';
+            if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+            if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'k';
+            return '$' + v.toFixed(0);
+        }
+
+        function buildCard(lead, idx) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.dataset.leadId = lead.id;
+            card.style.zIndex = 100 - idx;
+            card.style.transform = `translateY(${idx * 6}px) scale(${1 - idx * 0.03})`;
+            card.style.opacity = idx < 3 ? 1 : 0;
+
+            const reasons = (lead.reasons || [])
+                .map(r => `<span class="reason-chip">${escapeHtml(r)}</span>`)
+                .join('');
+
+            const score = Number(lead.score || 0);
+            const scoreLabel = lead.grade || (score >= 70 ? 'HOT' : score >= 50 ? 'WARM' : 'COOL');
+
+            card.innerHTML = `
+                <div class="card-stamp like">LIKE</div>
+                <div class="card-stamp nope">NOPE</div>
+                <div class="card-hero">
+                    <div class="hero-row">
+                        <div class="hero-score">${score}<small>/100</small></div>
+                        <div class="hero-grade">${escapeHtml(lead.grade_emoji || '')} ${escapeHtml(scoreLabel)}</div>
+                    </div>
+                    <div class="hero-service">
+                        ${escapeHtml(lead.service_emoji || '📋')} ${escapeHtml(lead.service_label || lead.service_type || 'Lead')}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div>
+                        <div class="address">${escapeHtml(lead.address || 'Sin dirección')}</div>
+                        <div class="city">${escapeHtml(lead.city || '')}</div>
+                    </div>
+                    ${lead.description ? `<div class="description">${escapeHtml(lead.description)}</div>` : ''}
+                    ${reasons ? `<div class="reasons">${reasons}</div>` : ''}
+                    <div class="meta-grid">
+                        <div class="meta-item">
+                            <span class="meta-label">Valor</span>
+                            <span class="meta-value">${fmtMoney(lead.value)}</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Contratista</span>
+                            <span class="meta-value">${escapeHtml((lead.contractor || '—').slice(0, 24))}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            attachDrag(card);
+            return card;
+        }
+
+        function renderDeck() {
+            // Remove old non-loader children
+            [...deck.querySelectorAll('.card, .empty-state')].forEach(n => n.remove());
+            document.getElementById('loader').style.display = 'none';
+
+            if (!state.queue.length) {
+                showEmpty();
+                return;
+            }
+
+            state.queue.slice(0, 5).forEach((lead, idx) => {
+                const card = buildCard(lead, idx);
+                deck.appendChild(card);
+            });
+        }
+
+        function showEmpty() {
+            const empty = document.createElement('div');
+            empty.className = 'empty-state';
+            empty.innerHTML = `
+                <h3>No hay más leads</h3>
+                <p>Vuelve más tarde o recarga para ver nuevos leads.</p>
+                <button onclick="fetchFeed()">Recargar</button>
+            `;
+            deck.appendChild(empty);
+        }
+
+        // ── Swipe logic ────────────────────────────────────
+        function attachDrag(card) {
+            let startX = 0, startY = 0, dx = 0, dy = 0, dragging = false;
+            const stampLike = card.querySelector('.card-stamp.like');
+            const stampNope = card.querySelector('.card-stamp.nope');
+
+            function onStart(e) {
+                if (card !== deck.querySelector('.card')) return;  // Only top card
+                dragging = true;
+                card.classList.add('dragging');
+                const p = e.touches ? e.touches[0] : e;
+                startX = p.clientX;
+                startY = p.clientY;
+                dx = 0; dy = 0;
+            }
+
+            function onMove(e) {
+                if (!dragging) return;
+                const p = e.touches ? e.touches[0] : e;
+                dx = p.clientX - startX;
+                dy = p.clientY - startY;
+                const rot = dx / 20;
+                card.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
+                const op = Math.min(Math.abs(dx) / 100, 1);
+                if (dx > 0) {
+                    stampLike.style.opacity = op;
+                    stampNope.style.opacity = 0;
+                } else if (dx < 0) {
+                    stampNope.style.opacity = op;
+                    stampLike.style.opacity = 0;
+                } else {
+                    stampLike.style.opacity = 0;
+                    stampNope.style.opacity = 0;
+                }
+                if (e.cancelable) e.preventDefault();
+            }
+
+            function onEnd() {
+                if (!dragging) return;
+                dragging = false;
+                card.classList.remove('dragging');
+                const threshold = 110;
+                if (dx > threshold) {
+                    commitSwipe(card, 'like');
+                } else if (dx < -threshold) {
+                    commitSwipe(card, 'dislike');
+                } else {
+                    card.style.transform = '';
+                    stampLike.style.opacity = 0;
+                    stampNope.style.opacity = 0;
+                }
+            }
+
+            card.addEventListener('mousedown', onStart);
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+
+            card.addEventListener('touchstart', onStart, { passive: true });
+            card.addEventListener('touchmove',  onMove,  { passive: false });
+            card.addEventListener('touchend',   onEnd);
+            card.addEventListener('touchcancel', onEnd);
+        }
+
+        function commitSwipe(card, action) {
+            card.classList.add(action === 'like' ? 'leaving-right' : 'leaving-left');
+            const leadId = card.dataset.leadId;
+            postSwipe(leadId, action);
+
+            setTimeout(() => {
+                card.remove();
+                state.queue.shift();
+                reStackCards();
+                if (state.queue.length <= 2) fetchFeed();
+            }, 260);
+        }
+
+        function reStackCards() {
+            const cards = [...deck.querySelectorAll('.card')];
+            cards.forEach((c, idx) => {
+                c.style.transform = `translateY(${idx * 6}px) scale(${1 - idx * 0.03})`;
+                c.style.opacity = idx < 3 ? 1 : 0;
+            });
+        }
+
+        function triggerSwipe(action) {
+            const top = deck.querySelector('.card');
+            if (!top) return;
+            commitSwipe(top, action);
+        }
+
+        document.getElementById('btnLike').addEventListener('click', () => triggerSwipe('like'));
+        document.getElementById('btnDislike').addEventListener('click', () => triggerSwipe('dislike'));
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') triggerSwipe('like');
+            if (e.key === 'ArrowLeft')  triggerSwipe('dislike');
+        });
+
+        // ── Login modal ────────────────────────────────────
+        const modal = document.getElementById('loginModal');
+
+        function showLoginModal() {
+            modal.classList.add('open');
+        }
+
+        function hideLoginModal() {
+            modal.classList.remove('open');
+        }
+
+        // ── OAuth: Google ──────────────────────────────────
+        document.getElementById('btnGoogle').addEventListener('click', () => {
+            if (!GOOGLE_CLIENT_ID) {
+                toast('Login con Google no configurado');
+                return;
+            }
+            if (!window.google || !google.accounts || !google.accounts.id) {
+                loadGoogleSDK(() => googleSignIn());
+            } else {
+                googleSignIn();
+            }
+        });
+
+        function loadGoogleSDK(cb) {
+            if (document.getElementById('google-sdk')) { cb && cb(); return; }
+            const s = document.createElement('script');
+            s.id = 'google-sdk';
+            s.src = 'https://accounts.google.com/gsi/client';
+            s.async = true; s.defer = true;
+            s.onload = cb;
+            document.head.appendChild(s);
+        }
+
+        function googleSignIn() {
+            google.accounts.id.initialize({
+                client_id: GOOGLE_CLIENT_ID,
+                callback: async (resp) => {
+                    const r = await fetch('/api/auth/oauth/google', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ credential: resp.credential }),
+                    });
+                    const data = await r.json();
+                    if (data.access_token) {
+                        await handleAuthSuccess(data);
+                    } else {
+                        toast(data.error || 'Login fallido');
+                    }
+                },
+            });
+            google.accounts.id.prompt();
+        }
+
+        // ── OAuth: Facebook ────────────────────────────────
+        document.getElementById('btnFacebook').addEventListener('click', () => {
+            if (!FACEBOOK_APP_ID) {
+                toast('Login con Facebook no configurado');
+                return;
+            }
+            loadFacebookSDK(() => facebookSignIn());
+        });
+
+        function loadFacebookSDK(cb) {
+            if (window.FB) { cb && cb(); return; }
+            window.fbAsyncInit = function() {
+                FB.init({
+                    appId: FACEBOOK_APP_ID,
+                    cookie: true,
+                    xfbml: false,
+                    version: 'v18.0',
+                });
+                cb && cb();
+            };
+            const s = document.createElement('script');
+            s.async = true; s.defer = true; s.crossOrigin = 'anonymous';
+            s.src = 'https://connect.facebook.net/en_US/sdk.js';
+            document.head.appendChild(s);
+        }
+
+        function facebookSignIn() {
+            FB.login(async (response) => {
+                if (response.authResponse && response.authResponse.accessToken) {
+                    const r = await fetch('/api/auth/oauth/facebook', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ access_token: response.authResponse.accessToken }),
+                    });
+                    const data = await r.json();
+                    if (data.access_token) {
+                        await handleAuthSuccess(data);
+                    } else {
+                        toast(data.error || 'Login fallido');
+                    }
+                } else {
+                    toast('Login cancelado');
+                }
+            }, { scope: 'public_profile,email' });
+        }
+
+        async function handleAuthSuccess(data) {
+            localStorage.setItem('access_token', data.access_token);
+            if (data.refresh_token) {
+                localStorage.setItem('refresh_token', data.refresh_token);
+            }
+            state.isAuthed = true;
+
+            // Migrate anonymous swipes onto the new user
+            try {
+                await fetch('/api/swipe/claim-anon', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ anon_id: getAnonId() }),
+                });
+            } catch (e) { /* non-fatal */ }
+
+            hideLoginModal();
+            toast('¡Bienvenido, ' + (data.user.full_name || 'pro') + '!');
+            state.queue = [];
+            fetchFeed();
+        }
+
+        // ── Init ───────────────────────────────────────────
+        fetchFeed();
+    </script>
+</body>
+</html>

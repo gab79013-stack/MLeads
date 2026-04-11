@@ -103,6 +103,22 @@ def login_page():
         return jsonify({"error": "Login page not found"}), 404
 
 
+@app.route('/swipe', methods=['GET'])
+@app.route('/swipe.html', methods=['GET'])
+def swipe_page():
+    """Serve the public Tinder-style swipe page (no auth required)."""
+    swipe_path = os.path.join(os.path.dirname(__file__), 'templates', 'swipe.html')
+    try:
+        with open(swipe_path, 'r', encoding='utf-8') as f:
+            html = f.read()
+    except FileNotFoundError:
+        return jsonify({"error": "Swipe page not found"}), 404
+    # Inject OAuth client identifiers from environment
+    html = html.replace('__GOOGLE_CLIENT_ID__', os.getenv('GOOGLE_CLIENT_ID', ''))
+    html = html.replace('__FACEBOOK_APP_ID__', os.getenv('FACEBOOK_APP_ID', ''))
+    return html
+
+
 @app.route('/<path:filename>', methods=['GET'])
 def catch_all(filename):
     """Catch all routes and serve dashboard for SPA routing."""
@@ -2057,6 +2073,494 @@ def stripe_webhook():
     except Exception as e:
         logger.exception(f"Stripe webhook handler error: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────
+# Public Swipe Endpoints (Tinder-style UX)
+# ─────────────────────────────────────────────────────────
+
+# Anonymous visitors can view up to this many leads before being asked
+# to log in with Google or Facebook.
+ANON_LEAD_LIMIT = int(os.getenv("SWIPE_ANON_LIMIT", "10"))
+
+
+def _resolve_swipe_identity():
+    """
+    Resolve the caller's identity for the swipe feed.
+
+    Returns a tuple (user_id, anon_id) where exactly one is set.
+    Authenticated users are identified by their JWT; anonymous users
+    are identified by an ``anon_id`` query/body parameter that the
+    client keeps in localStorage.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        try:
+            from web.auth import verify_token
+            payload = verify_token(token)
+            return payload.get("user_id"), None
+        except Exception:
+            pass
+
+    anon_id = (
+        request.args.get("anon_id")
+        or (request.get_json(silent=True) or {}).get("anon_id")
+        or request.headers.get("X-Anon-Id")
+        or ""
+    ).strip()
+    return None, anon_id or None
+
+
+def _count_swipes(user_id, anon_id) -> int:
+    conn = get_db_connection()
+    c = conn.cursor()
+    if user_id:
+        c.execute(
+            "SELECT COUNT(*) FROM swipe_actions WHERE user_id = ?",
+            (user_id,),
+        )
+    elif anon_id:
+        c.execute(
+            "SELECT COUNT(*) FROM swipe_actions WHERE anon_id = ?",
+            (anon_id,),
+        )
+    else:
+        conn.close()
+        return 0
+    row = c.fetchone()
+    conn.close()
+    return int(row[0]) if row else 0
+
+
+def _already_swiped_ids(user_id, anon_id) -> set:
+    conn = get_db_connection()
+    c = conn.cursor()
+    if user_id:
+        c.execute(
+            "SELECT lead_id FROM swipe_actions WHERE user_id = ?",
+            (user_id,),
+        )
+    elif anon_id:
+        c.execute(
+            "SELECT lead_id FROM swipe_actions WHERE anon_id = ?",
+            (anon_id,),
+        )
+    else:
+        conn.close()
+        return set()
+    ids = {row[0] for row in c.fetchall()}
+    conn.close()
+    return ids
+
+
+@app.route('/api/swipe/feed', methods=['GET'])
+def swipe_feed():
+    """
+    Public feed of leads for the Tinder-style swipe UI.
+
+    Query params:
+      - limit:    how many leads to return (default 10, max 20)
+      - anon_id:  stable client-generated id for anonymous visitors
+
+    Anonymous visitors can view up to ANON_LEAD_LIMIT leads total
+    (across the whole session). Once that budget is exhausted the
+    response includes ``auth_required: true`` and an empty ``leads``
+    array, prompting the client to show the login wall.
+    """
+    user_id, anon_id = _resolve_swipe_identity()
+
+    try:
+        limit = min(int(request.args.get("limit", 10)), 20)
+    except (TypeError, ValueError):
+        limit = 10
+
+    already_swiped = _already_swiped_ids(user_id, anon_id)
+    swipes_count = len(already_swiped)
+
+    remaining = None
+    if not user_id:
+        if not anon_id:
+            return jsonify({
+                "error": "anon_id required for anonymous browsing",
+            }), 400
+
+        remaining = max(ANON_LEAD_LIMIT - swipes_count, 0)
+        if remaining == 0:
+            return jsonify({
+                "leads": [],
+                "auth_required": True,
+                "anon_limit": ANON_LEAD_LIMIT,
+                "swipes_count": swipes_count,
+                "remaining": 0,
+            }), 200
+        limit = min(limit, remaining)
+
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    if already_swiped:
+        placeholders = ",".join("?" * len(already_swiped))
+        c.execute(f"""
+            SELECT address_key, address, city, agent_sources, lead_data,
+                   primary_service_type, first_seen
+            FROM consolidated_leads
+            WHERE address_key NOT IN ({placeholders})
+            ORDER BY last_updated DESC
+            LIMIT ?
+        """, list(already_swiped) + [limit])
+    else:
+        c.execute("""
+            SELECT address_key, address, city, agent_sources, lead_data,
+                   primary_service_type, first_seen
+            FROM consolidated_leads
+            ORDER BY last_updated DESC
+            LIMIT ?
+        """, (limit,))
+
+    rows = c.fetchall()
+
+    c.execute("SELECT name, display_label, emoji FROM service_types")
+    service_types_map = {
+        row[0]: {"label": row[1], "emoji": row[2]} for row in c.fetchall()
+    }
+    conn.close()
+
+    leads = []
+    for row in rows:
+        row_dict = dict(row)
+        try:
+            lead_data = json.loads(row_dict.get("lead_data") or "{}")
+        except Exception:
+            lead_data = {}
+
+        scoring = lead_data.get("_scoring", {}) or {}
+        service_type = (
+            row_dict.get("primary_service_type")
+            or (row_dict["agent_sources"].split(",")[0]
+                if row_dict.get("agent_sources") else None)
+        )
+        service_info = service_types_map.get(service_type, {})
+
+        leads.append({
+            "id":            row_dict["address_key"],
+            "address":       row_dict["address"],
+            "city":          row_dict["city"],
+            "description":   (lead_data.get("description") or "")[:240],
+            "value":         lead_data.get("value_float") or 0,
+            "score":         scoring.get("score", 0),
+            "grade":         scoring.get("grade", ""),
+            "grade_emoji":   scoring.get("grade_emoji", ""),
+            "reasons":       scoring.get("reasons", [])[:3],
+            "service_type":  service_type,
+            "service_label": service_info.get("label", ""),
+            "service_emoji": service_info.get("emoji", ""),
+            "contractor":    lead_data.get("contractor", ""),
+            "created_at":    row_dict.get("first_seen", ""),
+        })
+
+    response = {
+        "leads":         leads,
+        "auth_required": False,
+        "anon_limit":    ANON_LEAD_LIMIT,
+        "swipes_count":  swipes_count,
+    }
+    if remaining is not None:
+        response["remaining"] = remaining
+    return jsonify(response), 200
+
+
+@app.route('/api/swipe/action', methods=['POST'])
+def swipe_action():
+    """
+    Record a like/dislike swipe.
+
+    Body: {"lead_id": "...", "action": "like"|"dislike", "anon_id": "..."}
+
+    Returns the updated swipe counters and whether the anonymous
+    budget is exhausted (so the client can open the login wall).
+    """
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    action = (data.get("action") or "").strip().lower()
+
+    if not lead_id or action not in ("like", "dislike"):
+        return jsonify({"error": "lead_id and valid action required"}), 400
+
+    user_id, anon_id = _resolve_swipe_identity()
+    if not user_id and not anon_id:
+        return jsonify({"error": "anon_id or auth required"}), 400
+
+    if not user_id:
+        current = _count_swipes(None, anon_id)
+        if current >= ANON_LEAD_LIMIT:
+            return jsonify({
+                "ok": False,
+                "auth_required": True,
+                "anon_limit": ANON_LEAD_LIMIT,
+                "swipes_count": current,
+                "remaining": 0,
+            }), 200
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            INSERT INTO swipe_actions (user_id, anon_id, lead_id, action)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, anon_id, lead_id, action))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        logger.warning(f"swipe_action insert failed: {e}")
+        return jsonify({"error": "failed to record swipe"}), 500
+    conn.close()
+
+    swipes_count = _count_swipes(user_id, anon_id)
+    remaining = None
+    auth_required = False
+    if not user_id:
+        remaining = max(ANON_LEAD_LIMIT - swipes_count, 0)
+        auth_required = remaining == 0
+
+    return jsonify({
+        "ok":            True,
+        "auth_required": auth_required,
+        "anon_limit":    ANON_LEAD_LIMIT,
+        "swipes_count":  swipes_count,
+        "remaining":     remaining,
+    }), 200
+
+
+# ─────────────────────────────────────────────────────────
+# Social Login (Google / Facebook) for swipe app
+# ─────────────────────────────────────────────────────────
+
+def _upsert_oauth_user(provider: str, sub: str, email: str,
+                       full_name: str, avatar_url: str) -> int:
+    """
+    Create or update a user for a given OAuth identity.
+    Returns the user_id.
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT id FROM users
+        WHERE oauth_provider = ? AND oauth_sub = ?
+    """, (provider, sub))
+    row = c.fetchone()
+
+    if row:
+        user_id = row[0]
+        c.execute("""
+            UPDATE users
+               SET full_name = COALESCE(?, full_name),
+                   avatar_url = COALESCE(?, avatar_url),
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?
+        """, (full_name or None, avatar_url or None, user_id))
+    else:
+        # Fall back: try to match by email
+        if email:
+            c.execute("SELECT id FROM users WHERE email = ?", (email,))
+            existing = c.fetchone()
+        else:
+            existing = None
+
+        if existing:
+            user_id = existing[0]
+            c.execute("""
+                UPDATE users
+                   SET oauth_provider = ?,
+                       oauth_sub = ?,
+                       avatar_url = COALESCE(?, avatar_url),
+                       full_name = COALESCE(?, full_name),
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?
+            """, (provider, sub, avatar_url or None,
+                  full_name or None, user_id))
+        else:
+            username = (email or f"{provider}_{sub}")[:64]
+            safe_email = email or f"{provider}_{sub}@oauth.local"
+            c.execute("""
+                INSERT INTO users (username, email, password_hash, full_name,
+                                   oauth_provider, oauth_sub, avatar_url,
+                                   is_active)
+                VALUES (?, ?, '', ?, ?, ?, ?, 1)
+            """, (username, safe_email, full_name or username,
+                  provider, sub, avatar_url or None))
+            user_id = c.lastrowid
+
+    conn.commit()
+    conn.close()
+    return user_id
+
+
+def _verify_google_id_token(id_token: str) -> dict | None:
+    """
+    Verify a Google ID token via Google's tokeninfo endpoint.
+    Returns the claims dict or None if invalid.
+    """
+    if not id_token:
+        return None
+    try:
+        import requests
+        resp = requests.get(
+            "https://oauth2.googleapis.com/tokeninfo",
+            params={"id_token": id_token},
+            timeout=6,
+        )
+        if resp.status_code != 200:
+            return None
+        claims = resp.json() or {}
+        if not claims.get("sub"):
+            return None
+        expected_aud = os.getenv("GOOGLE_CLIENT_ID", "")
+        if expected_aud and claims.get("aud") != expected_aud:
+            logger.warning("Google token aud mismatch")
+            return None
+        return claims
+    except Exception as e:
+        logger.warning(f"Google token verification failed: {e}")
+        return None
+
+
+def _verify_facebook_token(access_token: str) -> dict | None:
+    """
+    Verify a Facebook user access token by calling the Graph API.
+    Returns the profile dict or None if invalid.
+    """
+    if not access_token:
+        return None
+    try:
+        import requests
+        resp = requests.get(
+            "https://graph.facebook.com/me",
+            params={
+                "fields": "id,name,email,picture.type(large)",
+                "access_token": access_token,
+            },
+            timeout=6,
+        )
+        if resp.status_code != 200:
+            return None
+        return resp.json() or None
+    except Exception as e:
+        logger.warning(f"Facebook token verification failed: {e}")
+        return None
+
+
+@app.route('/api/auth/oauth/google', methods=['POST'])
+def oauth_google_login():
+    """
+    Exchange a Google ID token (from the JS Identity Services client)
+    for an MLeads JWT.
+
+    Body: {"credential": "<google-id-token>"}
+    """
+    data = request.get_json(silent=True) or {}
+    id_token = data.get("credential") or data.get("id_token")
+    claims = _verify_google_id_token(id_token)
+    if not claims:
+        return jsonify({"error": "Invalid Google credential"}), 401
+
+    user_id = _upsert_oauth_user(
+        provider="google",
+        sub=str(claims.get("sub")),
+        email=claims.get("email") or "",
+        full_name=claims.get("name") or "",
+        avatar_url=claims.get("picture") or "",
+    )
+
+    access_token, refresh_token = generate_tokens(user_id)
+    return jsonify({
+        "access_token":  access_token,
+        "refresh_token": refresh_token,
+        "user": {
+            "id":         user_id,
+            "email":      claims.get("email"),
+            "full_name":  claims.get("name"),
+            "avatar_url": claims.get("picture"),
+            "provider":   "google",
+        },
+    }), 200
+
+
+@app.route('/api/auth/oauth/facebook', methods=['POST'])
+def oauth_facebook_login():
+    """
+    Exchange a Facebook user access token (from the JS SDK) for an
+    MLeads JWT.
+
+    Body: {"access_token": "<fb-access-token>"}
+    """
+    data = request.get_json(silent=True) or {}
+    access_token_fb = data.get("access_token")
+    profile = _verify_facebook_token(access_token_fb)
+    if not profile or not profile.get("id"):
+        return jsonify({"error": "Invalid Facebook token"}), 401
+
+    avatar = ""
+    picture = profile.get("picture") or {}
+    if isinstance(picture, dict):
+        avatar = (picture.get("data") or {}).get("url", "")
+
+    user_id = _upsert_oauth_user(
+        provider="facebook",
+        sub=str(profile.get("id")),
+        email=profile.get("email") or "",
+        full_name=profile.get("name") or "",
+        avatar_url=avatar,
+    )
+
+    access_token, refresh_token = generate_tokens(user_id)
+    return jsonify({
+        "access_token":  access_token,
+        "refresh_token": refresh_token,
+        "user": {
+            "id":         user_id,
+            "email":      profile.get("email"),
+            "full_name":  profile.get("name"),
+            "avatar_url": avatar,
+            "provider":   "facebook",
+        },
+    }), 200
+
+
+@app.route('/api/swipe/claim-anon', methods=['POST'])
+@require_auth
+def swipe_claim_anon():
+    """
+    After a successful OAuth login, migrate any anonymous swipes the
+    user made (tracked by anon_id) onto their new user_id so their
+    history carries over.
+
+    Body: {"anon_id": "..."}
+    """
+    data = request.get_json(silent=True) or {}
+    anon_id = (data.get("anon_id") or "").strip()
+    if not anon_id:
+        return jsonify({"ok": True, "migrated": 0}), 200
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        UPDATE swipe_actions
+           SET user_id = ?, anon_id = NULL
+         WHERE anon_id = ?
+           AND user_id IS NULL
+           AND lead_id NOT IN (
+               SELECT lead_id FROM swipe_actions WHERE user_id = ?
+           )
+    """, (g.user_id, anon_id, g.user_id))
+    migrated = c.rowcount
+    # Drop any remaining anon rows for leads the user already swiped
+    c.execute("DELETE FROM swipe_actions WHERE anon_id = ?", (anon_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "migrated": migrated}), 200
 
 
 # ─────────────────────────────────────────────────────────
