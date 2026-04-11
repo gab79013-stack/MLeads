@@ -360,8 +360,9 @@ class RealEstateAgent(BaseAgent):
                                 pass
 
                         # Calcular antigüedad — casas viejas = mejor lead
+                        # (mayor probabilidad de renovación: roofing, paint, electrical)
                         age = (datetime.now().year - year_built) if year_built > 1900 else 0
-                        insulation_priority = (
+                        renovation_priority = (
                             "ALTA" if age > 40 else
                             "MEDIA" if age > 20 else
                             "BAJA" if age > 0 else "DESCONOCIDA"
@@ -379,7 +380,7 @@ class RealEstateAgent(BaseAgent):
                             "seller":      get(raw, "seller"),
                             "year_built":  year_built if year_built > 1900 else None,
                             "property_age": age if age > 0 else None,
-                            "insulation_priority": insulation_priority,
+                            "renovation_priority": renovation_priority,
                             "_agent_key":  "realestate",
                         }
 
@@ -415,7 +416,7 @@ class RealEstateAgent(BaseAgent):
 
         price = lead.get("value_float", 0)
         age = lead.get("property_age")
-        priority = lead.get("insulation_priority", "")
+        priority = lead.get("renovation_priority", "")
 
         fields = {
             "📍 Zona":               lead.get("city"),
@@ -428,7 +429,7 @@ class RealEstateAgent(BaseAgent):
         if age:
             fields["🏗️ Antigüedad"] = f"{age} años (construida {lead['year_built']})"
 
-        fields["🔥 Prioridad Insulación"] = priority
+        fields["🔥 Prioridad Renovación"] = priority
 
         if lead.get("contact_phone"):
             src = lead.get("contact_source", "")
@@ -446,7 +447,7 @@ class RealEstateAgent(BaseAgent):
             agent_name=self.name, emoji=self.emoji,
             title=f"{lead['city']} — {lead['address']}",
             fields=fields,
-            cta="🏠 Nuevo propietario = oportunidad de insulación. ¡Contacta antes de la renovación!",
+            cta="🏠 Nuevo propietario = oportunidad de roofing/paint/electrical. ¡Contacta antes de la renovación!",
         )
 
         # Notificación multi-canal para leads calientes

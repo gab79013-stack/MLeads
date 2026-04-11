@@ -4,7 +4,8 @@ utils/census.py
 US Census Bureau API — datos demográficos para scoring geográfico.
 API 100% gratuita: https://api.census.gov
 
-Datos relevantes para insulación:
+Datos relevantes para servicios de renovación
+(roofing, drywall, paint, landscaping, electrical):
   - Mediana de antigüedad de viviendas (casas viejas = más necesidad)
   - Mediana de ingresos (capacidad de pago)
   - Total de unidades de vivienda (densidad de mercado)
@@ -121,7 +122,8 @@ def get_demographics(city: str) -> dict | None:
       - median_income: mediana de ingresos del hogar
       - total_housing_units: total de unidades de vivienda
       - owner_occupied_pct: % de viviendas ocupadas por propietarios
-      - insulation_score: score 0-100 de necesidad de insulación
+      - renovation_score: score 0-100 de necesidad de renovación
+        (roofing/drywall/paint/landscaping/electrical)
     """
     city_lower = city.lower().strip()
     county_name = _CITY_TO_COUNTY.get(city_lower)
@@ -187,35 +189,36 @@ def _fetch_census_data(state_fips: str, county_fips: str) -> dict | None:
 
         owner_pct = (owner_occupied / total_occupied * 100) if total_occupied else 0
 
-        # Calcular insulation_score basado en antigüedad
-        # Casas pre-1980 = alta necesidad, post-2000 = baja necesidad
-        insulation_score = 0
+        # Calcular renovation_score basado en antigüedad
+        # Casas pre-1980 = alta necesidad de roofing/paint/electrical,
+        # post-2000 = baja necesidad
+        renovation_score = 0
         if median_year_built:
             if median_year_built < 1960:
-                insulation_score = 95
+                renovation_score = 95
             elif median_year_built < 1970:
-                insulation_score = 85
+                renovation_score = 85
             elif median_year_built < 1980:
-                insulation_score = 75
+                renovation_score = 75
             elif median_year_built < 1990:
-                insulation_score = 60
+                renovation_score = 60
             elif median_year_built < 2000:
-                insulation_score = 45
+                renovation_score = 45
             else:
-                insulation_score = 25
+                renovation_score = 25
 
         # Ajustar por ingresos (mayor ingreso = mayor capacidad de pago)
         if median_income and median_income > 120000:
-            insulation_score = min(insulation_score + 10, 100)
+            renovation_score = min(renovation_score + 10, 100)
         elif median_income and median_income > 80000:
-            insulation_score = min(insulation_score + 5, 100)
+            renovation_score = min(renovation_score + 5, 100)
 
         return {
             "median_year_built":  median_year_built,
             "median_income":      median_income,
             "total_housing_units": total_housing,
             "owner_occupied_pct": round(owner_pct, 1),
-            "insulation_score":   insulation_score,
+            "renovation_score":   renovation_score,
         }
 
     except Exception as e:

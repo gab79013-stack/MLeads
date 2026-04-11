@@ -4,13 +4,17 @@ agents/construction_agent.py
 🚧 Construcciones Activas — Bay Area
 
 Monitorea inspecciones de construcción para detectar proyectos
-EN PROGRESO y su fase actual. El timing es clave:
+EN PROGRESO y su fase actual. Enfocado en los 5 servicios target:
+  Roofing · Drywall · Paint · Landscaping · Electrical
 
+Timing por fase:
   Fase de CIMENTACIÓN  → muy temprano, proyecto recién comienza
-  Fase de ESTRUCTURA   → ¡CONTACTAR AHORA! insulación es el siguiente paso
-  Fase de INSULACIÓN   → ya están comprando, ¿quién es el proveedor?
-  Fase de DRYWALL      → tarde pero aún posible para blown-in
-  Fase de FINAL        → oportunidad perdida para nuevo, pero upgrades futuros
+  Fase de ESTRUCTURA   → ¡CONTACTAR AHORA! roofing/electrical vienen después
+  Fase de ROOFING      → oportunidad activa para roofers y electricistas
+  Fase de DRYWALL      → ventana para drywall/paint subs
+  Fase de PAINT        → paint contractors entran
+  Fase de LANDSCAPING  → último paso antes de final
+  Fase de FINAL        → oportunidad para upgrades futuros
 
 Fuentes gratuitas:
   1. SF Building Inspections (Socrata) — inspecciones programadas/realizadas
@@ -58,7 +62,8 @@ def _parse_value(v) -> float:
         return 0.0
 
 
-# ── Fases de construcción y su relevancia para insulación ────────────
+# ── Fases de construcción y su relevancia para servicios target ──────
+# Servicios: Roofing · Drywall · Paint · Landscaping · Electrical
 
 CONSTRUCTION_PHASES = {
     # Fase temprana — proyecto arrancando
@@ -70,52 +75,70 @@ CONSTRUCTION_PHASES = {
         "action":      "Proyecto iniciando. Contactar para cotización anticipada.",
         "priority":    2,
     },
-    # Fase estructural — TIMING PERFECTO
+    # Fase estructural — TIMING PERFECTO para roofers/electricistas
     "framing": {
         "keywords": ["FRAMING", "FRAME", "ROUGH FRAME", "STRUCTURAL",
                       "SHEATHING", "SHEAR WALL", "ESTRUCTURA", "FRAME ROUGH",
                       "TOP OUT", "ROUGH FRAMING"],
         "phase_order": 2,
         "timing":      "🔥 AHORA",
-        "action":      "¡Estructura lista! Insulación es el SIGUIENTE paso. ¡CONTACTAR YA!",
+        "action":      "¡Estructura lista! Roofing y Electrical son los SIGUIENTES pasos.",
         "priority":    5,
     },
-    # Fase de sistemas MEP — oportunidad activa
-    "rough_mep": {
-        "keywords": ["ROUGH PLUMBING", "ROUGH ELECTRIC", "ROUGH MECHANICAL",
-                      "ROUGH MEP", "MEP ROUGH", "ROUGH-IN", "HVAC ROUGH",
-                      "DUCTWORK", "DUCTOS"],
+    # Fase eléctrica — oportunidad activa para electricistas
+    "electrical": {
+        "keywords": ["ROUGH ELECTRIC", "ELECTRICAL ROUGH", "ELECTRIC ROUGH",
+                      "PANEL UPGRADE", "SERVICE UPGRADE", "REWIRE", "WIRING",
+                      "SUB PANEL", "MAIN PANEL", "200 AMP", "ELECTRICAL PERMIT"],
         "phase_order": 3,
-        "timing":      "🟠 Oportunidad",
-        "action":      "MEP en progreso. Insulación se instala junto o justo después.",
+        "timing":      "⚡ EN CURSO",
+        "action":      "Eléctrico en progreso. Oportunidad directa para electricistas.",
+        "priority":    5,
+    },
+    # Fase de roofing — ventana crítica para roofers
+    "roofing": {
+        "keywords": ["ROOF", "ROOFING", "RE-ROOF", "REROOF", "ROOF REPLACE",
+                      "SHINGLE", "SHINGLES", "TILE ROOF", "FLAT ROOF",
+                      "TORCH DOWN", "ROOF SHEATHING"],
+        "phase_order": 4,
+        "timing":      "🔥 ROOFING",
+        "action":      "Roofing en progreso. Contactar roofers AHORA.",
+        "priority":    5,
+    },
+    # Fase de drywall — ventana para drywall/paint subs
+    "drywall": {
+        "keywords": ["DRYWALL", "SHEETROCK", "GYPSUM", "WALLBOARD", "LATH",
+                      "PLASTER", "STUCCO", "TAPING", "TEXTURING"],
+        "phase_order": 5,
+        "timing":      "🟠 DRYWALL",
+        "action":      "Drywall en curso. Oportunidad para drywall y paint subs.",
         "priority":    4,
     },
-    # Fase de insulación — ver quién lo está haciendo
-    "insulation": {
-        "keywords": ["INSULATION", "INSULATE", "BATT INSUL", "SPRAY FOAM",
-                      "BLOWN IN", "THERMAL", "R-VALUE", "VAPOR BARRIER",
-                      "AISLAMIENTO", "INSULACION", "ENERGY COMPLIANCE",
-                      "TITLE 24"],
-        "phase_order": 4,
-        "timing":      "⚡ EN CURSO",
-        "action":      "Insulación en progreso. ¿Quién es el subcontratista? Ofrecer alternativa.",
-        "priority":    3,
+    # Fase de paint — paint contractors
+    "paint": {
+        "keywords": ["PAINT", "PAINTING", "REPAINT", "PRIMER",
+                      "EXTERIOR PAINT", "INTERIOR PAINT", "STUCCO PAINT"],
+        "phase_order": 6,
+        "timing":      "🎨 PAINT",
+        "action":      "Fase de paint. Oportunidad directa para pintores.",
+        "priority":    4,
     },
-    # Fase de cierre — tarde pero posible
-    "drywall": {
-        "keywords": ["DRYWALL", "LATH", "PLASTER", "STUCCO", "EXTERIOR FINISH",
-                      "WALL COVER", "SHEETROCK"],
-        "phase_order": 5,
-        "timing":      "🟡 Último chance",
-        "action":      "Paredes cerrándose. Aún posible blown-in o correcciones.",
-        "priority":    2,
+    # Fase de landscaping — último paso antes del final
+    "landscaping": {
+        "keywords": ["LANDSCAPE", "LANDSCAPING", "IRRIGATION", "SPRINKLER",
+                      "HARDSCAPE", "PAVER", "SOD", "RETAINING WALL",
+                      "ARTIFICIAL TURF"],
+        "phase_order": 7,
+        "timing":      "🌳 LANDSCAPING",
+        "action":      "Landscaping activo. Oportunidad para landscapers.",
+        "priority":    4,
     },
     # Inspección final — oportunidad para upgrades
     "final": {
         "keywords": ["FINAL INSPECTION", "FINAL BLDG", "FINAL BUILDING",
                       "FINAL COMBO", "CERTIFICATE OF OCCUPANCY", "C OF O",
                       "TCO", "FINAL SIGN"],
-        "phase_order": 6,
+        "phase_order": 8,
         "timing":      "✅ Completado",
         "action":      "Proyecto terminado. Ofrecer mejoras futuras / mantenimiento.",
         "priority":    1,
@@ -153,7 +176,7 @@ INSPECTION_SOURCES = [
             "$where": (
                 "inspection_date >= '{cutoff_iso}' "
                 "AND (UPPER(inspection_type_description) LIKE '%FRAME%' "
-                "OR UPPER(inspection_type_description) LIKE '%INSULATION%' "
+                "OR UPPER(inspection_type_description) LIKE '%ROOFING%' OR UPPER(inspection_type_description) LIKE '%ELECTRICAL%' OR UPPER(inspection_type_description) LIKE '%PAINT%' OR UPPER(inspection_type_description) LIKE '%LANDSCAPE%'"
                 "OR UPPER(inspection_type_description) LIKE '%ROUGH%' "
                 "OR UPPER(inspection_type_description) LIKE '%DRYWALL%' "
                 "OR UPPER(inspection_type_description) LIKE '%FOUNDATION%' "
@@ -187,7 +210,7 @@ INSPECTION_SOURCES = [
                 "issued_date >= '{cutoff_iso}' "
                 "AND status IN('issued','complete') "
                 "AND (UPPER(description) LIKE '%FRAME%' "
-                "OR UPPER(description) LIKE '%INSULATION%' "
+                "OR UPPER(description) LIKE '%ROOFING%' OR UPPER(description) LIKE '%REROOF%' OR UPPER(description) LIKE '%ELECTRICAL%' OR UPPER(description) LIKE '%PAINT%' OR UPPER(description) LIKE '%LANDSCAPE%' OR UPPER(description) LIKE '%DRYWALL%'"
                 "OR UPPER(description) LIKE '%ROUGH%' "
                 "OR UPPER(description) LIKE '%STRUCTURE%')"
             ),
@@ -243,7 +266,7 @@ INSPECTION_SOURCES = [
             "$where": (
                 "application_date >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%FRAME%' "
-                "OR UPPER(description) LIKE '%INSULATION%' "
+                "OR UPPER(description) LIKE '%ROOFING%' OR UPPER(description) LIKE '%REROOF%' OR UPPER(description) LIKE '%ELECTRICAL%' OR UPPER(description) LIKE '%PAINT%' OR UPPER(description) LIKE '%LANDSCAPE%' OR UPPER(description) LIKE '%DRYWALL%'"
                 "OR UPPER(description) LIKE '%ROUGH%')"
             ),
         },
@@ -273,7 +296,7 @@ INSPECTION_SOURCES = [
             "$where": (
                 "issueddate >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%FRAME%' "
-                "OR UPPER(description) LIKE '%INSULATION%' "
+                "OR UPPER(description) LIKE '%ROOFING%' OR UPPER(description) LIKE '%REROOF%' OR UPPER(description) LIKE '%ELECTRICAL%' OR UPPER(description) LIKE '%PAINT%' OR UPPER(description) LIKE '%LANDSCAPE%' OR UPPER(description) LIKE '%DRYWALL%'"
                 "OR UPPER(description) LIKE '%ROUGH%')"
             ),
         },
@@ -303,7 +326,7 @@ INSPECTION_SOURCES = [
             "$where": (
                 "issue_date >= '{cutoff_iso}' "
                 "AND (UPPER(project_description) LIKE '%FRAME%' "
-                "OR UPPER(project_description) LIKE '%INSULATION%' "
+                "OR UPPER(project_description) LIKE '%ROOFING%' OR UPPER(project_description) LIKE '%ELECTRICAL%' OR UPPER(project_description) LIKE '%PAINT%' OR UPPER(project_description) LIKE '%LANDSCAPE%' OR UPPER(project_description) LIKE '%DRYWALL%'"
                 "OR UPPER(project_description) LIKE '%ROUGH%')"
             ),
         },
@@ -334,7 +357,7 @@ INSPECTION_SOURCES = [
             "$where": (
                 "issued_date >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%FRAME%' "
-                "OR UPPER(description) LIKE '%INSULATION%' "
+                "OR UPPER(description) LIKE '%ROOFING%' OR UPPER(description) LIKE '%REROOF%' OR UPPER(description) LIKE '%ELECTRICAL%' OR UPPER(description) LIKE '%PAINT%' OR UPPER(description) LIKE '%LANDSCAPE%' OR UPPER(description) LIKE '%DRYWALL%'"
                 "OR UPPER(description) LIKE '%ROUGH%')"
             ),
         },
@@ -364,7 +387,7 @@ INSPECTION_SOURCES = [
             "$where": (
                 "issued_date >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%FRAME%' "
-                "OR UPPER(description) LIKE '%INSULATION%' "
+                "OR UPPER(description) LIKE '%ROOFING%' OR UPPER(description) LIKE '%REROOF%' OR UPPER(description) LIKE '%ELECTRICAL%' OR UPPER(description) LIKE '%PAINT%' OR UPPER(description) LIKE '%LANDSCAPE%' OR UPPER(description) LIKE '%DRYWALL%'"
                 "OR UPPER(description) LIKE '%ROUGH%')"
             ),
         },
@@ -394,7 +417,7 @@ INSPECTION_SOURCES = [
             "$where": (
                 "issued_date >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%FRAME%' "
-                "OR UPPER(description) LIKE '%INSULATION%' "
+                "OR UPPER(description) LIKE '%ROOFING%' OR UPPER(description) LIKE '%REROOF%' OR UPPER(description) LIKE '%ELECTRICAL%' OR UPPER(description) LIKE '%PAINT%' OR UPPER(description) LIKE '%LANDSCAPE%' OR UPPER(description) LIKE '%DRYWALL%'"
                 "OR UPPER(description) LIKE '%ROUGH%')"
             ),
         },
@@ -424,7 +447,7 @@ INSPECTION_SOURCES = [
             "$where": (
                 "issued_date >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%FRAME%' "
-                "OR UPPER(description) LIKE '%INSULATION%' "
+                "OR UPPER(description) LIKE '%ROOFING%' OR UPPER(description) LIKE '%REROOF%' OR UPPER(description) LIKE '%ELECTRICAL%' OR UPPER(description) LIKE '%PAINT%' OR UPPER(description) LIKE '%LANDSCAPE%' OR UPPER(description) LIKE '%DRYWALL%'"
                 "OR UPPER(description) LIKE '%ROUGH%')"
             ),
         },
@@ -454,7 +477,7 @@ INSPECTION_SOURCES = [
             "$where": (
                 "issued_date >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%FRAME%' "
-                "OR UPPER(description) LIKE '%INSULATION%' "
+                "OR UPPER(description) LIKE '%ROOFING%' OR UPPER(description) LIKE '%REROOF%' OR UPPER(description) LIKE '%ELECTRICAL%' OR UPPER(description) LIKE '%PAINT%' OR UPPER(description) LIKE '%LANDSCAPE%' OR UPPER(description) LIKE '%DRYWALL%'"
                 "OR UPPER(description) LIKE '%ROUGH%')"
             ),
         },
@@ -484,7 +507,7 @@ INSPECTION_SOURCES = [
             "$where": (
                 "issued_date >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%FRAME%' "
-                "OR UPPER(description) LIKE '%INSULATION%' "
+                "OR UPPER(description) LIKE '%ROOFING%' OR UPPER(description) LIKE '%REROOF%' OR UPPER(description) LIKE '%ELECTRICAL%' OR UPPER(description) LIKE '%PAINT%' OR UPPER(description) LIKE '%LANDSCAPE%' OR UPPER(description) LIKE '%DRYWALL%'"
                 "OR UPPER(description) LIKE '%ROUGH%')"
             ),
         },
@@ -514,7 +537,7 @@ INSPECTION_SOURCES = [
             "$where": (
                 "issued_date >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%FRAME%' "
-                "OR UPPER(description) LIKE '%INSULATION%' "
+                "OR UPPER(description) LIKE '%ROOFING%' OR UPPER(description) LIKE '%REROOF%' OR UPPER(description) LIKE '%ELECTRICAL%' OR UPPER(description) LIKE '%PAINT%' OR UPPER(description) LIKE '%LANDSCAPE%' OR UPPER(description) LIKE '%DRYWALL%'"
                 "OR UPPER(description) LIKE '%ROUGH%')"
             ),
         },
@@ -544,7 +567,7 @@ INSPECTION_SOURCES = [
             "$where": (
                 "issued_date >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%FRAME%' "
-                "OR UPPER(description) LIKE '%INSULATION%' "
+                "OR UPPER(description) LIKE '%ROOFING%' OR UPPER(description) LIKE '%REROOF%' OR UPPER(description) LIKE '%ELECTRICAL%' OR UPPER(description) LIKE '%PAINT%' OR UPPER(description) LIKE '%LANDSCAPE%' OR UPPER(description) LIKE '%DRYWALL%'"
                 "OR UPPER(description) LIKE '%ROUGH%')"
             ),
         },
@@ -863,12 +886,14 @@ class ConstructionAgent(BaseAgent):
 
         # Header con fase prominente
         phase_display = {
-            "foundation": "🔵 CIMENTACIÓN",
-            "framing":    "🔥 ESTRUCTURA (FRAMING)",
-            "rough_mep":  "🟠 MEP ROUGH-IN",
-            "insulation":  "⚡ INSULACIÓN",
-            "drywall":    "🟡 DRYWALL/CIERRE",
-            "final":      "✅ INSPECCIÓN FINAL",
+            "foundation":  "🔵 CIMENTACIÓN",
+            "framing":     "🔥 ESTRUCTURA (FRAMING)",
+            "electrical":  "⚡ ELÉCTRICO",
+            "roofing":     "🏠 ROOFING",
+            "drywall":     "🧱 DRYWALL",
+            "paint":       "🎨 PAINT",
+            "landscaping": "🌳 LANDSCAPING",
+            "final":       "✅ INSPECCIÓN FINAL",
         }.get(phase, phase.upper())
 
         fields = {
@@ -917,6 +942,6 @@ class ConstructionAgent(BaseAgent):
             cta=f"🚧 {action}",
         )
 
-        # Multi-canal para leads HOT (framing/rough_mep)
-        if phase in ("framing", "rough_mep", "insulation"):
+        # Multi-canal para leads HOT (servicios target activos)
+        if phase in ("framing", "electrical", "roofing", "drywall", "paint", "landscaping"):
             notify_multichannel(lead, scoring)

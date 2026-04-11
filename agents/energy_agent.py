@@ -190,10 +190,10 @@ ENERGY_SOURCES = [
             "$where": (
                 "issued_date >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%ENERGY AUDIT%' "
-                "OR UPPER(description) LIKE '%WEATHERIZATION%' "
                 "OR UPPER(description) LIKE '%TITLE 24%' "
                 "OR UPPER(description) LIKE '%ENERGY RETROFIT%' "
-                "OR UPPER(description) LIKE '%INSULATION%')"
+                "OR UPPER(description) LIKE '%PANEL UPGRADE%' "
+                "OR UPPER(description) LIKE '%SERVICE UPGRADE%')"
             ),
         },
         "field_map": {
@@ -220,10 +220,10 @@ ENERGY_SOURCES = [
             "$where": (
                 "issued_date >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%ENERGY AUDIT%' "
-                "OR UPPER(description) LIKE '%WEATHERIZATION%' "
                 "OR UPPER(description) LIKE '%TITLE 24%' "
                 "OR UPPER(description) LIKE '%ENERGY RETROFIT%' "
-                "OR UPPER(description) LIKE '%INSULATION%')"
+                "OR UPPER(description) LIKE '%PANEL UPGRADE%' "
+                "OR UPPER(description) LIKE '%SERVICE UPGRADE%')"
             ),
         },
         "field_map": {
@@ -250,10 +250,10 @@ ENERGY_SOURCES = [
             "$where": (
                 "issued_date >= '{cutoff_iso}' "
                 "AND (UPPER(description) LIKE '%ENERGY AUDIT%' "
-                "OR UPPER(description) LIKE '%WEATHERIZATION%' "
                 "OR UPPER(description) LIKE '%TITLE 24%' "
                 "OR UPPER(description) LIKE '%ENERGY RETROFIT%' "
-                "OR UPPER(description) LIKE '%INSULATION%')"
+                "OR UPPER(description) LIKE '%PANEL UPGRADE%' "
+                "OR UPPER(description) LIKE '%SERVICE UPGRADE%')"
             ),
         },
         "field_map": {

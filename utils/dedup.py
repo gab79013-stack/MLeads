@@ -181,7 +181,7 @@ class DeduplicationEngine:
             # Fusionar campos que el lead original no tiene
             for key in ["contractor", "owner", "contact_phone", "contact_email",
                         "value_float", "year_built", "property_age", "lic_number",
-                        "insulation_need", "assessed_value", "energy_score",
+                        "assessed_value", "energy_score",
                         "solar_potential", "pest_type", "severity"]:
                 if not consolidated.get(key) and signal_data.get(key):
                     consolidated[key] = signal_data[key]
@@ -267,7 +267,7 @@ class DeduplicationEngine:
             k: lead.get(k) for k in [
                 "contractor", "owner", "contact_phone", "contact_email",
                 "value_float", "year_built", "property_age", "lic_number",
-                "insulation_need", "assessed_value", "energy_score",
+                "assessed_value", "energy_score",
                 "solar_potential", "pest_type", "severity", "phase",
                 "description",
             ] if lead.get(k)

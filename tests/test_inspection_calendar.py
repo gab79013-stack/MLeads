@@ -128,9 +128,9 @@ class TestInspectionPredictor:
         assert prob == 0.85
 
     def test_estimate_gc_presence_medium(self):
-        """Test medium GC presence probability for insulation."""
-        prob = estimate_gc_presence({}, None, "INSULATION")
-        assert prob == 0.70
+        """Test medium GC presence probability for roofing phase."""
+        prob = estimate_gc_presence({}, None, "ROOFING")
+        assert prob == 0.75
 
     def test_get_next_inspection_date(self):
         """Test getting next inspection date from lead."""

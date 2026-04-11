@@ -44,6 +44,42 @@ def init_web_db():
     except sqlite3.OperationalError:
         c.execute("ALTER TABLE users ADD COLUMN expires_at TIMESTAMP")
 
+    # Migration: add OAuth fields for social login (swipe app)
+    for col, ddl in [
+        ("oauth_provider", "ALTER TABLE users ADD COLUMN oauth_provider TEXT"),
+        ("oauth_sub",      "ALTER TABLE users ADD COLUMN oauth_sub TEXT"),
+        ("avatar_url",     "ALTER TABLE users ADD COLUMN avatar_url TEXT"),
+    ]:
+        try:
+            c.execute(f"SELECT {col} FROM users LIMIT 1")
+        except sqlite3.OperationalError:
+            c.execute(ddl)
+
+    # Swipe interactions (like/dislike) per user or anonymous session
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS swipe_actions (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id      INTEGER,
+            anon_id      TEXT,
+            lead_id      TEXT NOT NULL,
+            action       TEXT NOT NULL CHECK(action IN ('like','dislike')),
+            created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_swipe_actions_user
+        ON swipe_actions(user_id, created_at)
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_swipe_actions_anon
+        ON swipe_actions(anon_id, created_at)
+    """)
+    c.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_swipe_actions_user_lead
+        ON swipe_actions(user_id, lead_id) WHERE user_id IS NOT NULL
+    """)
+
     # ─────────────────────────────────────────────────────
     # Roles & Permissions
     # ─────────────────────────────────────────────────────
