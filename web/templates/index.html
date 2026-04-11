@@ -990,6 +990,11 @@
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -1219,7 +1224,7 @@
                     <div class="section-header">
                         <h3 class="section-title">Scheduled Inspections</h3>
                         <div style="display:flex;gap:8px;align-items:center;">
-                            <select id="inspectionDaysFilter" class="filter-group" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit;color:var(--fg);background:var(--bg-surface);">
+                            <select id="inspectionDaysFilter" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit;color:var(--fg);background:var(--bg-surface);">
                                 <option value="">All Dates</option>
                                 <option value="7">Next 7 Days</option>
                                 <option value="14">Next 14 Days</option>
