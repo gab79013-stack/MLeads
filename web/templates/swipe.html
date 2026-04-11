@@ -5,969 +5,1879 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>MLeads — Descubre Leads</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+        :root{
+            --fg:#171717;--fg2:#6c7278;--fg3:#9ca3af;
+            --bg:#f4f5f6;--surface:#fff;--border:#e2e2e3;
+            --like:#22c55e;--nope:#ef4444;--accent:#ff4458;
+            --shadow:0 10px 30px rgba(0,0,0,.12),0 4px 12px rgba(0,0,0,.06);
+        }
+        html,body{height:100%;font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--fg);overflow:hidden;overscroll-behavior:none}
+        body{display:flex;flex-direction:column;align-items:center;min-height:100dvh;padding:10px 14px 14px}
 
-        :root {
-            --fg: #171717;
-            --fg-secondary: #6c7278;
-            --fg-muted: #9ca3af;
-            --bg-page: #f4f5f6;
-            --bg-surface: #ffffff;
-            --border: #e2e2e3;
-            --like: #22c55e;
-            --dislike: #ef4444;
-            --accent: #2490ef;
-            --shadow-card: 0 10px 30px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
+        /* ─── Header ─────────────────────────────────── */
+        .hdr{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:420px;padding:4px 0 8px}
+        .brand{display:flex;align-items:center;gap:9px;font-weight:900;font-size:19px;letter-spacing:-.5px}
+        .brand-icon{width:32px;height:32px;border-radius:8px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center}
+        .brand-icon svg{width:17px;height:17px}
+        .hdr-right{display:flex;align-items:center;gap:8px}
+        .counter{font-size:12px;font-weight:600;color:var(--fg2);background:var(--surface);padding:5px 11px;border-radius:999px;border:1px solid var(--border)}
+        .counter strong{color:var(--fg)}
+        .icon-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--fg2);transition:all .15s;box-shadow:0 2px 6px rgba(0,0,0,.06);position:relative;flex-shrink:0}
+        .icon-btn:hover{background:#f8f9fa;color:var(--fg)}
+        .icon-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+        .icon-btn svg{width:16px;height:16px}
+        .fdot{position:absolute;top:-2px;right:-2px;width:9px;height:9px;background:var(--accent);border-radius:50%;border:2px solid var(--bg);display:none}
+        .icon-btn:not(.active) .fdot.on{display:block}
+
+        /* ─── Chips bar ───────────────────────────────── */
+        .chips-bar{display:flex;gap:5px;width:100%;max-width:420px;flex-wrap:wrap;min-height:0;margin-bottom:4px}
+        .chip{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--fg2);white-space:nowrap}
+        .chip.hot{background:#fff1f2;border-color:#fecdd3;color:#e11d48}
+        .chip.val{background:#f0fdf4;border-color:#bbf7d0;color:#15803d}
+        .chip.loc{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
+        .chip.sub{background:#faf5ff;border-color:#e9d5ff;color:#7c3aed}
+        .chip.ltype{background:#fff7ed;border-color:#fed7aa;color:#c2410c}
+        .chip-x{cursor:pointer;opacity:.6;margin-left:1px;font-size:12px;line-height:1}
+        .chip-x:hover{opacity:1}
+
+        /* ─── Deck ────────────────────────────────────── */
+        .deck{position:relative;width:100%;max-width:420px;height:min(560px,calc(100dvh - 215px));margin-top:2px}
+        .card{position:absolute;inset:0;background:var(--surface);border-radius:20px;box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden;cursor:grab;user-select:none;display:flex;flex-direction:column;touch-action:pan-y;transition:transform .25s cubic-bezier(.2,.9,.3,1.3),opacity .25s ease;will-change:transform}
+        .card.drag{transition:none;cursor:grabbing}
+        .card.go-left{transform:translate(-160%,40px) rotate(-26deg)!important;opacity:0}
+        .card.go-right{transform:translate(160%,40px) rotate(26deg)!important;opacity:0}
+        .stamp{position:absolute;top:26px;padding:7px 16px;border:3.5px solid;border-radius:9px;font-size:26px;font-weight:800;letter-spacing:2px;opacity:0;transition:opacity .1s linear;pointer-events:none;text-transform:uppercase;z-index:10}
+        .stamp.like{left:22px;color:var(--like);border-color:var(--like);transform:rotate(-15deg)}
+        .stamp.nope{right:22px;color:var(--nope);border-color:var(--nope);transform:rotate(15deg)}
+
+        /* ─── Card Hero ───────────────────────────────── */
+        .hero{padding:16px 18px 14px;color:#fff;position:relative;flex-shrink:0}
+        .hero.cold  {background:linear-gradient(135deg,#0f172a,#1e293b)}
+        .hero.hot   {background:linear-gradient(135deg,#7f1d1d,#b91c1c)}
+        .hero.warm  {background:linear-gradient(135deg,#431407,#9a3412)}
+        .hero.medium{background:linear-gradient(135deg,#1c1917,#292524)}
+
+        /* Hero layout: thermometer left, info right */
+        .hero-layout{display:flex;align-items:stretch;gap:12px}
+
+        /* ─── Thermometer ─────────────────────────────── */
+        .therm-col{display:flex;flex-direction:column;align-items:center;gap:4px;padding:2px 0}
+        .therm-label{font-size:9px;font-weight:700;letter-spacing:.5px;opacity:.7;text-transform:uppercase}
+        .therm-svg{flex:1}
+
+        /* Thermometer tick animations */
+        .therm-tube-fill{
+            transition:height .7s cubic-bezier(.34,1.56,.64,1), y .7s cubic-bezier(.34,1.56,.64,1);
         }
 
-        html, body {
-            height: 100%;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: var(--bg-page);
-            color: var(--fg);
-            overflow: hidden;
-            overscroll-behavior: none;
-        }
+        /* Score glow for HOT */
+        .hero.hot .therm-bulb-fill{filter:drop-shadow(0 0 5px rgba(255,80,80,.8))}
+        .hero.warm .therm-bulb-fill{filter:drop-shadow(0 0 4px rgba(251,146,60,.7))}
 
-        body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            min-height: 100dvh;
-            padding: 16px;
-        }
+        /* ─── Hero info side ──────────────────────────── */
+        .hero-info{flex:1;display:flex;flex-direction:column;justify-content:space-between;min-width:0}
+        .hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
+        .hero-score{font-size:34px;font-weight:900;letter-spacing:-1px;line-height:1}
+        .hero-score small{font-size:13px;font-weight:500;opacity:.65;letter-spacing:0}
+        .badge{display:inline-block;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.4px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.22);white-space:nowrap;margin-top:2px}
+        .badge.hot-badge{background:rgba(255,68,88,.35);border-color:rgba(255,68,88,.55)}
+        .badge.warm-badge{background:rgba(249,115,22,.3);border-color:rgba(249,115,22,.5)}
+        .badge.med-badge{background:rgba(234,179,8,.2);border-color:rgba(234,179,8,.4)}
+        .hero-bot{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:10px}
+        .hero-svc{font-size:11.5px;opacity:.85;display:flex;align-items:center;gap:4px;font-weight:500}
+        .hero-val{font-size:15px;font-weight:800;color:#4ade80;white-space:nowrap}
+        .hero-val.none{color:rgba(255,255,255,.35);font-weight:400;font-size:12px}
 
-        .app-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            width: 100%;
-            max-width: 420px;
-            padding: 8px 4px 16px;
-        }
+        /* Temp label under score */
+        .temp-words{font-size:10px;font-weight:700;letter-spacing:.6px;opacity:.75;margin-top:2px}
 
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 800;
-            font-size: 20px;
-            letter-spacing: -0.5px;
-        }
+        /* ─── Hero addr strip ──────────────────────────── */
+        .hero-addr{font-size:12.5px;font-weight:700;color:rgba(255,255,255,.92);margin-top:9px;padding-top:9px;border-top:1px solid rgba(255,255,255,.18);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-        .brand-icon {
-            width: 34px; height: 34px;
-            border-radius: 9px;
-            background: #171717;
-            color: #fff;
-            display: flex; align-items: center; justify-content: center;
-        }
+        /* ─── Card body ───────────────────────────────── */
+        .cbody{padding:11px 16px 14px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:0;-webkit-overflow-scrolling:touch}
+        .cbody::-webkit-scrollbar{width:3px}.cbody::-webkit-scrollbar-thumb{background:var(--border);border-radius:999px}
 
-        .brand-icon svg { width: 18px; height: 18px; }
+        /* Detail sections */
+        .det-sec{display:flex;flex-direction:column;gap:4px;padding:9px 0;border-bottom:1px solid var(--border)}
+        .det-sec:last-child{border-bottom:none;padding-bottom:0}
+        .det-title{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--fg3);margin-bottom:2px}
+        .det-row{display:flex;align-items:baseline;gap:5px;font-size:12px;line-height:1.5;min-width:0}
+        .det-k{color:var(--fg3);font-weight:600;white-space:nowrap;flex-shrink:0;font-size:11px}
+        .det-v{color:var(--fg);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+        .det-v.wrap{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 
-        .counter {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--fg-secondary);
-            background: var(--bg-surface);
-            padding: 6px 12px;
-            border-radius: 999px;
-            border: 1px solid var(--border);
-        }
+        /* Contact inside card body */
+        .contact-row{display:flex;gap:6px;flex-wrap:wrap}
+        .cta{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:9px;font-size:11.5px;font-weight:600;text-decoration:none;border:1.5px solid;transition:opacity .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+        .cta.phone{color:#15803d;border-color:#bbf7d0;background:#f0fdf4}
+        .cta.email{color:#1d4ed8;border-color:#bfdbfe;background:#eff6ff}
+        .cta svg{width:12px;height:12px;flex-shrink:0}
 
-        .counter strong { color: var(--fg); }
+        /* Inspection highlight block */
+        .insp-sec{background:linear-gradient(135deg,#fef9c3,#fef3c7);border:1px solid #fde68a;border-radius:11px;padding:10px 13px;display:flex;flex-direction:column;gap:4px;margin:6px 0}
+        .insp-title{font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:.5px}
+        .insp-row{font-size:12px;color:#78350f;line-height:1.4}
+        .insp-badge{display:inline-block;background:#f97316;color:#fff;font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:999px;letter-spacing:.3px;margin-left:4px;vertical-align:middle}
 
-        .deck {
-            position: relative;
-            width: 100%;
-            max-width: 420px;
-            height: min(620px, calc(100dvh - 220px));
-            margin-top: 4px;
-        }
+        /* CTA action bar */
+        .cta-bar{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #86efac;border-radius:10px;padding:9px 13px;font-size:12px;font-weight:600;color:#166534;line-height:1.5;margin-top:4px}
 
-        .card {
-            position: absolute;
-            inset: 0;
-            background: var(--bg-surface);
-            border-radius: 20px;
-            box-shadow: var(--shadow-card);
-            border: 1px solid var(--border);
-            overflow: hidden;
-            cursor: grab;
-            user-select: none;
-            display: flex;
-            flex-direction: column;
-            touch-action: pan-y;
-            transition: transform 0.25s cubic-bezier(.2,.9,.3,1.3),
-                        opacity 0.25s ease,
-                        box-shadow 0.25s ease;
-            will-change: transform;
-        }
+        /* Reasons */
+        .reasons{display:flex;flex-wrap:wrap;gap:4px;padding:6px 0}
+        .rc{font-size:10px;font-weight:500;padding:2px 7px;background:#f8f9fa;border:1px solid var(--border);border-radius:999px;color:var(--fg2)}
 
-        .card.dragging { transition: none; cursor: grabbing; }
+        /* ─── Actions ─────────────────────────────────── */
+        .actions{display:flex;align-items:center;justify-content:center;gap:24px;margin-top:16px;width:100%;max-width:420px}
+        .abtn{width:60px;height:60px;border-radius:50%;border:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 12px rgba(0,0,0,.06)}
+        .abtn:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.1)}
+        .abtn:active{transform:scale(.95)}
+        .abtn.nope{color:var(--nope)}.abtn.like{color:var(--like)}
+        .abtn svg{width:27px;height:27px}
 
-        .card.leaving-left  { transform: translate(-150%, 40px) rotate(-25deg) !important; opacity: 0; }
-        .card.leaving-right { transform: translate( 150%, 40px) rotate( 25deg) !important; opacity: 0; }
+        /* ─── Empty / Loader ──────────────────────────── */
+        .empty,.loader{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:28px;background:var(--surface);border-radius:20px;border:1px solid var(--border)}
+        .empty h3{font-size:19px;font-weight:700}.empty p{font-size:13px;color:var(--fg2);max-width:250px}
+        .empty button{margin-top:6px;padding:9px 18px;background:var(--fg);color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer}
+        .spin{width:34px;height:34px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
 
-        .card-stamp {
-            position: absolute;
-            top: 28px;
-            padding: 8px 18px;
-            border: 4px solid;
-            border-radius: 10px;
-            font-size: 28px;
-            font-weight: 800;
-            letter-spacing: 2px;
-            opacity: 0;
-            transform: rotate(-12deg);
-            transition: opacity 0.1s linear;
-            pointer-events: none;
-            text-transform: uppercase;
-        }
+        /* ─── Filter drawer ───────────────────────────── */
+        .backdrop{position:fixed;inset:0;background:rgba(15,23,42,.5);backdrop-filter:blur(5px);z-index:900;opacity:0;pointer-events:none;transition:opacity .25s}
+        .backdrop.open{opacity:1;pointer-events:auto}
+        .drawer{position:fixed;bottom:0;left:50%;transform:translateX(-50%) translateY(100%);width:100%;max-width:480px;background:var(--surface);border-radius:22px 22px 0 0;z-index:950;transition:transform .32s cubic-bezier(.32,.72,0,1);max-height:92dvh;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom,12px)}
+        .backdrop.open .drawer{transform:translateX(-50%) translateY(0)}
+        .dhandle{width:38px;height:4px;background:var(--border);border-radius:999px;margin:12px auto 0}
+        .dhdr{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 6px}
+        .dtitle{font-size:16px;font-weight:800;letter-spacing:-.3px}
+        .dreset{font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;padding:4px 8px;border-radius:6px;border:none;background:none;font-family:inherit}
+        .dreset:hover{background:#fff1f2}
+        .dbody{padding:4px 18px 18px;display:flex;flex-direction:column;gap:20px}
 
-        .card-stamp.like {
-            left: 24px;
-            color: var(--like);
-            border-color: var(--like);
-            transform: rotate(-15deg);
-        }
+        /* Filter section header */
+        .fsec{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+        .fsec-icon{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+        .fsec-icon.purple{background:#f3e8ff}
+        .fsec-icon.orange{background:#fff7ed}
+        .fsec-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--fg3)}
+        .fsec-count{margin-left:auto;font-size:10px;font-weight:700;background:var(--fg);color:#fff;padding:2px 7px;border-radius:999px;display:none}
+        .fsec-count.on{display:inline-block}
 
-        .card-stamp.nope {
-            right: 24px;
-            color: var(--dislike);
-            border-color: var(--dislike);
-            transform: rotate(15deg);
-        }
+        /* Toggle */
+        .trow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+        .tlabel span{font-size:14px;font-weight:600}.tlabel small{font-size:11px;color:var(--fg3);display:block;margin-top:1px}
+        .tsw{width:48px;height:26px;background:#e5e7eb;border-radius:999px;position:relative;cursor:pointer;transition:background .2s;border:none;outline:none;flex-shrink:0}
+        .tsw::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+        .tsw.on{background:var(--accent)}.tsw.on::after{transform:translateX(22px)}
 
-        .card-hero {
-            padding: 24px 22px 18px;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            color: #fff;
-            position: relative;
-        }
+        /* Pills */
+        .pills{display:flex;flex-wrap:wrap;gap:7px}
+        .pill{padding:8px 13px;border-radius:999px;border:1.5px solid var(--border);background:var(--surface);font-size:12px;font-weight:600;color:var(--fg2);cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap}
+        .pill:hover{opacity:.8}
+        /* Subcontractor pills: purple theme */
+        .pill.sub:hover{border-color:#c4b5fd;color:#7c3aed}
+        .pill.sub.on{background:#7c3aed;border-color:#7c3aed;color:#fff}
+        /* Lead type pills: orange theme */
+        .pill.ltype:hover{border-color:#fdba74;color:#c2410c}
+        .pill.ltype.on{background:#ea580c;border-color:#ea580c;color:#fff}
 
-        .hero-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-        }
+        /* City input + autocomplete */
+        .inp-wrap{position:relative}
+        .inp-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--fg3);pointer-events:none}
+        .city-inp{width:100%;padding:11px 11px 11px 34px;border:1px solid var(--border);border-radius:11px;font-size:14px;font-family:inherit;color:var(--fg);background:#fafafa;outline:none;transition:border-color .15s}
+        .city-inp:focus{border-color:var(--accent);background:#fff}
+        /* City autocomplete — inline flow so drawer overflow doesn't clip it */
+        .city-suggestions{display:none;margin-top:4px;background:var(--surface);border:1px solid var(--accent);border-radius:10px;overflow:hidden;max-height:160px;overflow-y:auto}
+        .city-suggestions.open{display:block}
+        .city-sug-item{padding:10px 14px;font-size:13px;font-weight:500;cursor:pointer;color:var(--fg);border-bottom:1px solid var(--border)}
+        .city-sug-item:last-child{border-bottom:none}
+        .city-sug-item:hover,.city-sug-item:active{background:#f0fdf4;color:#15803d}
 
-        .hero-score {
-            font-size: 28px;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-        }
+        /* Beta banner */
+        .beta-banner{display:flex;align-items:center;gap:8px;width:100%;max-width:420px;background:linear-gradient(135deg,#fff7ed,#fef3c7);border:1px solid #fed7aa;border-radius:10px;padding:7px 12px;margin-bottom:4px}
+        .beta-tag{font-size:9px;font-weight:800;background:#f97316;color:#fff;padding:2px 7px;border-radius:5px;letter-spacing:.6px;flex-shrink:0}
+        .beta-text{flex:1;font-size:11px;color:#92400e;line-height:1.3}
+        .beta-fb-btn{font-size:10px;font-weight:700;color:#c2410c;background:none;border:1px solid #fdba74;border-radius:6px;padding:3px 8px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0}
+        .beta-fb-btn:hover{background:#fff7ed}
 
-        .hero-score small {
-            font-size: 13px;
-            font-weight: 500;
-            opacity: 0.7;
-        }
+        /* Lang toggle */
+        .lang-btn{font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;border:1.5px solid var(--accent);background:var(--surface);color:var(--accent);cursor:pointer;font-family:inherit;transition:all .15s;letter-spacing:.3px}
+        .lang-btn:hover{background:#fff1f2}
 
-        .hero-grade {
-            padding: 6px 14px;
-            border-radius: 999px;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            background: rgba(255,255,255,0.15);
-            border: 1px solid rgba(255,255,255,0.25);
-        }
+        /* Contacts drawer list */
+        .cl-empty{text-align:center;padding:32px 20px;color:var(--fg2);font-size:13px}
+        .cl-empty div{font-size:32px;margin-bottom:8px}
+        .cl-item{display:flex;flex-direction:column;gap:5px;padding:13px 0;border-bottom:1px solid var(--border)}
+        .cl-item:last-child{border-bottom:none}
+        .cl-addr{font-size:14px;font-weight:700;color:var(--fg);line-height:1.2}
+        .cl-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+        .cl-city{font-size:11.5px;color:var(--fg2)}
+        .cl-score{font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+        .cl-score.hot{background:#fff1f2;color:#e11d48;border-color:#fecdd3}
+        .cl-score.warm{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+        .cl-date{font-size:10px;color:var(--fg3);margin-left:auto}
+        .cl-actions{display:flex;gap:6px;flex-wrap:wrap}
+        .cl-cta{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:8px;font-size:11.5px;font-weight:600;text-decoration:none;border:1.5px solid;white-space:nowrap}
+        .cl-cta.phone{color:#15803d;border-color:#bbf7d0;background:#f0fdf4}
+        .cl-cta.email{color:#1d4ed8;border-color:#bfdbfe;background:#eff6ff}
+        .cl-cta svg{width:11px;height:11px;flex-shrink:0}
 
-        .hero-service {
-            margin-top: 16px;
-            font-size: 13px;
-            opacity: 0.85;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-weight: 500;
-        }
+        /* Feedback modal */
+        .fb-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.6);backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center;z-index:1100;opacity:0;pointer-events:none;transition:opacity .25s}
+        .fb-backdrop.open{opacity:1;pointer-events:auto}
+        .fb-modal{background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:0 0 env(safe-area-inset-bottom,16px);transform:translateY(40px);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+        .fb-backdrop.open .fb-modal{transform:translateY(0)}
+        .fb-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 10px}
+        .fb-title{font-size:16px;font-weight:800}
+        .fb-close{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--fg2)}
+        .fb-body{padding:4px 18px 16px;display:flex;flex-direction:column;gap:12px}
+        .fb-notice{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 13px;font-size:12px;line-height:1.5;color:#92400e}
+        .fb-textarea{width:100%;min-height:90px;border:1px solid var(--border);border-radius:11px;padding:10px 12px;font-size:13px;font-family:inherit;resize:vertical;outline:none;transition:border-color .15s;color:var(--fg)}
+        .fb-textarea:focus{border-color:var(--accent)}
+        .fb-submit{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:11px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;transition:opacity .15s}
+        .fb-submit:hover{opacity:.9}
 
-        .card-body {
-            padding: 20px 22px;
-            flex: 1;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-        }
+        /* Radius pills */
+        .rpills{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+        .rpill{padding:7px 14px;border-radius:999px;border:1.5px solid var(--border);background:var(--surface);font-size:12px;font-weight:600;color:var(--fg2);cursor:pointer;transition:all .15s;font-family:inherit}
+        .rpill:hover{border-color:var(--accent);color:var(--accent)}
+        .rpill.on{background:var(--accent);border-color:var(--accent);color:#fff}
 
-        .address {
-            font-size: 18px;
-            font-weight: 700;
-            line-height: 1.3;
-            color: var(--fg);
-        }
+        /* Value inputs */
+        .vinputs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        .vfield label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--fg3);display:block;margin-bottom:5px}
+        .vwrap{display:flex;align-items:center;border:1px solid var(--border);border-radius:10px;background:#fafafa;overflow:hidden;transition:border-color .15s}
+        .vwrap:focus-within{border-color:var(--accent);background:#fff}
+        .vpfx{padding:0 6px 0 10px;font-size:13px;font-weight:600;color:var(--fg3)}
+        .vinp{flex:1;border:none;background:transparent;font-size:13px;font-family:inherit;font-weight:600;color:var(--fg);padding:10px 10px 10px 0;outline:none;min-width:0}
+        .vpresets{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+        .vpreset{padding:5px 11px;border-radius:999px;border:1px solid var(--border);background:#fafafa;font-size:11px;font-weight:600;color:var(--fg2);cursor:pointer;font-family:inherit;transition:all .15s}
+        .vpreset:hover{border-color:#15803d;color:#15803d;background:#f0fdf4}
+        .vpreset.on{background:#15803d;border-color:#15803d;color:#fff}
 
-        .city {
-            font-size: 13px;
-            color: var(--fg-secondary);
-            font-weight: 500;
-            margin-top: 2px;
-        }
+        /* Apply btn */
+        .apply-btn{width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:13px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;transition:opacity .15s,transform .1s;margin-top:2px}
+        .apply-btn:hover{opacity:.92}.apply-btn:active{transform:scale(.98)}
 
-        .description {
-            font-size: 14px;
-            line-height: 1.5;
-            color: var(--fg-secondary);
-            overflow: hidden;
-            display: -webkit-box;
-            -webkit-line-clamp: 4;
-            -webkit-box-orient: vertical;
-        }
+        /* ─── Paywall modal ───────────────────────────── */
+        .mbackdrop{position:fixed;inset:0;background:rgba(15,23,42,.7);backdrop-filter:blur(6px);display:flex;align-items:flex-end;justify-content:center;z-index:1000;padding:0;opacity:0;pointer-events:none;transition:opacity .25s}
+        .mbackdrop.open{opacity:1;pointer-events:auto}
+        .modal{background:var(--surface);border-radius:24px 24px 0 0;width:100%;max-width:480px;padding:0 0 env(safe-area-inset-bottom,20px);transform:translateY(60px);transition:transform .3s cubic-bezier(.32,.72,0,1);overflow:hidden}
+        .mbackdrop.open .modal{transform:translateY(0)}
+        .pw-hero{background:linear-gradient(160deg,#1a0a1e,#3b0764 50%,#1a0a1e);padding:28px 24px 22px;text-align:center;position:relative;overflow:hidden}
+        .pw-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(168,85,247,.35),transparent 70%)}
+        .pw-stars{font-size:26px;margin-bottom:8px;display:block}
+        .pw-hero h2{font-size:21px;font-weight:900;color:#fff;letter-spacing:-.4px;line-height:1.2;margin-bottom:5px}
+        .pw-hero p{font-size:13px;color:rgba(255,255,255,.7);line-height:1.5}
+        .trial-badge{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#ff4458,#ff6b35);border-radius:14px;padding:11px 18px;margin:16px auto 0;font-weight:800;font-size:15px;color:#fff;letter-spacing:-.2px}
+        .trial-badge small{font-size:10px;font-weight:500;opacity:.85;display:block;margin-top:1px;letter-spacing:0}
+        .pw-body{padding:16px 20px 6px}
+        .perks{display:flex;flex-direction:column;gap:9px;margin-bottom:18px}
+        .perk{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:var(--fg)}
+        .perk-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+        .pi-g{background:#f0fdf4}.pi-b{background:#eff6ff}.pi-p{background:#faf5ff}.pi-o{background:#fff7ed}
+        .oauth-btn{width:100%;padding:13px 16px;border-radius:13px;border:1px solid var(--border);background:var(--surface);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:9px;transition:background .15s,transform .1s}
+        .oauth-btn:hover{background:#f8f9fa}.oauth-btn:active{transform:scale(.98)}
+        .oauth-btn svg{width:20px;height:20px}
+        .oauth-btn.google{color:#171717}
+        .oauth-btn.facebook{background:#1877f2;border-color:#1877f2;color:#fff}
+        .oauth-btn.facebook:hover{background:#166fe0}
+        .pw-footer{text-align:center;padding:6px 20px 4px;font-size:11px;color:var(--fg3)}
+        .pw-footer strong{color:var(--fg2)}
 
-        .meta-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: auto;
-            padding-top: 14px;
-            border-top: 1px solid var(--border);
-        }
+        /* ─── Toast ───────────────────────────────────── */
+        .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:#171717;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:500;opacity:0;transition:opacity .2s,transform .22s;z-index:2000;pointer-events:none;max-width:88vw;text-align:center}
+        .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-        .meta-item {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-
-        .meta-label {
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            color: var(--fg-muted);
-            font-weight: 600;
-        }
-
-        .meta-value {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--fg);
-        }
-
-        .reasons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-
-        .reason-chip {
-            font-size: 11px;
-            font-weight: 500;
-            padding: 4px 10px;
-            background: #f8f9fa;
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            color: var(--fg-secondary);
-        }
-
-        .actions {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 28px;
-            margin-top: 24px;
-            width: 100%;
-            max-width: 420px;
-        }
-
-        .action-btn {
-            width: 64px;
-            height: 64px;
-            border-radius: 50%;
-            border: 1px solid var(--border);
-            background: var(--bg-surface);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 26px;
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-        }
-
-        .action-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.1); }
-        .action-btn:active { transform: scale(0.95); }
-
-        .action-btn.dislike { color: var(--dislike); }
-        .action-btn.like    { color: var(--like); }
-
-        .action-btn svg { width: 28px; height: 28px; }
-
-        .empty-state, .loader {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 14px;
-            text-align: center;
-            padding: 32px;
-            background: var(--bg-surface);
-            border-radius: 20px;
-            border: 1px solid var(--border);
-        }
-
-        .empty-state h3 {
-            font-size: 20px;
-            font-weight: 700;
-        }
-
-        .empty-state p {
-            font-size: 14px;
-            color: var(--fg-secondary);
-            max-width: 260px;
-        }
-
-        .empty-state button {
-            margin-top: 8px;
-            padding: 10px 20px;
-            background: var(--fg);
-            color: #fff;
-            border: none;
-            border-radius: 10px;
-            font-size: 14px;
-            font-weight: 600;
-            font-family: inherit;
-            cursor: pointer;
-        }
-
-        .spinner {
-            width: 36px; height: 36px;
-            border: 3px solid var(--border);
-            border-top-color: var(--fg);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
-        /* Login modal */
-        .modal-backdrop {
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(4px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            padding: 16px;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s ease;
-        }
-
-        .modal-backdrop.open {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .modal {
-            background: var(--bg-surface);
-            border-radius: 18px;
-            max-width: 380px;
-            width: 100%;
-            padding: 32px 28px;
-            text-align: center;
-            transform: translateY(20px);
-            transition: transform 0.25s ease;
-            box-shadow: 0 24px 60px rgba(0,0,0,0.3);
-        }
-
-        .modal-backdrop.open .modal { transform: translateY(0); }
-
-        .modal h2 {
-            font-size: 22px;
-            font-weight: 800;
-            margin-bottom: 8px;
-            letter-spacing: -0.3px;
-        }
-
-        .modal p {
-            font-size: 14px;
-            color: var(--fg-secondary);
-            line-height: 1.5;
-            margin-bottom: 24px;
-        }
-
-        .oauth-btn {
-            width: 100%;
-            padding: 12px 16px;
-            border-radius: 10px;
-            border: 1px solid var(--border);
-            background: var(--bg-surface);
-            font-size: 14px;
-            font-weight: 600;
-            font-family: inherit;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            margin-bottom: 10px;
-            transition: background 0.15s ease, transform 0.1s ease;
-        }
-
-        .oauth-btn:hover { background: #f8f9fa; }
-        .oauth-btn:active { transform: scale(0.98); }
-
-        .oauth-btn svg { width: 20px; height: 20px; }
-
-        .oauth-btn.google { color: #171717; }
-        .oauth-btn.facebook {
-            background: #1877f2;
-            border-color: #1877f2;
-            color: #fff;
-        }
-        .oauth-btn.facebook:hover { background: #166fe0; }
-
-        .modal-footer {
-            margin-top: 14px;
-            font-size: 12px;
-            color: var(--fg-muted);
-        }
-
-        .toast {
-            position: fixed;
-            bottom: 24px;
-            left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            background: #171717;
-            color: #fff;
-            padding: 12px 20px;
-            border-radius: 10px;
-            font-size: 13px;
-            font-weight: 500;
-            opacity: 0;
-            transition: opacity 0.2s ease, transform 0.25s ease;
-            z-index: 2000;
-            pointer-events: none;
-            max-width: 90vw;
-            text-align: center;
-        }
-
-        .toast.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
-
-        @media (max-width: 420px) {
-            .deck { height: calc(100dvh - 210px); }
-            .action-btn { width: 58px; height: 58px; }
+        @media(max-width:400px){
+            .deck{height:calc(100dvh - 210px)}
+            .abtn{width:54px;height:54px}
         }
     </style>
 </head>
 <body>
-    <header class="app-header">
-        <div class="brand">
-            <div class="brand-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                </svg>
-            </div>
-            <span>MLeads</span>
-        </div>
+
+<!-- ─── Header ──────────────────────────────────────────────────────── -->
+<header class="hdr">
+    <div class="brand">
+        <div class="brand-icon" style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-1px">$</div>
+        <span>MLeads</span>
+    </div>
+    <div class="hdr-right">
+        <button class="lang-btn" id="langToggle" aria-label="Cambiar idioma">ES</button>
+        <button class="icon-btn" id="contactsBtn" aria-label="Mis contactos" style="display:none">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+            <div class="fdot" id="contactsDot"></div>
+        </button>
         <div class="counter" id="counter">
             <strong id="swipesCount">0</strong> / <span id="swipesLimit">10</span>
         </div>
-    </header>
-
-    <section class="deck" id="deck">
-        <div class="loader" id="loader">
-            <div class="spinner"></div>
-            <p style="font-size:13px;color:var(--fg-secondary)">Cargando leads...</p>
-        </div>
-    </section>
-
-    <div class="actions">
-        <button class="action-btn dislike" id="btnDislike" aria-label="Descartar">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-        </button>
-        <button class="action-btn like" id="btnLike" aria-label="Me interesa">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        <button class="icon-btn" id="filterBtn" aria-label="Filtros">
+            <div class="fdot" id="filterDot"></div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
             </svg>
         </button>
     </div>
+</header>
 
-    <!-- Login modal -->
-    <div class="modal-backdrop" id="loginModal">
-        <div class="modal">
-            <h2>¡Te estás enganchando!</h2>
-            <p>Has visto tus <strong>10 leads gratis</strong>. Inicia sesión para seguir descubriendo oportunidades sin límite.</p>
+<!-- Active filter chips -->
+<div class="chips-bar" id="chipsBar"></div>
 
+<!-- Beta banner -->
+<div class="beta-banner" id="betaBanner">
+    <span class="beta-tag">BETA</span>
+    <span class="beta-text" id="betaText">Esta app está en versión BETA. ¡Tu opinión nos ayuda a mejorar!</span>
+    <button class="beta-fb-btn" id="openFeedback" onclick="showFeedback()">Comentar</button>
+</div>
+
+<!-- Deck -->
+<section class="deck" id="deck">
+    <div class="loader" id="loader">
+        <div class="spin"></div>
+        <p style="font-size:12px;color:var(--fg2)">Cargando leads...</p>
+    </div>
+</section>
+
+<!-- Action buttons -->
+<div class="actions">
+    <button class="abtn nope" id="btnNope" aria-label="Descartar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+    </button>
+    <button class="abtn like" id="btnLike" aria-label="Me interesa">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="1" x2="12" y2="23"/>
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+        </svg>
+    </button>
+</div>
+
+<!-- ─── Filter drawer ────────────────────────────────────────────────── -->
+<div class="backdrop" id="backdrop">
+    <div class="drawer">
+        <div class="dhandle"></div>
+        <div class="dhdr">
+            <span class="dtitle">Filtros de búsqueda</span>
+            <button class="dreset" id="btnReset">Restablecer</button>
+        </div>
+        <div class="dbody">
+
+            <!-- HOT toggle -->
+            <div class="trow">
+                <div class="tlabel">
+                    <span>🔥 Solo leads HOT</span>
+                    <small>Score ≥ 90 — máxima temperatura</small>
+                </div>
+                <button class="tsw on" id="hotToggle" role="switch" aria-checked="true"></button>
+            </div>
+
+            <!-- Subcontractors -->
+            <div>
+                <div class="fsec">
+                    <div class="fsec-icon purple">👷</div>
+                    <span class="fsec-label">Subcontratistas</span>
+                    <span class="fsec-count" id="subCount">0</span>
+                </div>
+                <div class="pills" id="subPills">
+                    <button class="pill sub" data-cat="roofing">🏚️ Roofing</button>
+                    <button class="pill sub" data-cat="drywall">🧱 Drywall</button>
+                    <button class="pill sub" data-cat="paint">🎨 Pintura</button>
+                    <button class="pill sub" data-cat="landscaping">🌿 Paisajismo</button>
+                    <button class="pill sub" data-cat="electrical">⚡ Eléctrico</button>
+                </div>
+            </div>
+
+            <!-- Lead type -->
+            <div>
+                <div class="fsec">
+                    <div class="fsec-icon orange">📋</div>
+                    <span class="fsec-label">Tipo de Lead</span>
+                    <span class="fsec-count" id="ltypeCount">0</span>
+                </div>
+                <div class="pills" id="ltypePills">
+                    <button class="pill ltype" data-cat="permits">🏗️ Permisos</button>
+                    <button class="pill ltype" data-cat="construction">👷 Construcción</button>
+                    <button class="pill ltype" data-cat="solar">☀️ Solar</button>
+                    <button class="pill ltype" data-cat="realestate" data-i18n-ltype="realestate">🏗️ Nueva Construcción</button>
+                    <button class="pill ltype" data-cat="flood">💧 Daño Agua</button>
+                    <button class="pill ltype" data-cat="energy">💡 Energía</button>
+                    <button class="pill ltype" data-cat="rodents">🐭 Plagas</button>
+                    <button class="pill ltype" data-cat="deconstruction">💥 Demolición</button>
+                </div>
+            </div>
+
+            <!-- Location -->
+            <div>
+                <div class="fsec">
+                    <div class="fsec-icon" style="background:#eff6ff">📍</div>
+                    <span class="fsec-label">Ubicación</span>
+                </div>
+                <div class="inp-wrap" id="cityWrap">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input class="city-inp" id="cityInp" type="text" placeholder="Tu ciudad..." autocomplete="off" autocorrect="off" spellcheck="false">
+                </div>
+                <div class="city-suggestions" id="citySuggestions"></div>
+                <div class="rpills" id="rpills">
+                    <button class="rpill" data-mi="5">5 mi</button>
+                    <button class="rpill" data-mi="10">10 mi</button>
+                    <button class="rpill on" data-mi="25">25 mi</button>
+                    <button class="rpill" data-mi="50">50 mi</button>
+                    <button class="rpill" data-mi="100">100 mi</button>
+                </div>
+            </div>
+
+            <!-- Value -->
+            <div>
+                <div class="fsec">
+                    <div class="fsec-icon" style="background:#f0fdf4">💰</div>
+                    <span class="fsec-label">Valor del proyecto</span>
+                </div>
+                <div class="vinputs">
+                    <div class="vfield">
+                        <label>Mínimo</label>
+                        <div class="vwrap"><span class="vpfx">$</span><input class="vinp" id="minVal" type="number" placeholder="0" min="0" step="5000"></div>
+                    </div>
+                    <div class="vfield">
+                        <label>Máximo</label>
+                        <div class="vwrap"><span class="vpfx">$</span><input class="vinp" id="maxVal" type="number" placeholder="Sin límite" min="0" step="5000"></div>
+                    </div>
+                </div>
+                <div class="vpresets">
+                    <button class="vpreset" data-min="0" data-max="100000">&lt;$100k</button>
+                    <button class="vpreset" data-min="100000" data-max="500000">$100k–$500k</button>
+                    <button class="vpreset" data-min="500000" data-max="0">&gt;$500k</button>
+                </div>
+            </div>
+
+            <button class="apply-btn" id="btnApply">Buscar leads</button>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Paywall ───────────────────────────────────────────────────────── -->
+<div class="mbackdrop" id="loginModal">
+    <div class="modal">
+        <div class="pw-hero">
+            <span class="pw-stars">🔥✨🔥</span>
+            <h2 id="pwTitle">¡Desbloquea leads ilimitados!</h2>
+            <p id="pwSubtitle">Has visto tus <strong style="color:#fff">10 leads gratis</strong>.<br>Regístrate y obtén <strong style="color:#4ade80">40 leads adicionales gratis</strong>.</p>
+            <div class="trial-badge" id="pwBadge">
+                🎁 40 Leads Gratis
+                <div style="text-align:left">
+                    <small id="pwBadgeSmall">Después desde $29/mes</small>
+                    <small>Sin tarjeta de crédito</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Register flow (default) -->
+        <div id="pwRegisterSection" class="pw-body">
+            <div class="perks">
+                <div class="perk"><div class="perk-icon pi-g">🎁</div><span><strong>40 leads gratis</strong> — sin tarjeta de crédito</span></div>
+                <div class="perk"><div class="perk-icon pi-b">📞</div><span><strong>Contacto completo</strong> — Teléfono, email y contratista</span></div>
+                <div class="perk"><div class="perk-icon pi-p">🔥</div><span><strong>Leads HOT en tiempo real</strong> — Sé el primero en contactar</span></div>
+                <div class="perk"><div class="perk-icon pi-o">📍</div><span><strong>Filtros por zona y servicio</strong> — Roofing, solar, eléctrico…</span></div>
+            </div>
             <button class="oauth-btn google" id="btnGoogle">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
                     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/>
                 </svg>
-                Continuar con Google
+                Empezar gratis con Google
             </button>
-
             <button class="oauth-btn facebook" id="btnFacebook">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                <svg viewBox="0 0 24 24" fill="currentColor">
                     <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                 </svg>
-                Continuar con Facebook
+                Empezar gratis con Facebook
             </button>
+        </div>
 
-            <p class="modal-footer">Sin spam. Solo usamos tu email para identificarte.</p>
+        <!-- Upgrade flow (paid tiers) -->
+        <div id="pwUpgradeSection" class="pw-body" style="display:none">
+            <p id="pwUpgradeUsage" style="font-size:13px;color:var(--muted);margin-bottom:12px;text-align:center"></p>
+            <div style="display:flex;gap:10px;margin-bottom:14px">
+                <!-- Pro tier -->
+                <div style="flex:1;border:2px solid var(--accent);border-radius:14px;padding:14px 12px;text-align:center;background:var(--surface)">
+                    <div style="font-size:20px;font-weight:900;color:var(--accent)">$29<small style="font-size:12px;font-weight:500">/mes</small></div>
+                    <div style="font-weight:700;margin:4px 0 8px">Pro</div>
+                    <div style="font-size:12px;color:var(--muted);line-height:1.5">200 leads/mes<br>Todos los filtros<br>Contacto completo</div>
+                    <button onclick="handleUpgrade('pro')" style="margin-top:10px;width:100%;padding:8px;border-radius:8px;background:var(--accent);color:#fff;border:none;font-weight:700;cursor:pointer">Elegir Pro</button>
+                </div>
+                <!-- Premium tier -->
+                <div style="flex:1;border:2px solid #f59e0b;border-radius:14px;padding:14px 12px;text-align:center;background:var(--surface)">
+                    <div style="font-size:20px;font-weight:900;color:#f59e0b">$99<small style="font-size:12px;font-weight:500">/mes</small></div>
+                    <div style="font-weight:700;margin:4px 0 8px">Premium ✨</div>
+                    <div style="font-size:12px;color:var(--muted);line-height:1.5">Leads ilimitados<br>Inspecciones en tiempo real<br>Prioridad de soporte</div>
+                    <button onclick="handleUpgrade('premium')" style="margin-top:10px;width:100%;padding:8px;border-radius:8px;background:#f59e0b;color:#fff;border:none;font-weight:700;cursor:pointer">Elegir Premium</button>
+                </div>
+            </div>
+            <p style="font-size:11px;color:var(--muted);text-align:center">Cancela cuando quieras · sin compromisos</p>
+        </div>
+
+        <div class="pw-footer" id="pwFooterWrap">Al registrarte aceptas los términos de uso.<br>
+            <strong id="pwFooter">40 leads gratis · después desde $29/mes</strong>
+        </div>
+        <button onclick="hidePaywall()" style="background:none;border:none;color:var(--muted);font-size:12px;padding:8px;cursor:pointer;width:100%">Cerrar</button>
+    </div>
+</div>
+
+<!-- ─── My Contacts drawer ──────────────────────────────────────────────── -->
+<div class="backdrop" id="contactsBackdrop">
+    <div class="drawer">
+        <div class="dhandle"></div>
+        <div class="dhdr">
+            <span class="dtitle" id="contactsTitle">📋 Mis Leads Contactados</span>
+            <button class="dreset" id="contactsClose">Cerrar</button>
+        </div>
+        <div class="dbody" id="contactsBody" style="padding-top:0">
+            <div class="cl-empty"><div class="spin"></div></div>
         </div>
     </div>
+</div>
 
-    <div class="toast" id="toast"></div>
+<div class="toast" id="toast"></div>
 
-    <script>
-        // Injected by server from environment variables
-        window.GOOGLE_CLIENT_ID = "__GOOGLE_CLIENT_ID__";
-        window.FACEBOOK_APP_ID  = "__FACEBOOK_APP_ID__";
-    </script>
-    <script>
-        // ── Config ─────────────────────────────────────────
-        const GOOGLE_CLIENT_ID = window.GOOGLE_CLIENT_ID || '';
-        const FACEBOOK_APP_ID  = window.FACEBOOK_APP_ID  || '';
+<!-- ─── Feedback modal ────────────────────────────────────────────────────── -->
+<div class="fb-backdrop" id="fbBackdrop">
+    <div class="fb-modal">
+        <div class="fb-hdr">
+            <span class="fb-title" id="fbTitle">💬 Deja tu comentario</span>
+            <button class="fb-close" onclick="hideFeedback()">×</button>
+        </div>
+        <div class="fb-body">
+            <div class="fb-notice" id="fbNotice">
+                <strong>🚀 MLeads está en BETA</strong><br>
+                Estamos mejorando la app con tu ayuda. Cuéntanos qué funciona bien, qué falla o qué te gustaría ver.
+            </div>
+            <textarea class="fb-textarea" id="fbText" rows="4" placeholder="Tu sugerencia o comentario..."></textarea>
+            <button class="fb-submit" id="fbSubmitBtn" onclick="submitFeedback()">Enviar comentario</button>
+        </div>
+    </div>
+</div>
 
-        // ── Anonymous identity ─────────────────────────────
-        function getAnonId() {
-            let id = localStorage.getItem('mleads_anon_id');
-            if (!id) {
-                id = 'anon_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-                localStorage.setItem('mleads_anon_id', id);
-            }
-            return id;
-        }
+<script>
+window.GOOGLE_CLIENT_ID   = "__GOOGLE_CLIENT_ID__";
+window.FACEBOOK_APP_ID    = "__FACEBOOK_APP_ID__";
+window.GOOGLE_MAPS_API_KEY = "__GOOGLE_MAPS_API_KEY__";
+</script>
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const GOOGLE_CLIENT_ID    = window.GOOGLE_CLIENT_ID   || '';
+const FACEBOOK_APP_ID     = window.FACEBOOK_APP_ID    || '';
+const GOOGLE_MAPS_API_KEY = window.GOOGLE_MAPS_API_KEY || '';
 
-        function getAccessToken() {
-            return localStorage.getItem('access_token') || '';
-        }
+// ── Identity ──────────────────────────────────────────────────────────────────
+function getAnonId() {
+    let id = localStorage.getItem('ml_anon');
+    if (!id) { id = 'a_' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('ml_anon', id); }
+    return id;
+}
+const getToken = () => localStorage.getItem('access_token') || '';
+const authHdrs = () => { const h = {'Content-Type':'application/json'}; const t = getToken(); if (t) h.Authorization = `Bearer ${t}`; return h; };
 
-        function authHeaders() {
-            const h = { 'Content-Type': 'application/json' };
-            const t = getAccessToken();
-            if (t) h['Authorization'] = `Bearer ${t}`;
-            return h;
-        }
+// ── Filter state ──────────────────────────────────────────────────────────────
+const F = {
+    hotOnly:  true,
+    subCats:  new Set(),   // roofing, drywall, paint, landscaping, electrical
+    leadTypes: new Set(),  // permits, construction, solar, realestate, flood, energy, rodents, deconstruction
+    city:     '',
+    radius:   25,
+    minVal:   0,
+    maxVal:   0,
+};
 
-        // ── State ──────────────────────────────────────────
-        const state = {
-            queue: [],
-            swipesCount: 0,
-            anonLimit: 10,
-            loading: false,
-            isAuthed: !!getAccessToken(),
+// ── Filter persistence (localStorage + URL params) ────────────────────────────
+function saveFilters() {
+    try {
+        const snap = {
+            hotOnly:   F.hotOnly,
+            subCats:   [...F.subCats],
+            leadTypes: [...F.leadTypes],
+            city:      F.city,
+            radius:    F.radius,
+            minVal:    F.minVal,
+            maxVal:    F.maxVal,
         };
+        localStorage.setItem('mleads_filters', JSON.stringify(snap));
 
-        // ── Toast helper ───────────────────────────────────
-        const toastEl = document.getElementById('toast');
-        let toastTimer = null;
-        function toast(msg) {
-            toastEl.textContent = msg;
-            toastEl.classList.add('show');
-            clearTimeout(toastTimer);
-            toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
+        // Reflect active filters in URL for shareability/bookmarking
+        const url = new URL(window.location.href);
+        if (F.city)               url.searchParams.set('city', F.city);
+        else                      url.searchParams.delete('city');
+        if (F.leadTypes.size > 0) url.searchParams.set('service', [...F.leadTypes].join(','));
+        else                      url.searchParams.delete('service');
+        if (!F.hotOnly)           url.searchParams.set('all', '1');
+        else                      url.searchParams.delete('all');
+        history.replaceState(null, '', url.toString());
+    } catch(e) {}
+}
+
+function loadFilters() {
+    try {
+        // URL params take priority (shared link), then localStorage
+        const url = new URL(window.location.href);
+        const urlCity    = url.searchParams.get('city');
+        const urlService = url.searchParams.get('service');
+        const urlAll     = url.searchParams.get('all');
+
+        if (urlCity || urlService || urlAll !== null) {
+            if (urlCity)    F.city = urlCity;
+            if (urlService) urlService.split(',').forEach(s => F.leadTypes.add(s.trim()));
+            if (urlAll === '1') F.hotOnly = false;
+            return; // URL params win — don't restore localStorage
         }
 
-        // ── API helpers ────────────────────────────────────
-        async function fetchFeed() {
-            if (state.loading) return;
-            state.loading = true;
-            try {
-                const url = new URL('/api/swipe/feed', location.origin);
-                if (!state.isAuthed) url.searchParams.set('anon_id', getAnonId());
-                url.searchParams.set('limit', '10');
-                const resp = await fetch(url, { headers: authHeaders() });
-                const data = await resp.json();
+        const raw = localStorage.getItem('mleads_filters');
+        if (!raw) return;
+        const snap = JSON.parse(raw);
+        F.hotOnly   = snap.hotOnly  ?? true;
+        F.subCats   = new Set(snap.subCats  || []);
+        F.leadTypes = new Set(snap.leadTypes || []);
+        F.city      = snap.city   || '';
+        F.radius    = snap.radius ?? 25;
+        F.minVal    = snap.minVal ?? 0;
+        F.maxVal    = snap.maxVal ?? 0;
+    } catch(e) {}
+}
 
-                if (data.auth_required) {
-                    showLoginModal();
-                    return;
-                }
+// ── App state ─────────────────────────────────────────────────────────────────
+const S = { queue:[], swipes:0, limit:10, loading:false, authed:!!getToken(), isPaid:false };
 
-                state.anonLimit = data.anon_limit || 10;
-                state.swipesCount = data.swipes_count || 0;
-                updateCounter();
+// ── Progressive score reveal ──────────────────────────────────────────────────
+// Thresholds per "batch" of 10 leads seen. Drops every batch to show more leads.
+const _SCORE_STEPS = [90, 71, 51, 0]; // HOT, WARM+, MEDIUM+, all
+let _scoreStepIdx = 0;    // which step we're currently on
+let _batchSwipes  = 0;    // swipes in the current batch
 
-                state.queue = data.leads || [];
-                renderDeck();
-            } catch (e) {
-                console.error(e);
-                toast('Error cargando leads');
-            } finally {
-                state.loading = false;
+function _getDynamicMinScore() {
+    // If user manually turned off hot_only filter, respect that (show all)
+    if (!F.hotOnly) return 0;
+    return _SCORE_STEPS[_scoreStepIdx] || 0;
+}
+
+function _advanceScoreStep() {
+    _batchSwipes++;
+    if (_batchSwipes >= 10 && _scoreStepIdx < _SCORE_STEPS.length - 1) {
+        _scoreStepIdx++;
+        _batchSwipes = 0;
+        const nextScore = _SCORE_STEPS[_scoreStepIdx];
+        const labels = ['HOT (≥90)', 'WARM (71-89)', 'MEDIUM (51-70)', 'todos'];
+        const label = labels[_scoreStepIdx] || 'todos';
+        const msg = CURRENT_LANG === 'es'
+            ? `Ahora mostrando leads ${label}`
+            : `Now showing ${label} leads`;
+        toast(msg);
+        // Refetch with new threshold if queue is empty
+        if (S.queue.length === 0) fetchFeed();
+    }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+const $toast = document.getElementById('toast');
+let _tt = null;
+function toast(m) { $toast.textContent = m; $toast.classList.add('show'); clearTimeout(_tt); _tt = setTimeout(() => $toast.classList.remove('show'), 2600); }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtMoney(v) {
+    v = Number(v || 0); if (!v) return '—';
+    if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + Math.round(v/1e3) + 'k';
+    return '$' + v.toFixed(0);
+}
+function fmtK(v) {
+    if (v >= 1e6) return (v/1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return Math.round(v/1e3) + 'k';
+    return String(v);
+}
+function fmtPhone(p) {
+    if (!p) return null;
+    const d = String(p).replace(/\D/g,'');
+    if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
+    if (d.length === 11 && d[0] === '1') return `+1 (${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;
+    return String(p);
+}
+
+// ── Thermometer builder ───────────────────────────────────────────────────────
+/**
+ * Returns an SVG string for an interactive thermometer.
+ * The fill is initially at 0 and animated via JS after DOM insertion.
+ *
+ * Tube: y=4..54 (50px tall). Bulb: cy=64, r=10.
+ * Total viewBox height: 78.
+ */
+function thermometerSVG(score, uid) {
+    // Color by temperature zone
+    let color, glow;
+    if      (score >= 90) { color = '#ef4444'; glow = 'rgba(239,68,68,.6)'; }
+    else if (score >= 70) { color = '#f97316'; glow = 'rgba(249,115,22,.5)'; }
+    else if (score >= 50) { color = '#eab308'; glow = 'rgba(234,179,8,.4)'; }
+    else if (score >= 25) { color = '#60a5fa'; glow = 'rgba(96,165,250,.4)'; }
+    else                  { color = '#94a3b8'; glow = 'rgba(148,163,184,.3)'; }
+
+    const tubeTop  = 4;
+    const tubeBot  = 54;
+    const tubeH    = tubeBot - tubeTop;  // 50
+    const fillRatio = score / 100;
+    const fillH    = Math.round(tubeH * fillRatio);
+    const fillY    = tubeBot - fillH;    // starts from bottom
+
+    // Tick positions (from bottom: 25%, 50%, 75%, 90%)
+    const ticks = [25, 50, 75, 90].map(pct => tubeBot - Math.round(tubeH * pct / 100));
+
+    const tickSvg = ticks.map(ty =>
+        `<line x1="11" y1="${ty}" x2="14" y2="${ty}" stroke="rgba(255,255,255,0.4)" stroke-width="1"/>`
+    ).join('');
+
+    return `<svg id="therm-${uid}" class="therm-svg" viewBox="0 0 20 78" width="20" height="78"
+               xmlns="http://www.w3.org/2000/svg" overflow="visible">
+        <defs>
+            <filter id="glow-${uid}" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+                <feFlood flood-color="${glow}" result="color"/>
+                <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+                <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+        </defs>
+        <!-- Tube background -->
+        <rect x="6" y="${tubeTop}" width="8" height="${tubeH}" rx="4" fill="rgba(255,255,255,0.18)"/>
+        <!-- Fill (starts at full height, clipped from top via initial scaleY=0) -->
+        <rect id="tf-${uid}" x="6" y="${fillY}" width="8" height="${fillH}" rx="3"
+              fill="${color}" style="transform-origin:10px ${tubeBot}px; transform:scaleY(0); transition:transform .75s cubic-bezier(.34,1.2,.64,1)"/>
+        <!-- Tick marks -->
+        ${tickSvg}
+        <!-- Tube outline -->
+        <rect x="6" y="${tubeTop}" width="8" height="${tubeH}" rx="4" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+        <!-- Bulb background -->
+        <circle cx="10" cy="65" r="10" fill="rgba(255,255,255,0.18)"/>
+        <!-- Bulb fill -->
+        <circle cx="10" cy="65" r="8" fill="${color}" ${score >= 70 ? `filter="url(#glow-${uid})"` : ''}/>
+        <!-- Bulb outline -->
+        <circle cx="10" cy="65" r="10" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+    </svg>`;
+}
+
+/** Animate all thermometers in the deck that haven't been animated yet */
+function animateThermometers() {
+    document.querySelectorAll('[id^="tf-"]').forEach(el => {
+        if (el.dataset.animated) return;
+        el.dataset.animated = '1';
+        // Trigger reflow then set scale to 1
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                el.style.transform = 'scaleY(1)';
+            });
+        });
+    });
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function fetchFeed() {
+    if (S.loading) return;
+    S.loading = true;
+    document.getElementById('loader').style.display = '';
+    try {
+        const url = new URL('/api/swipe/feed', location.origin);
+        if (!S.authed) url.searchParams.set('anon_id', getAnonId());
+        url.searchParams.set('limit', '10');
+
+        // has_contact is enforced as permanent policy on the backend
+
+        // Progressive score reveal: HOT first, then warm, then medium, then all
+        // Threshold drops every 10 leads seen (based on total swipes in session)
+        const _dynScore = _getDynamicMinScore();
+        if (_dynScore > 0) url.searchParams.set('min_score', _dynScore);
+
+        if (F.minVal > 0) url.searchParams.set('min_value', F.minVal);
+        if (F.maxVal > 0) url.searchParams.set('max_value', F.maxVal);
+        if (F.city) {
+            url.searchParams.set('city', F.city);
+            if (F.radius > 0) url.searchParams.set('radius_miles', F.radius);
+        }
+
+        // Combine subcontractor + lead type cats
+        const allCats = [...F.subCats, ...F.leadTypes];
+        if (allCats.length > 0) url.searchParams.set('service_cats', allCats.join(','));
+
+        const res  = await fetch(url, { headers: authHdrs() });
+        const data = await res.json();
+
+        if (data.auth_required) { showPaywall(data.auth_mode || 'register'); return; }
+
+        S.limit  = data.anon_limit || 10;
+        S.swipes = data.swipes_count || 0;
+        if (data.is_paid !== undefined) S.isPaid = !!data.is_paid;
+        updateCounter();
+        S.queue  = data.leads || [];
+        renderDeck();
+    } catch (e) {
+        console.error(e);
+        toast('Error cargando leads');
+    } finally {
+        S.loading = false;
+    }
+}
+
+async function postSwipe(leadId, action) {
+    try {
+        const body = { lead_id: leadId, action };
+        if (!S.authed) body.anon_id = getAnonId();
+        const res  = await fetch('/api/swipe/action', { method:'POST', headers:authHdrs(), body:JSON.stringify(body) });
+        const data = await res.json();
+        if (data.swipes_count !== undefined) { S.swipes = data.swipes_count; updateCounter(); }
+        if (data.auth_required) showPaywall(data.auth_mode || 'register');
+    } catch (e) { console.error(e); }
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+const $deck = document.getElementById('deck');
+
+function updateCounter() {
+    document.getElementById('swipesCount').textContent = S.swipes;
+    if (!S.authed) {
+        document.getElementById('swipesLimit').textContent = S.limit;
+    } else if (S.isPaid) {
+        document.getElementById('swipesLimit').textContent = '∞';
+    } else {
+        document.getElementById('swipesLimit').textContent = 40;
+    }
+}
+
+let _uid = 0;
+
+function buildCard(lead, idx) {
+    const uid   = ++_uid;
+    const card  = document.createElement('div');
+    card.className = 'card';
+    card.dataset.id = lead.id;
+    card.style.zIndex    = 100 - idx;
+    card.style.transform = `translateY(${idx * 6}px) scale(${1 - idx * 0.03})`;
+    card.style.opacity   = idx < 3 ? 1 : 0;
+
+    const score   = Number(lead.score || 0);
+    const grade   = (lead.grade || '').toUpperCase();
+    const isHot   = grade === 'HOT'  || score >= 90;
+    const isWarm  = !isHot && (grade === 'WARM'   || score >= 70);
+    const isMed   = !isHot && !isWarm && (grade === 'MEDIUM' || score >= 50);
+
+    // ── Freshness ──────────────────────────────────────────────────────────────
+    let freshnessBadge = '';
+    if (lead.issued_date) {
+        try {
+            const issuedMs = new Date(lead.issued_date + 'T00:00:00').getTime();
+            const agedays  = Math.round((Date.now() - issuedMs) / 86400000);
+            if (agedays <= 3) {
+                freshnessBadge = `<span style="background:#16a34a;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:8px;letter-spacing:.3px">${isEN?'NEW':'NUEVO'} · ${agedays}d</span>`;
+            } else if (agedays <= 14) {
+                freshnessBadge = `<span style="background:#d97706;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px">${agedays}d ${isEN?'ago':'atrás'}</span>`;
+            } else if (agedays <= 60) {
+                const wks = Math.round(agedays / 7);
+                freshnessBadge = `<span style="background:rgba(255,255,255,.15);color:rgba(255,255,255,.8);font-size:10px;padding:2px 7px;border-radius:8px">${wks}${isEN?'w':'sem'} ${isEN?'ago':'atrás'}</span>`;
             }
-        }
+        } catch(e) {}
+    }
 
-        async function postSwipe(leadId, action) {
-            try {
-                const body = { lead_id: leadId, action };
-                if (!state.isAuthed) body.anon_id = getAnonId();
-                const resp = await fetch('/api/swipe/action', {
-                    method: 'POST',
-                    headers: authHeaders(),
-                    body: JSON.stringify(body),
-                });
-                const data = await resp.json();
-                if (data.swipes_count !== undefined) {
-                    state.swipesCount = data.swipes_count;
-                    updateCounter();
-                }
-                if (data.auth_required) {
-                    showLoginModal();
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        }
+    const heroClass  = isHot ? 'hero hot' : isWarm ? 'hero warm' : isMed ? 'hero medium' : 'hero cold';
+    const badgeCls   = isHot ? 'badge hot-badge' : isWarm ? 'badge warm-badge' : isMed ? 'badge med-badge' : 'badge';
+    const gradeLabel = lead.grade || (isHot ? 'HOT' : isWarm ? 'WARM' : isMed ? 'MEDIUM' : 'COOL');
+    const tempWord   = isHot ? '🔥 Muy caliente' : isWarm ? '🌡️ Caliente' : isMed ? '🌤️ Templado' : '❄️ Frío';
+    const isEN       = CURRENT_LANG === 'en';
 
-        // ── Rendering ──────────────────────────────────────
-        const deck = document.getElementById('deck');
+    // ── Contact buttons ────────────────────────────────────────────────────────
+    const phone  = lead.phone ? fmtPhone(lead.phone) : null;
+    const telRef = lead.phone ? `tel:${String(lead.phone).replace(/\D/g,'')}` : null;
+    const mailRef= lead.email ? `mailto:${lead.email}` : null;
+    const phoneBtn = phone
+        ? `<a class="cta phone" href="${esc(telRef)}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.45 2 2 0 0 1 3.59 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.76a16 16 0 0 0 7.33 7.33l1.12-1.12a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>${esc(phone)}</a>` : '';
+    const emailBtn = lead.email
+        ? `<a class="cta email" href="${esc(mailRef)}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+            </svg>${esc(lead.email.length>24?lead.email.slice(0,24)+'…':lead.email)}</a>` : '';
 
-        function updateCounter() {
-            document.getElementById('swipesCount').textContent = state.swipesCount;
-            const limitEl = document.getElementById('swipesLimit');
-            const counterEl = document.getElementById('counter');
-            if (state.isAuthed) {
-                limitEl.textContent = '∞';
-                counterEl.firstChild.textContent = '';
-                limitEl.previousSibling.textContent = '';
-            } else {
-                limitEl.textContent = state.anonLimit;
-            }
-        }
+    // ── WhatsApp share button ──────────────────────────────────────────────────
+    const waText = encodeURIComponent(
+        (isEN
+            ? `Lead: ${lead.address||''}, ${lead.city||''}\nGC: ${lead.gc_name||'N/A'}\nPhone: ${lead.phone||'N/A'}\nScore: ${score}/100`
+            : `Lead: ${lead.address||''}, ${lead.city||''}\nContratista: ${lead.gc_name||'N/A'}\nTel: ${lead.phone||'N/A'}\nScore: ${score}/100`)
+    );
+    const whatsappBtn = `<a class="cta" href="https://wa.me/?text=${waText}" target="_blank" rel="noopener"
+        onclick="event.stopPropagation()"
+        style="background:#25d366;border-color:#25d366;color:#fff;gap:5px">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        WhatsApp
+    </a>`;
 
-        function escapeHtml(s) {
-            if (s === null || s === undefined) return '';
-            return String(s)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-        }
+    // ── Days to inspection ─────────────────────────────────────────────────────
+    let inspDays = null, inspDateFmt = '';
+    if (lead.inspection_date) {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const insp  = new Date(lead.inspection_date + 'T00:00:00');
+        inspDays    = Math.round((insp - today) / 86400000);
+        inspDateFmt = lead.inspection_date;
+    }
 
-        function fmtMoney(v) {
-            v = Number(v || 0);
-            if (!v) return '—';
-            if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
-            if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'k';
-            return '$' + v.toFixed(0);
-        }
+    // ── Permit section ─────────────────────────────────────────────────────────
+    const rows_permit = [
+        lead.permit_type  ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Type':'Tipo'}:</span><span class="det-v">${esc(lead.permit_type)}</span></div>` : '',
+        lead.description  ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Desc.':'Desc.'}:</span><span class="det-v wrap">${esc(lead.description.slice(0,130))}</span></div>` : '',
+        lead.issued_date  ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Issued':'Emisión'}:</span><span class="det-v">${esc(lead.issued_date)}</span></div>` : '',
+        lead.value        ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Value':'Valor'}:</span><span class="det-v" style="color:#15803d;font-weight:700">${fmtMoney(lead.value)}</span></div>` : '',
+    ].filter(Boolean).join('');
 
-        function buildCard(lead, idx) {
-            const card = document.createElement('div');
-            card.className = 'card';
-            card.dataset.leadId = lead.id;
-            card.style.zIndex = 100 - idx;
-            card.style.transform = `translateY(${idx * 6}px) scale(${1 - idx * 0.03})`;
-            card.style.opacity = idx < 3 ? 1 : 0;
+    // ── Contractor section ─────────────────────────────────────────────────────
+    const rows_gc = [
+        lead.contractor  ? `<div class="det-row"><span class="det-k">▸ GC:</span><span class="det-v" style="font-weight:700">${esc(lead.contractor)}</span></div>` : '',
+        lead.lic_number  ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Lic.':'CSLB'}:</span><span class="det-v">${esc(lead.lic_number)}</span></div>` : '',
+        phoneBtn         ? `<div class="det-row">${phoneBtn}</div>` : '',
+        emailBtn         ? `<div class="det-row">${emailBtn}</div>` : '',
+        (phoneBtn || emailBtn) ? `<div class="det-row">${whatsappBtn}</div>` : '',
+        lead.owner       ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Owner':'Propietario'}:</span><span class="det-v">${esc(lead.owner)}</span></div>` : '',
+    ].filter(Boolean).join('');
 
-            const reasons = (lead.reasons || [])
-                .map(r => `<span class="reason-chip">${escapeHtml(r)}</span>`)
-                .join('');
+    // ── Inspection block ───────────────────────────────────────────────────────
+    let inspHtml = '';
+    if (lead.inspection_date && inspDays !== null && inspDays >= 0) {
+        const urgLabel = inspDays === 0 ? (isEN ? '⚡ TODAY' : '⚡ HOY')
+                       : inspDays === 1 ? (isEN ? '⚡ Tomorrow' : '⚡ Mañana')
+                       : inspDays <= 3  ? (isEN ? `🔥 in ${inspDays} days` : `🔥 en ${inspDays} días`)
+                       : `${isEN?'in':'en'} ${inspDays} ${isEN?'days':'días'}`;
 
-            const score = Number(lead.score || 0);
-            const scoreLabel = lead.grade || (score >= 70 ? 'HOT' : score >= 50 ? 'WARM' : 'COOL');
+        const timeWindow = lead.time_window
+            ? `<strong>${esc(lead.time_window)}</strong>`
+            : (isEN ? 'during the day' : 'durante el día');
 
-            card.innerHTML = `
-                <div class="card-stamp like">LIKE</div>
-                <div class="card-stamp nope">NOPE</div>
-                <div class="card-hero">
-                    <div class="hero-row">
-                        <div class="hero-score">${score}<small>/100</small></div>
-                        <div class="hero-grade">${escapeHtml(lead.grade_emoji || '')} ${escapeHtml(scoreLabel)}</div>
+        // Opportunity headline — the core value proposition
+        const oppHeadline = inspDays === 0
+            ? (isEN
+                ? `⚡ The inspector visits <strong>today</strong> ${timeWindow}. Be there before the visit!`
+                : `⚡ El inspector visita esta obra <strong>hoy</strong> ${timeWindow}. ¡Llega antes que él!`)
+            : inspDays === 1
+                ? (isEN
+                    ? `🚀 Inspector comes <strong>tomorrow</strong> ${timeWindow}. Perfect time to show up in person.`
+                    : `🚀 El inspector llega <strong>mañana</strong> ${timeWindow}. Fecha perfecta para presentarte en persona.`)
+                : (isEN
+                    ? `📅 Inspector scheduled <strong>${inspDateFmt.slice(5)}</strong> ${timeWindow}. Show up early — the GC will be there.`
+                    : `📅 Inspector agendado el <strong>${inspDateFmt.slice(5)}</strong> ${timeWindow}. Llega antes — el GC estará en obra.`);
+
+        const mapsQ   = lead.address ? encodeURIComponent((lead.address||'') + ', ' + (lead.city||'') + ', CA') : '';
+        const mapsBtn = mapsQ
+            ? `<a href="https://www.google.com/maps/search/?api=1&query=${mapsQ}" target="_blank" rel="noopener"
+                onclick="event.stopPropagation()"
+                style="display:inline-flex;align-items:center;gap:5px;margin-top:7px;padding:6px 12px;background:#1d4ed8;color:#fff;border-radius:8px;text-decoration:none;font-size:12px;font-weight:700">
+                🗺 ${isEN ? 'Open in Maps' : 'Ver en Maps'}
+              </a>`
+            : '';
+
+        const inspRows = [
+            lead.inspection_type ? `<div class="insp-row">▸ ${isEN?'Type':'Tipo'}: <strong>${esc(lead.inspection_type)}</strong></div>` : '',
+            lead.inspector_name  ? `<div class="insp-row">▸ ${isEN?'Inspector':'Inspector'}: ${esc(lead.inspector_name)}</div>` : '',
+            lead.inspection_source ? `<div class="insp-row" style="font-size:10.5px;opacity:.7">▸ ${isEN?'Source':'Fuente'}: ${esc(lead.inspection_source)}</div>` : '',
+        ].filter(Boolean).join('');
+
+        inspHtml = `<div class="insp-sec" style="margin:8px 0">
+            <div class="insp-title" style="font-size:12px;font-weight:800;color:#92400e;letter-spacing:.3px;text-transform:uppercase">
+                🏗️ ${isEN ? 'OPPORTUNITY: MEET IN PERSON' : 'OPORTUNIDAD: CONOCERLO EN PERSONA'}
+                <span style="float:right;background:#dc2626;color:#fff;padding:2px 8px;border-radius:8px;font-size:10px">${urgLabel}</span>
+            </div>
+            <div style="margin:6px 0 4px;font-size:13px;line-height:1.5;color:#78350f">${oppHeadline}</div>
+            ${inspRows}
+            ${mapsBtn}
+        </div>`;
+    }
+
+    // ── Reasons & CTA ──────────────────────────────────────────────────────────
+    const reasonsHtml = (lead.reasons || []).map(r => `<span class="rc">${esc(r)}</span>`).join('');
+    let ctaHtml = '';
+    if (inspDays !== null && inspDays >= 0 && inspDays <= 5) {
+        const dayTxt = inspDays === 0 ? (isEN?'today':'hoy')
+                     : inspDays === 1 ? (isEN?'tomorrow':'mañana')
+                     : (isEN?`on ${inspDateFmt.slice(5)}`:`el ${inspDateFmt.slice(5)}`);
+        const gcName = lead.gc_name ? esc(lead.gc_name) : (isEN ? 'the GC' : 'el Contratista');
+        ctaHtml = `<div class="cta-bar" style="padding:10px 14px">
+            <div style="font-weight:800;font-size:13px;margin-bottom:4px">
+                📲 ${isEN ? 'Act now — limited window!' : '¡Actúa ahora — ventana limitada!'}
+            </div>
+            <div style="font-size:12px;color:inherit;opacity:.9">
+                ${isEN
+                    ? `${gcName} will be on-site ${dayTxt}. Call or email before the inspection to introduce yourself.`
+                    : `${gcName} estará en obra ${dayTxt}. Llama o escribe antes de la inspección para presentarte.`}
+            </div>
+        </div>`;
+    }
+
+    card.innerHTML = `
+        <div class="stamp like">LIKE</div>
+        <div class="stamp nope">NOPE</div>
+
+        <div class="${heroClass}">
+            <div class="hero-layout">
+                <div class="therm-col">
+                    <span class="therm-label">°C</span>
+                    ${thermometerSVG(score, uid)}
+                </div>
+                <div class="hero-info">
+                    <div class="hero-top">
+                        <div>
+                            <div class="hero-score">${score}<small>/100</small></div>
+                            <div class="temp-words">${tempWord}</div>
+                        </div>
+                        <div class="${badgeCls}">${esc(lead.grade_emoji||'')} ${esc(gradeLabel)}</div>
                     </div>
-                    <div class="hero-service">
-                        ${escapeHtml(lead.service_emoji || '📋')} ${escapeHtml(lead.service_label || lead.service_type || 'Lead')}
+                    <div class="hero-bot">
+                        <div class="hero-svc">${esc(lead.service_emoji||'📋')} ${esc((lead.service_label||lead.service_type||'Lead').toUpperCase())} ${freshnessBadge}</div>
+                        ${lead.value ? `<div class="hero-val">${fmtMoney(lead.value)}</div>` : `<div class="hero-val none">${isEN?'No value':'Sin valor'}</div>`}
                     </div>
                 </div>
-                <div class="card-body">
-                    <div>
-                        <div class="address">${escapeHtml(lead.address || 'Sin dirección')}</div>
-                        <div class="city">${escapeHtml(lead.city || '')}</div>
-                    </div>
-                    ${lead.description ? `<div class="description">${escapeHtml(lead.description)}</div>` : ''}
-                    ${reasons ? `<div class="reasons">${reasons}</div>` : ''}
-                    <div class="meta-grid">
-                        <div class="meta-item">
-                            <span class="meta-label">Valor</span>
-                            <span class="meta-value">${fmtMoney(lead.value)}</span>
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Contratista</span>
-                            <span class="meta-value">${escapeHtml((lead.contractor || '—').slice(0, 24))}</span>
-                        </div>
-                    </div>
-                </div>
-            `;
+            </div>
+            <div class="hero-addr" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📌 ${esc(lead.city||'')} — ${esc(lead.address||'')}</span>
+                ${lead.address ? (() => {
+                    const mapsQ = encodeURIComponent((lead.address||'') + ', ' + (lead.city||'') + ', CA');
+                    return `<a href="https://www.google.com/maps/search/?api=1&query=${mapsQ}" target="_blank" rel="noopener"
+                        onclick="event.stopPropagation()"
+                        style="flex-shrink:0;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:3px 7px;font-size:11px;font-weight:700;color:#fff;text-decoration:none;white-space:nowrap">
+                        🗺 Maps
+                    </a>`;
+                })() : ''}
+            </div>
+            ${(GOOGLE_MAPS_API_KEY && lead.address) ? (() => {
+                const addr = encodeURIComponent((lead.address||'') + ', ' + (lead.city||'') + ', CA');
+                const svUrl = `https://maps.googleapis.com/maps/api/streetview?size=400x90&location=${addr}&key=${GOOGLE_MAPS_API_KEY}&return_error_code=true`;
+                return `<img src="${svUrl}" alt="" loading="lazy"
+                    style="width:100%;height:72px;object-fit:cover;border-radius:0 0 0 0;display:block;opacity:.85"
+                    onerror="this.style.display='none'">`;
+            })() : ''}
+        </div>
 
-            attachDrag(card);
-            return card;
-        }
+        <div class="cbody">
+            ${rows_permit ? `<div class="det-sec">
+                <div class="det-title">📋 ${isEN?'Permit':'Permiso'}</div>
+                ${rows_permit}
+            </div>` : ''}
 
-        function renderDeck() {
-            // Remove old non-loader children
-            [...deck.querySelectorAll('.card, .empty-state')].forEach(n => n.remove());
-            document.getElementById('loader').style.display = 'none';
+            ${rows_gc ? `<div class="det-sec">
+                <div class="det-title">👷 ${isEN?'Contractor':'Contratista'}</div>
+                ${rows_gc}
+            </div>` : ''}
 
-            if (!state.queue.length) {
-                showEmpty();
-                return;
-            }
+            ${inspHtml}
 
-            state.queue.slice(0, 5).forEach((lead, idx) => {
-                const card = buildCard(lead, idx);
-                deck.appendChild(card);
-            });
-        }
+            ${reasonsHtml ? `<div class="det-sec">
+                <div class="reasons">${reasonsHtml}</div>
+            </div>` : ''}
 
-        function showEmpty() {
-            const empty = document.createElement('div');
-            empty.className = 'empty-state';
-            empty.innerHTML = `
-                <h3>No hay más leads</h3>
-                <p>Vuelve más tarde o recarga para ver nuevos leads.</p>
-                <button onclick="fetchFeed()">Recargar</button>
-            `;
-            deck.appendChild(empty);
-        }
+            ${ctaHtml}
+        </div>`;
 
-        // ── Swipe logic ────────────────────────────────────
-        function attachDrag(card) {
-            let startX = 0, startY = 0, dx = 0, dy = 0, dragging = false;
-            const stampLike = card.querySelector('.card-stamp.like');
-            const stampNope = card.querySelector('.card-stamp.nope');
+    // Store lead data reference on card for anon like tracking
+    card._leadData = lead;
 
-            function onStart(e) {
-                if (card !== deck.querySelector('.card')) return;  // Only top card
-                dragging = true;
-                card.classList.add('dragging');
-                const p = e.touches ? e.touches[0] : e;
-                startX = p.clientX;
-                startY = p.clientY;
-                dx = 0; dy = 0;
-            }
+    attachDrag(card);
 
-            function onMove(e) {
-                if (!dragging) return;
-                const p = e.touches ? e.touches[0] : e;
-                dx = p.clientX - startX;
-                dy = p.clientY - startY;
-                const rot = dx / 20;
-                card.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
-                const op = Math.min(Math.abs(dx) / 100, 1);
-                if (dx > 0) {
-                    stampLike.style.opacity = op;
-                    stampNope.style.opacity = 0;
-                } else if (dx < 0) {
-                    stampNope.style.opacity = op;
-                    stampLike.style.opacity = 0;
-                } else {
-                    stampLike.style.opacity = 0;
-                    stampNope.style.opacity = 0;
-                }
-                if (e.cancelable) e.preventDefault();
-            }
-
-            function onEnd() {
-                if (!dragging) return;
-                dragging = false;
-                card.classList.remove('dragging');
-                const threshold = 110;
-                if (dx > threshold) {
-                    commitSwipe(card, 'like');
-                } else if (dx < -threshold) {
-                    commitSwipe(card, 'dislike');
-                } else {
-                    card.style.transform = '';
-                    stampLike.style.opacity = 0;
-                    stampNope.style.opacity = 0;
-                }
-            }
-
-            card.addEventListener('mousedown', onStart);
-            window.addEventListener('mousemove', onMove);
-            window.addEventListener('mouseup', onEnd);
-
-            card.addEventListener('touchstart', onStart, { passive: true });
-            card.addEventListener('touchmove',  onMove,  { passive: false });
-            card.addEventListener('touchend',   onEnd);
-            card.addEventListener('touchcancel', onEnd);
-        }
-
-        function commitSwipe(card, action) {
-            card.classList.add(action === 'like' ? 'leaving-right' : 'leaving-left');
-            const leadId = card.dataset.leadId;
-            postSwipe(leadId, action);
-
-            setTimeout(() => {
-                card.remove();
-                state.queue.shift();
-                reStackCards();
-                if (state.queue.length <= 2) fetchFeed();
-            }, 260);
-        }
-
-        function reStackCards() {
-            const cards = [...deck.querySelectorAll('.card')];
-            cards.forEach((c, idx) => {
-                c.style.transform = `translateY(${idx * 6}px) scale(${1 - idx * 0.03})`;
-                c.style.opacity = idx < 3 ? 1 : 0;
-            });
-        }
-
-        function triggerSwipe(action) {
-            const top = deck.querySelector('.card');
-            if (!top) return;
-            commitSwipe(top, action);
-        }
-
-        document.getElementById('btnLike').addEventListener('click', () => triggerSwipe('like'));
-        document.getElementById('btnDislike').addEventListener('click', () => triggerSwipe('dislike'));
-
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowRight') triggerSwipe('like');
-            if (e.key === 'ArrowLeft')  triggerSwipe('dislike');
-        });
-
-        // ── Login modal ────────────────────────────────────
-        const modal = document.getElementById('loginModal');
-
-        function showLoginModal() {
-            modal.classList.add('open');
-        }
-
-        function hideLoginModal() {
-            modal.classList.remove('open');
-        }
-
-        // ── OAuth: Google ──────────────────────────────────
-        document.getElementById('btnGoogle').addEventListener('click', () => {
-            if (!GOOGLE_CLIENT_ID) {
-                toast('Login con Google no configurado');
-                return;
-            }
-            if (!window.google || !google.accounts || !google.accounts.id) {
-                loadGoogleSDK(() => googleSignIn());
-            } else {
-                googleSignIn();
+    // Log contact when phone/email is clicked (if authenticated)
+    card.querySelectorAll('.cta.phone, .cta.email').forEach(link => {
+        link.addEventListener('click', () => {
+            if (S.authed) {
+                const ct = link.classList.contains('phone') ? 'phone_click' : 'email_click';
+                fetch('/api/swipe/log-contact', {
+                    method: 'POST', headers: authHdrs(),
+                    body: JSON.stringify({ lead_id: lead.id, contact_type: ct })
+                }).catch(() => {});
             }
         });
+    });
 
-        function loadGoogleSDK(cb) {
-            if (document.getElementById('google-sdk')) { cb && cb(); return; }
-            const s = document.createElement('script');
-            s.id = 'google-sdk';
-            s.src = 'https://accounts.google.com/gsi/client';
-            s.async = true; s.defer = true;
-            s.onload = cb;
-            document.head.appendChild(s);
+    return card;
+}
+
+function renderDeck() {
+    [...$deck.querySelectorAll('.card,.empty')].forEach(n => n.remove());
+    document.getElementById('loader').style.display = 'none';
+    if (!S.queue.length) { showEmpty(); return; }
+    S.queue.slice(0, 5).forEach((l, i) => $deck.appendChild(buildCard(l, i)));
+    // Animate thermometers on next frame
+    requestAnimationFrame(animateThermometers);
+}
+
+function showEmpty() {
+    const el = document.createElement('div');
+    el.className = 'empty';
+
+    // Build a contextual hint based on active filters
+    const hasFilters = F.city || F.leadTypes.size > 0 || F.subCats.size > 0 || F.hotOnly || F.minVal > 0;
+    let hint = '';
+    let suggestions = [];
+
+    if (hasFilters) {
+        const parts = [];
+        if (F.leadTypes.size > 0) {
+            const labels = [...F.leadTypes].map(s => LTYPE_LABELS[s] || s).join(', ');
+            parts.push(CURRENT_LANG === 'es' ? `servicio "${labels}"` : `"${labels}" service`);
+        }
+        if (F.city) parts.push(F.city);
+        if (F.hotOnly) parts.push(CURRENT_LANG === 'es' ? 'solo leads HOT' : 'HOT leads only');
+
+        if (parts.length > 0) {
+            hint = CURRENT_LANG === 'es'
+                ? `No encontramos leads para ${parts.join(' + ')} esta semana.`
+                : `No leads found for ${parts.join(' + ')} this week.`;
+        } else {
+            hint = t('noLeadsHint');
         }
 
-        function googleSignIn() {
-            google.accounts.id.initialize({
-                client_id: GOOGLE_CLIENT_ID,
-                callback: async (resp) => {
-                    const r = await fetch('/api/auth/oauth/google', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ credential: resp.credential }),
-                    });
-                    const data = await r.json();
-                    if (data.access_token) {
-                        await handleAuthSuccess(data);
-                    } else {
-                        toast(data.error || 'Login fallido');
-                    }
-                },
-            });
-            google.accounts.id.prompt();
-        }
-
-        // ── OAuth: Facebook ────────────────────────────────
-        document.getElementById('btnFacebook').addEventListener('click', () => {
-            if (!FACEBOOK_APP_ID) {
-                toast('Login con Facebook no configurado');
-                return;
-            }
-            loadFacebookSDK(() => facebookSignIn());
+        // Contextual suggestions
+        if (F.hotOnly) suggestions.push({
+            label: CURRENT_LANG === 'es' ? 'Ver todos los leads' : 'Show all leads',
+            action: `F.hotOnly=false; applyFilters()`
         });
+        if (F.city) suggestions.push({
+            label: CURRENT_LANG === 'es' ? 'Quitar filtro de ciudad' : 'Remove city filter',
+            action: `F.city=''; applyFilters()`
+        });
+        if (F.leadTypes.size > 0) suggestions.push({
+            label: CURRENT_LANG === 'es' ? 'Ver todos los servicios' : 'All services',
+            action: `F.leadTypes.clear(); applyFilters()`
+        });
+    } else {
+        hint = t('noLeadsDefault');
+    }
 
-        function loadFacebookSDK(cb) {
-            if (window.FB) { cb && cb(); return; }
-            window.fbAsyncInit = function() {
-                FB.init({
-                    appId: FACEBOOK_APP_ID,
-                    cookie: true,
-                    xfbml: false,
-                    version: 'v18.0',
-                });
-                cb && cb();
-            };
-            const s = document.createElement('script');
-            s.async = true; s.defer = true; s.crossOrigin = 'anonymous';
-            s.src = 'https://connect.facebook.net/en_US/sdk.js';
-            document.head.appendChild(s);
+    const suggestHtml = suggestions.map(s =>
+        `<button onclick="${s.action}" style="margin:4px 6px 0 0;padding:6px 14px;border-radius:20px;border:1px solid var(--accent);background:var(--surface);color:var(--accent);font-size:13px;cursor:pointer">${s.label}</button>`
+    ).join('');
+
+    el.innerHTML = `
+        <div style="font-size:36px">🔍</div>
+        <h3>${t('noLeads')}</h3>
+        <p style="color:var(--muted);max-width:280px;text-align:center">${hint}</p>
+        <div style="margin-top:8px">${suggestHtml}</div>
+        <button onclick="fetchFeed()" style="margin-top:14px;padding:8px 22px;border-radius:20px;background:var(--accent);color:#fff;border:none;font-size:14px;cursor:pointer">${t('reload')}</button>
+    `;
+    $deck.appendChild(el);
+}
+
+// ── Swipe logic ───────────────────────────────────────────────────────────────
+function attachDrag(card) {
+    let sx=0, sy=0, dx=0, dy=0, dragging=false;
+    const sl = card.querySelector('.stamp.like');
+    const sn = card.querySelector('.stamp.nope');
+
+    function start(e) {
+        if (card !== $deck.querySelector('.card')) return;
+        dragging = true; card.classList.add('drag');
+        const p = e.touches ? e.touches[0] : e;
+        sx = p.clientX; sy = p.clientY; dx = 0; dy = 0;
+    }
+    function move(e) {
+        if (!dragging) return;
+        const p = e.touches ? e.touches[0] : e;
+        dx = p.clientX - sx; dy = p.clientY - sy;
+        card.style.transform = `translate(${dx}px,${dy}px) rotate(${dx/20}deg)`;
+        const op = Math.min(Math.abs(dx)/100, 1);
+        if      (dx > 0) { sl.style.opacity = op; sn.style.opacity = 0; }
+        else if (dx < 0) { sn.style.opacity = op; sl.style.opacity = 0; }
+        else             { sl.style.opacity = 0;  sn.style.opacity = 0; }
+        if (e.cancelable) e.preventDefault();
+    }
+    function end() {
+        if (!dragging) return;
+        dragging = false; card.classList.remove('drag');
+        if      (dx > 110)  commit(card, 'like');
+        else if (dx < -110) commit(card, 'dislike');
+        else { card.style.transform = ''; sl.style.opacity = 0; sn.style.opacity = 0; }
+    }
+
+    card.addEventListener('mousedown', start);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+    card.addEventListener('touchstart', start, { passive: true });
+    card.addEventListener('touchmove',  move,  { passive: false });
+    card.addEventListener('touchend',   end);
+    card.addEventListener('touchcancel', end);
+}
+
+function commit(card, action) {
+    card.classList.add(action === 'like' ? 'go-right' : 'go-left');
+    postSwipe(card.dataset.id, action);
+    // Log contact in profile when authenticated user swipes right
+    if (action === 'like' && S.authed) {
+        fetch('/api/swipe/log-contact', {
+            method: 'POST', headers: authHdrs(),
+            body: JSON.stringify({ lead_id: card.dataset.id, contact_type: 'swipe_like' })
+        }).catch(() => {});
+    }
+    // Save to localStorage for anonymous users so contacts persist before login
+    if (action === 'like' && !S.authed) {
+        _saveAnonLike(card.dataset.id, card._leadData);
+    }
+    // Advance progressive score threshold
+    _advanceScoreStep();
+    setTimeout(() => {
+        card.remove(); S.queue.shift(); restack();
+        if (S.queue.length <= 2) fetchFeed();
+    }, 260);
+}
+
+function restack() {
+    [...$deck.querySelectorAll('.card')].forEach((c, i) => {
+        c.style.transform = `translateY(${i*6}px) scale(${1 - i*.03})`;
+        c.style.opacity   = i < 3 ? 1 : 0;
+    });
+    requestAnimationFrame(animateThermometers);
+}
+
+function doSwipe(a) { const t = $deck.querySelector('.card'); if (t) commit(t, a); }
+
+document.getElementById('btnLike').addEventListener('click', () => doSwipe('like'));
+document.getElementById('btnNope').addEventListener('click', () => doSwipe('dislike'));
+document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight') doSwipe('like');
+    if (e.key === 'ArrowLeft')  doSwipe('dislike');
+});
+
+// ── Filter drawer ─────────────────────────────────────────────────────────────
+const $backdrop = document.getElementById('backdrop');
+
+document.getElementById('filterBtn').addEventListener('click', () => {
+    syncDrawer();
+    $backdrop.classList.add('open');
+});
+$backdrop.addEventListener('click', e => { if (e.target === $backdrop) $backdrop.classList.remove('open'); });
+
+// Sub pills
+document.querySelectorAll('#subPills .pill').forEach(p => {
+    p.addEventListener('click', () => {
+        p.classList.toggle('on');
+        updateCountBadge('subCount', '#subPills .pill.on');
+    });
+});
+
+// Lead type pills
+document.querySelectorAll('#ltypePills .pill').forEach(p => {
+    p.addEventListener('click', () => {
+        p.classList.toggle('on');
+        updateCountBadge('ltypeCount', '#ltypePills .pill.on');
+    });
+});
+
+function updateCountBadge(badgeId, selector) {
+    const n = document.querySelectorAll(selector).length;
+    const el = document.getElementById(badgeId);
+    el.textContent = n;
+    el.classList.toggle('on', n > 0);
+}
+
+// Radius pills
+document.querySelectorAll('.rpill').forEach(p => {
+    p.addEventListener('click', () => {
+        document.querySelectorAll('.rpill').forEach(x => x.classList.remove('on'));
+        p.classList.add('on');
+    });
+});
+
+// Value presets
+document.querySelectorAll('.vpreset').forEach(b => {
+    b.addEventListener('click', () => {
+        document.querySelectorAll('.vpreset').forEach(x => x.classList.remove('on'));
+        b.classList.add('on');
+        document.getElementById('minVal').value = Number(b.dataset.min||0) > 0 ? b.dataset.min : '';
+        document.getElementById('maxVal').value = Number(b.dataset.max||0) > 0 ? b.dataset.max : '';
+    });
+});
+['minVal','maxVal'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () =>
+        document.querySelectorAll('.vpreset').forEach(x => x.classList.remove('on'))
+    );
+});
+
+function syncDrawer() {
+    document.getElementById('hotToggle').classList.toggle('on', F.hotOnly);
+    document.querySelectorAll('#subPills .pill').forEach(p =>
+        p.classList.toggle('on', F.subCats.has(p.dataset.cat))
+    );
+    document.querySelectorAll('#ltypePills .pill').forEach(p =>
+        p.classList.toggle('on', F.leadTypes.has(p.dataset.cat))
+    );
+    updateCountBadge('subCount', '#subPills .pill.on');
+    updateCountBadge('ltypeCount', '#ltypePills .pill.on');
+    document.getElementById('cityInp').value = F.city;
+    document.getElementById('minVal').value  = F.minVal > 0 ? F.minVal : '';
+    document.getElementById('maxVal').value  = F.maxVal > 0 ? F.maxVal : '';
+    document.querySelectorAll('.rpill').forEach(p =>
+        p.classList.toggle('on', Number(p.dataset.mi) === F.radius)
+    );
+    document.querySelectorAll('.vpreset').forEach(b =>
+        b.classList.toggle('on', Number(b.dataset.min||0)===F.minVal && Number(b.dataset.max||0)===F.maxVal)
+    );
+}
+
+function readDrawer() {
+    F.hotOnly = document.getElementById('hotToggle').classList.contains('on');
+    F.subCats.clear();
+    document.querySelectorAll('#subPills .pill.on').forEach(p => F.subCats.add(p.dataset.cat));
+    F.leadTypes.clear();
+    document.querySelectorAll('#ltypePills .pill.on').forEach(p => F.leadTypes.add(p.dataset.cat));
+    F.city   = document.getElementById('cityInp').value.trim();
+    F.minVal = Number(document.getElementById('minVal').value) || 0;
+    F.maxVal = Number(document.getElementById('maxVal').value) || 0;
+    const rp = document.querySelector('.rpill.on');
+    F.radius = rp ? Number(rp.dataset.mi) : 25;
+}
+
+document.getElementById('hotToggle').addEventListener('click', function() {
+    this.classList.toggle('on');
+    this.setAttribute('aria-checked', this.classList.contains('on'));
+});
+
+document.getElementById('btnApply').addEventListener('click', () => {
+    readDrawer();
+    $backdrop.classList.remove('open');
+    applyFilters();
+});
+
+document.getElementById('btnReset').addEventListener('click', () => {
+    F.hotOnly = true; F.subCats.clear(); F.leadTypes.clear();
+    F.city = ''; F.radius = 25; F.minVal = 0; F.maxVal = 0;
+    syncDrawer();
+});
+
+function applyFilters() { saveFilters(); renderChips(); S.queue = []; fetchFeed(); }
+
+// ── Chips bar ─────────────────────────────────────────────────────────────────
+const SUB_LABELS = {
+    roofing:'🏚️ Roofing', drywall:'🧱 Drywall', paint:'🎨 Pintura',
+    landscaping:'🌿 Paisajismo', electrical:'⚡ Eléctrico',
+};
+const LTYPE_LABELS = {
+    permits:'🏗️ Permisos', construction:'👷 Construcción', solar:'☀️ Solar',
+    realestate:'🏗️ Nueva Construcción', flood:'💧 Agua', energy:'💡 Energía',
+    rodents:'🐭 Plagas', deconstruction:'💥 Demolición',
+};
+const LTYPE_LABELS_EN = {
+    permits:'🏗️ Permits', construction:'👷 Construction', solar:'☀️ Solar',
+    realestate:'🏗️ New Construction', flood:'💧 Water Damage', energy:'💡 Energy',
+    rodents:'🐭 Pest Control', deconstruction:'💥 Demolition',
+};
+
+function renderChips() {
+    const bar = document.getElementById('chipsBar');
+    bar.innerHTML = '';
+
+    function addChip(text, cls, onRemove) {
+        const c = document.createElement('div');
+        c.className = `chip ${cls}`;
+        c.innerHTML = `${esc(text)}<span class="chip-x" title="Quitar">×</span>`;
+        c.querySelector('.chip-x').addEventListener('click', onRemove);
+        bar.appendChild(c);
+    }
+
+    if (F.hotOnly) addChip('🔥 Solo HOT', 'hot', () => { F.hotOnly = false; applyFilters(); });
+
+    F.subCats.forEach(cat => {
+        addChip(SUB_LABELS[cat] || cat, 'sub', () => { F.subCats.delete(cat); applyFilters(); });
+    });
+
+    F.leadTypes.forEach(cat => {
+        addChip(LTYPE_LABELS[cat] || cat, 'ltype', () => { F.leadTypes.delete(cat); applyFilters(); });
+    });
+
+    if (F.city) {
+        const lbl = F.radius ? `📍 ${F.city} · ${F.radius} mi` : `📍 ${F.city}`;
+        addChip(lbl, 'loc', () => { F.city = ''; applyFilters(); });
+    }
+
+    if (F.minVal > 0 || F.maxVal > 0) {
+        let lbl = '💰 ';
+        if (F.minVal > 0 && F.maxVal > 0) lbl += `$${fmtK(F.minVal)}–$${fmtK(F.maxVal)}`;
+        else if (F.minVal > 0) lbl += `≥$${fmtK(F.minVal)}`;
+        else lbl += `≤$${fmtK(F.maxVal)}`;
+        addChip(lbl, 'val', () => { F.minVal = 0; F.maxVal = 0; applyFilters(); });
+    }
+
+    // Filter dot
+    const hasExtra = F.city || F.minVal > 0 || F.maxVal > 0 || !F.hotOnly || F.subCats.size > 0 || F.leadTypes.size > 0;
+    document.getElementById('filterDot').classList.toggle('on', hasExtra);
+}
+
+// ── Paywall ───────────────────────────────────────────────────────────────────
+const $loginModal = document.getElementById('loginModal');
+function showPaywall(mode) {
+    $loginModal.classList.add('open');
+    const regSec = document.getElementById('pwRegisterSection');
+    const upgSec = document.getElementById('pwUpgradeSection');
+
+    if (mode === 'upgrade') {
+        // Already registered free user → show tier comparison
+        document.getElementById('pwTitle').textContent  = '¡Elige tu plan!';
+        document.getElementById('pwSubtitle').innerHTML = 'Has agotado tus <strong style="color:#fff">40 leads gratis</strong>.<br>Elige un plan para seguir encontrando clientes.';
+        document.getElementById('pwBadge').innerHTML    = '📊 <span id="pwUsageNum">40</span> leads usados<div style="text-align:left"><small>Pro $29/mes · 200 leads</small><small>Premium $99/mes · ilimitado</small></div>';
+        document.getElementById('pwFooter').textContent = 'Sin compromisos · cancela cuando quieras';
+        const _roi = Math.round(S.swipes / 20 * 3000);
+        document.getElementById('pwUpgradeUsage').innerHTML = CURRENT_LANG === 'es'
+            ? `Contactaste <strong>${S.swipes} leads</strong> esta semana. Si 1 de cada 20 cierra un trabajo de $3k, ya vas por <strong>$${_roi.toLocaleString()} de potencial</strong>. Con Pro ($29/mes) accedes a 200/mes.`
+            : `You contacted <strong>${S.swipes} leads</strong> this week. If 1 in 20 closes at $3k, that's <strong>$${_roi.toLocaleString()} in potential revenue</strong>. Go Pro ($29/mo) for 200/month.`;
+        regSec.style.display = 'none';
+        upgSec.style.display = '';
+    } else {
+        // Anonymous → register for free leads
+        document.getElementById('pwTitle').textContent  = '¡Desbloquea leads ilimitados!';
+        document.getElementById('pwSubtitle').innerHTML = 'Has visto tus <strong style="color:#fff">10 leads gratis</strong>.<br>Regístrate y obtén <strong style="color:#4ade80">40 leads adicionales gratis</strong>.';
+        document.getElementById('pwBadge').innerHTML    = '🎁 40 Leads Gratis<div style="text-align:left"><small id="pwBadgeSmall">Después desde $29/mes</small><small>Sin tarjeta de crédito</small></div>';
+        document.getElementById('pwFooter').textContent = '40 leads gratis · después desde $29/mes';
+        regSec.style.display = '';
+        upgSec.style.display = 'none';
+    }
+}
+function hidePaywall() { $loginModal.classList.remove('open'); }
+
+function handleUpgrade(tier) {
+    // Placeholder for Stripe integration — for now show a toast with contact info
+    const msgs = {
+        pro:     '¡Genial! Escríbenos a hola@mleads.io para activar Plan Pro ($29/mes).',
+        premium: '¡Perfecto! Escríbenos a hola@mleads.io para activar Plan Premium ($99/mes).',
+    };
+    hidePaywall();
+    toast(msgs[tier] || 'Contacta a soporte para activar tu plan.');
+}
+
+// ── OAuth: Google ─────────────────────────────────────────────────────────────
+document.getElementById('btnGoogle').addEventListener('click', () => {
+    if (!GOOGLE_CLIENT_ID) { toast('Login con Google no configurado'); return; }
+    if (!window.google?.accounts?.id) { loadGSDK(() => googleSignIn()); }
+    else { googleSignIn(); }
+});
+
+function loadGSDK(cb) {
+    if (document.getElementById('gsdk')) { cb && cb(); return; }
+    const s = document.createElement('script');
+    s.id = 'gsdk'; s.src = 'https://accounts.google.com/gsi/client'; s.async = true; s.defer = true; s.onload = cb;
+    document.head.appendChild(s);
+}
+
+function googleSignIn() {
+    google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async resp => {
+            const r = await fetch('/api/auth/oauth/google', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ credential: resp.credential }) });
+            const d = await r.json();
+            if (d.access_token) handleAuth(d); else toast(d.error || 'Login fallido');
+        },
+    });
+    google.accounts.id.prompt();
+}
+
+// ── OAuth: Facebook ───────────────────────────────────────────────────────────
+document.getElementById('btnFacebook').addEventListener('click', () => {
+    if (!FACEBOOK_APP_ID) { toast('Login con Facebook no configurado'); return; }
+    loadFBSDK(() => fbSignIn());
+});
+
+function loadFBSDK(cb) {
+    if (window.FB) { cb && cb(); return; }
+    window.fbAsyncInit = () => { FB.init({ appId: FACEBOOK_APP_ID, cookie:true, xfbml:false, version:'v18.0' }); cb && cb(); };
+    const s = document.createElement('script'); s.async = true; s.defer = true; s.crossOrigin = 'anonymous';
+    s.src = 'https://connect.facebook.net/en_US/sdk.js'; document.head.appendChild(s);
+}
+
+function fbSignIn() {
+    FB.login(async resp => {
+        if (resp.authResponse?.accessToken) {
+            const r = await fetch('/api/auth/oauth/facebook', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ access_token: resp.authResponse.accessToken }) });
+            const d = await r.json();
+            if (d.access_token) handleAuth(d); else toast(d.error || 'Login fallido');
+        } else toast('Login cancelado');
+    }, { scope: 'public_profile,email' });
+}
+
+async function handleAuth(data) {
+    localStorage.setItem('access_token', data.access_token);
+    if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
+    S.authed = true;
+    syncContactsBtn();
+    try {
+        // Migrate anonymous swipe_actions to authenticated user
+        await fetch('/api/swipe/claim-anon', { method:'POST', headers:authHdrs(), body:JSON.stringify({ anon_id: getAnonId() }) });
+    } catch (e) {}
+    // Clear anon localStorage likes — they're now persisted in the server DB
+    _clearAnonLikes();
+    hidePaywall();
+    toast('¡Bienvenido, ' + (data.user?.full_name || 'pro') + '! 🎉');
+    S.queue = [];
+    fetchFeed();
+}
+
+// ── i18n ─────────────────────────────────────────────────────────────────────
+const I18N = {
+    es: {
+        langBtn:       'ES',
+        loading:       'Cargando leads...',
+        filterTitle:   'Filtros de búsqueda',
+        filterReset:   'Restablecer',
+        hotLabel:      '🔥 Solo leads HOT',
+        hotDesc:       'Score ≥ 90 — máxima temperatura',
+        subTitle:      'Subcontratistas',
+        ltypeTitle:    'Tipo de Lead',
+        locationTitle: 'Ubicación',
+        cityPH:        'Tu ciudad...',
+        valueTitle:    'Valor del proyecto',
+        valMin:        'Mínimo',
+        valMax:        'Máximo',
+        applyBtn:      'Buscar leads',
+        noLeads:       'No hay más leads',
+        noLeadsHint:   'Ajusta los filtros o amplía la zona de búsqueda.',
+        noLeadsDefault:'Vuelve más tarde — nuevos leads entran a diario.',
+        reload:        'Recargar',
+        betaText:      'Esta app está en versión BETA. ¡Tu opinión nos ayuda a mejorar!',
+        betaBtn:       'Comentar',
+        fbTitle:       '💬 Deja tu comentario',
+        fbNotice:      '<strong>🚀 MLeads está en BETA</strong><br>Estamos mejorando la app con tu ayuda. Cuéntanos qué funciona bien, qué falla o qué te gustaría ver.',
+        fbPH:          'Tu sugerencia o comentario...',
+        fbSubmit:      'Enviar comentario',
+        fbSent:        '¡Gracias por tu comentario! 🙌',
+        stamp_like:    'LIKE',
+        stamp_nope:    'NOPE',
+        noContact:     'Sin contacto registrado',
+        sinValor:      'Sin valor',
+        sinDir:        'Sin dirección',
+        responsable:   'Responsable',
+        tipoPermiso:   'Tipo permiso',
+        contactsTitle: '📋 Mis Leads Contactados',
+        contactsClose: 'Cerrar',
+        contactsEmpty: 'Aún no has contactado ningún lead. Desliza a la derecha o llama para guardar.',
+        contactsBtn:   'Mis Contactos',
+    },
+    en: {
+        langBtn:       'EN',
+        loading:       'Loading leads...',
+        filterTitle:   'Search filters',
+        filterReset:   'Reset',
+        hotLabel:      '🔥 HOT leads only',
+        hotDesc:       'Score ≥ 90 — maximum heat',
+        subTitle:      'Subcontractors',
+        ltypeTitle:    'Lead Type',
+        locationTitle: 'Location',
+        cityPH:        'Your city...',
+        valueTitle:    'Project value',
+        valMin:        'Minimum',
+        valMax:        'Maximum',
+        applyBtn:      'Search leads',
+        noLeads:       'No more leads',
+        noLeadsHint:   'Adjust filters or expand the search area.',
+        noLeadsDefault:'Check back later — new leads come in daily.',
+        reload:        'Reload',
+        betaText:      'This app is in BETA. Your feedback helps us improve!',
+        betaBtn:       'Comment',
+        fbTitle:       '💬 Leave a comment',
+        fbNotice:      '<strong>🚀 MLeads is in BETA</strong><br>We\'re improving the app with your help. Tell us what works, what doesn\'t, or what you\'d like to see.',
+        fbPH:          'Your suggestion or comment...',
+        fbSubmit:      'Send comment',
+        fbSent:        'Thanks for your feedback! 🙌',
+        stamp_like:    'LIKE',
+        stamp_nope:    'NOPE',
+        noContact:     'No contact on file',
+        sinValor:      'No value',
+        sinDir:        'No address',
+        responsable:   'Responsible',
+        tipoPermiso:   'Permit type',
+        contactsTitle: '📋 My Contacted Leads',
+        contactsClose: 'Close',
+        contactsEmpty: 'You haven\'t contacted any lead yet. Swipe right or call to save.',
+        contactsBtn:   'My Contacts',
+    }
+};
+
+let CURRENT_LANG = localStorage.getItem('ml_lang') || 'es';
+
+function t(key) {
+    return (I18N[CURRENT_LANG] || I18N.es)[key] || key;
+}
+
+function applyLang() {
+    // Show current language on button so user knows what's active
+    document.getElementById('langToggle').textContent = CURRENT_LANG.toUpperCase();
+    document.getElementById('betaText').textContent    = t('betaText');
+    document.getElementById('openFeedback').textContent= t('betaBtn');
+    document.getElementById('fbTitle').textContent     = t('fbTitle');
+    document.getElementById('fbNotice').innerHTML      = t('fbNotice');
+    document.getElementById('fbText').placeholder      = t('fbPH');
+    document.getElementById('fbSubmitBtn').textContent = t('fbSubmit');
+    document.querySelector('#loader p').textContent    = t('loading');
+    document.querySelector('.dtitle').textContent      = t('filterTitle');
+    document.querySelector('.dreset').textContent      = t('filterReset');
+    document.querySelector('.tlabel span').textContent = t('hotLabel');
+    document.querySelector('.tlabel small').textContent= t('hotDesc');
+    // Section labels
+    const fsecLabels = document.querySelectorAll('.fsec-label');
+    if (fsecLabels[0]) fsecLabels[0].textContent = t('subTitle');
+    if (fsecLabels[1]) fsecLabels[1].textContent = t('ltypeTitle');
+    if (fsecLabels[2]) fsecLabels[2].textContent = t('locationTitle');
+    if (fsecLabels[3]) fsecLabels[3].textContent = t('valueTitle');
+    document.getElementById('cityInp').placeholder = t('cityPH');
+    document.getElementById('btnApply').textContent = t('applyBtn');
+    document.getElementById('contactsTitle').textContent = t('contactsTitle');
+    document.getElementById('contactsClose').textContent = t('contactsClose');
+    // Value labels
+    const vLabels = document.querySelectorAll('.vfield label');
+    if (vLabels[0]) vLabels[0].textContent = t('valMin');
+    if (vLabels[1]) vLabels[1].textContent = t('valMax');
+    // Lead type pills — update text from locale
+    const ltypeLabels = CURRENT_LANG === 'en' ? LTYPE_LABELS_EN : LTYPE_LABELS;
+    document.querySelectorAll('#ltypePills .pill').forEach(p => {
+        const cat = p.dataset.cat;
+        if (ltypeLabels[cat]) p.textContent = ltypeLabels[cat];
+    });
+    // Sub pills
+    const subLabels_en = { roofing:'🏚️ Roofing', drywall:'🧱 Drywall', paint:'🎨 Painting', landscaping:'🌿 Landscaping', electrical:'⚡ Electrical' };
+    const subLabels_es = { roofing:'🏚️ Roofing', drywall:'🧱 Drywall', paint:'🎨 Pintura', landscaping:'🌿 Paisajismo', electrical:'⚡ Eléctrico' };
+    const subL = CURRENT_LANG === 'en' ? subLabels_en : subLabels_es;
+    document.querySelectorAll('#subPills .pill').forEach(p => {
+        const cat = p.dataset.cat;
+        if (subL[cat]) p.textContent = subL[cat];
+    });
+}
+
+document.getElementById('langToggle').addEventListener('click', () => {
+    CURRENT_LANG = CURRENT_LANG === 'es' ? 'en' : 'es';
+    localStorage.setItem('ml_lang', CURRENT_LANG);
+    applyLang();
+});
+
+// ── City autocomplete ─────────────────────────────────────────────────────────
+// Suggestions are siblings of inp-wrap (outside it) to avoid overflow clipping
+const $cityInp  = document.getElementById('cityInp');
+const $citySugg = document.getElementById('citySuggestions');
+let _cityTimer  = null;
+
+function showCitySuggestions(items) {
+    $citySugg.innerHTML = '';
+    if (!items.length) { $citySugg.classList.remove('open'); return; }
+    items.forEach(name => {
+        const div = document.createElement('div');
+        div.className = 'city-sug-item';
+        div.textContent = name;
+        div.addEventListener('mousedown', e => {
+            e.preventDefault();
+            $cityInp.value = name;
+            $citySugg.classList.remove('open');
+        });
+        $citySugg.appendChild(div);
+    });
+    $citySugg.classList.add('open');
+}
+
+$cityInp.addEventListener('input', () => {
+    clearTimeout(_cityTimer);
+    const q = $cityInp.value.trim();
+    if (q.length < 2) { $citySugg.classList.remove('open'); return; }
+    _cityTimer = setTimeout(async () => {
+        try {
+            const res = await fetch(`/api/swipe/cities?q=${encodeURIComponent(q.toLowerCase())}`);
+            const data = await res.json();
+            showCitySuggestions(Array.isArray(data) ? data : []);
+        } catch (e) { $citySugg.classList.remove('open'); }
+    }, 200);
+});
+
+$cityInp.addEventListener('blur', () => {
+    setTimeout(() => $citySugg.classList.remove('open'), 180);
+});
+
+// ── My Contacts drawer ────────────────────────────────────────────────────────
+const $contactsBackdrop = document.getElementById('contactsBackdrop');
+const $contactsBody     = document.getElementById('contactsBody');
+
+function showContacts() {
+    $contactsBackdrop.classList.add('open');
+    loadContacts();
+}
+function hideContacts() { $contactsBackdrop.classList.remove('open'); }
+
+document.getElementById('contactsBtn').addEventListener('click', showContacts);
+document.getElementById('contactsClose').addEventListener('click', hideContacts);
+$contactsBackdrop.addEventListener('click', e => {
+    if (e.target === $contactsBackdrop) hideContacts();
+});
+
+// ── Anonymous like persistence ────────────────────────────────────────────────
+const ANON_LIKES_KEY = 'mleads_anon_likes';
+
+function _saveAnonLike(leadId, leadData) {
+    try {
+        const raw   = localStorage.getItem(ANON_LIKES_KEY);
+        const likes = raw ? JSON.parse(raw) : [];
+        // Avoid duplicates
+        if (!likes.find(l => l.id === leadId)) {
+            likes.unshift({
+                id:           leadId,
+                address:      leadData?.address  || '',
+                city:         leadData?.city      || '',
+                phone:        leadData?.phone     || '',
+                email:        leadData?.email     || '',
+                score:        leadData?.score     || 0,
+                grade:        leadData?.grade     || '',
+                service_type: leadData?.service_type || '',
+                contacted_at: new Date().toISOString(),
+            });
+            localStorage.setItem(ANON_LIKES_KEY, JSON.stringify(likes.slice(0, 100)));
         }
+    } catch(e) {}
+}
 
-        function facebookSignIn() {
-            FB.login(async (response) => {
-                if (response.authResponse && response.authResponse.accessToken) {
-                    const r = await fetch('/api/auth/oauth/facebook', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ access_token: response.authResponse.accessToken }),
-                    });
-                    const data = await r.json();
-                    if (data.access_token) {
-                        await handleAuthSuccess(data);
-                    } else {
-                        toast(data.error || 'Login fallido');
-                    }
-                } else {
-                    toast('Login cancelado');
-                }
-            }, { scope: 'public_profile,email' });
+function _getAnonLikes() {
+    try {
+        const raw = localStorage.getItem(ANON_LIKES_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch(e) { return []; }
+}
+
+function _clearAnonLikes() {
+    try { localStorage.removeItem(ANON_LIKES_KEY); } catch(e) {}
+}
+
+async function loadContacts() {
+    $contactsBody.innerHTML = '<div style="text-align:center;padding:24px"><div class="spin" style="margin:0 auto"></div></div>';
+
+    // Anonymous users: show from localStorage
+    if (!S.authed) {
+        const anonLikes = _getAnonLikes();
+        if (anonLikes.length === 0) {
+            $contactsBody.innerHTML = `<div class="cl-empty"><div>📭</div>${t('contactsEmpty')}</div>`;
+        } else {
+            const banner = document.createElement('div');
+            banner.innerHTML = `<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:10px;padding:10px 14px;margin:0 0 10px;font-size:13px;color:#92400e">
+                ${CURRENT_LANG === 'es'
+                    ? '💡 <strong>Regístrate gratis</strong> para guardar tu historial permanentemente.'
+                    : '💡 <strong>Sign up free</strong> to permanently save your contact history.'}
+                <button onclick="showPaywall('register')" style="margin-left:8px;padding:4px 12px;border-radius:12px;background:#d97706;color:#fff;border:none;font-size:12px;cursor:pointer">
+                    ${CURRENT_LANG === 'es' ? 'Registrarse' : 'Sign up'}
+                </button>
+            </div>`;
+            $contactsBody.appendChild(banner);
+            renderContacts(anonLikes);
         }
+        return;
+    }
 
-        async function handleAuthSuccess(data) {
-            localStorage.setItem('access_token', data.access_token);
-            if (data.refresh_token) {
-                localStorage.setItem('refresh_token', data.refresh_token);
-            }
-            state.isAuthed = true;
-
-            // Migrate anonymous swipes onto the new user
-            try {
-                await fetch('/api/swipe/claim-anon', {
-                    method: 'POST',
-                    headers: authHeaders(),
-                    body: JSON.stringify({ anon_id: getAnonId() }),
-                });
-            } catch (e) { /* non-fatal */ }
-
-            hideLoginModal();
-            toast('¡Bienvenido, ' + (data.user.full_name || 'pro') + '!');
-            state.queue = [];
-            fetchFeed();
+    // Authenticated users: fetch from server
+    try {
+        const res  = await fetch('/api/swipe/my-contacts', { headers: authHdrs() });
+        if (res.status === 401) {
+            $contactsBody.innerHTML = `<div class="cl-empty"><div>🔒</div>${CURRENT_LANG === 'en' ? 'Log in to see your contacted leads.' : 'Inicia sesión para ver tus leads contactados.'}</div>`;
+            return;
         }
+        const data = await res.json();
+        renderContacts(data.contacts || []);
+    } catch (e) {
+        $contactsBody.innerHTML = `<div class="cl-empty"><div>⚠️</div>${CURRENT_LANG === 'en' ? 'Error loading contacts.' : 'Error al cargar contactos.'}</div>`;
+    }
+}
 
-        // ── Init ───────────────────────────────────────────
-        fetchFeed();
-    </script>
+function renderContacts(list) {
+    if (!list.length) {
+        $contactsBody.innerHTML = `<div class="cl-empty"><div>📭</div>${t('contactsEmpty')}</div>`;
+        return;
+    }
+    $contactsBody.innerHTML = '';
+    list.forEach(c => {
+        const score = Number(c.score || 0);
+        const isHot  = score >= 90;
+        const isWarm = !isHot && score >= 70;
+        const scoreCls = isHot ? 'cl-score hot' : isWarm ? 'cl-score warm' : 'cl-score';
+        const date = c.contacted_at ? c.contacted_at.slice(0, 10) : '';
+        const phoneFmt = c.phone ? fmtPhone(c.phone) : null;
+        const phoneHtml = phoneFmt
+            ? `<a class="cl-cta phone" href="tel:${String(c.phone).replace(/\D/g,'')}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.45 2 2 0 0 1 3.59 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.76a16 16 0 0 0 7.33 7.33l1.12-1.12a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                </svg>${esc(phoneFmt)}</a>` : '';
+        const emailHtml = c.email
+            ? `<a class="cl-cta email" href="mailto:${esc(c.email)}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+                </svg>${esc(c.email.length > 22 ? c.email.slice(0,22)+'…' : c.email)}</a>` : '';
+
+        const div = document.createElement('div');
+        div.className = 'cl-item';
+        div.innerHTML = `
+            <div class="cl-addr">${esc(c.address || '—')}</div>
+            <div class="cl-meta">
+                <span class="cl-city">📍 ${esc(c.city || '')}</span>
+                ${score ? `<span class="${scoreCls}">${score}/100</span>` : ''}
+                ${date ? `<span class="cl-date">${date}</span>` : ''}
+            </div>
+            ${(phoneHtml || emailHtml) ? `<div class="cl-actions">${phoneHtml}${emailHtml}</div>` : ''}
+        `;
+        $contactsBody.appendChild(div);
+    });
+}
+
+// Show contacts button always; show dot when there are anon likes
+function syncContactsBtn() {
+    const btn = document.getElementById('contactsBtn');
+    btn.style.display = 'flex';  // always visible
+    const hasAnonLikes = !S.authed && _getAnonLikes().length > 0;
+    document.getElementById('contactsDot').classList.toggle('on', hasAnonLikes);
+}
+
+// ── Feedback modal ────────────────────────────────────────────────────────────
+const $fbBackdrop = document.getElementById('fbBackdrop');
+
+function showFeedback() { $fbBackdrop.classList.add('open'); }
+function hideFeedback() { $fbBackdrop.classList.remove('open'); }
+
+$fbBackdrop.addEventListener('click', e => {
+    if (e.target === $fbBackdrop) hideFeedback();
+});
+
+async function submitFeedback() {
+    const msg = document.getElementById('fbText').value.trim();
+    if (!msg) { toast(CURRENT_LANG === 'en' ? 'Please write a comment first' : 'Escribe un comentario primero'); return; }
+    const btn = document.getElementById('fbSubmitBtn');
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/swipe/feedback', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg, anon_id: getAnonId() })
+        });
+        if (res.ok) {
+            toast(t('fbSent'));
+            document.getElementById('fbText').value = '';
+            setTimeout(hideFeedback, 400);
+        } else {
+            toast(CURRENT_LANG === 'en' ? 'Error sending, try again' : 'Error al enviar, intenta de nuevo');
+        }
+    } catch (e) {
+        toast(CURRENT_LANG === 'en' ? 'Connection error' : 'Error de conexión');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadFilters();   // restore saved filters before first render
+applyLang();
+syncContactsBtn();
+renderChips();
+fetchFeed();
+</script>
 </body>
 </html>

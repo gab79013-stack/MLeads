@@ -18,7 +18,10 @@ DB_PATH = os.getenv("DB_PATH", "data/leads.db")
 
 def init_web_db():
     """Initialize web dashboard schema (runs once on app startup)."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA synchronous=NORMAL")
     c = conn.cursor()
 
     # ─────────────────────────────────────────────────────
@@ -49,6 +52,16 @@ def init_web_db():
         ("oauth_provider", "ALTER TABLE users ADD COLUMN oauth_provider TEXT"),
         ("oauth_sub",      "ALTER TABLE users ADD COLUMN oauth_sub TEXT"),
         ("avatar_url",     "ALTER TABLE users ADD COLUMN avatar_url TEXT"),
+    ]:
+        try:
+            c.execute(f"SELECT {col} FROM users LIMIT 1")
+        except sqlite3.OperationalError:
+            c.execute(ddl)
+
+    # Migration: add paid-tier fields
+    for col, ddl in [
+        ("is_paid",    "ALTER TABLE users ADD COLUMN is_paid BOOLEAN DEFAULT 0"),
+        ("paid_since", "ALTER TABLE users ADD COLUMN paid_since TIMESTAMP"),
     ]:
         try:
             c.execute(f"SELECT {col} FROM users LIMIT 1")
@@ -272,6 +285,24 @@ def init_web_db():
         )
     """)
 
+    # Migration: ensure scheduled_inspections has all needed columns
+    for col, ddl in [
+        ("inspector_name", "ALTER TABLE scheduled_inspections ADD COLUMN inspector_name TEXT"),
+        ("inspector_id", "ALTER TABLE scheduled_inspections ADD COLUMN inspector_id TEXT"),
+        ("time_window_start", "ALTER TABLE scheduled_inspections ADD COLUMN time_window_start TEXT"),
+        ("time_window_end", "ALTER TABLE scheduled_inspections ADD COLUMN time_window_end TEXT"),
+        ("gc_presence_probability", "ALTER TABLE scheduled_inspections ADD COLUMN gc_presence_probability REAL DEFAULT 0.8"),
+        ("source_url", "ALTER TABLE scheduled_inspections ADD COLUMN source_url TEXT"),
+        ("status", "ALTER TABLE scheduled_inspections ADD COLUMN status TEXT DEFAULT 'scheduled'"),
+    ]:
+        try:
+            c.execute(f"SELECT {col} FROM scheduled_inspections LIMIT 1")
+        except:
+            try:
+                c.execute(ddl)
+            except:
+                pass
+
     # ─────────────────────────────────────────────────────
     # Consolidated Leads & Property Signals
     # ─────────────────────────────────────────────────────
@@ -293,6 +324,20 @@ def init_web_db():
         c.execute("SELECT primary_service_type FROM consolidated_leads LIMIT 1")
     except sqlite3.OperationalError:
         c.execute("ALTER TABLE consolidated_leads ADD COLUMN primary_service_type TEXT")
+
+    # Migration: add has_contact column (computed from lead_data JSON)
+    try:
+        c.execute("SELECT has_contact FROM consolidated_leads LIMIT 1")
+    except sqlite3.OperationalError:
+        c.execute("ALTER TABLE consolidated_leads ADD COLUMN has_contact INTEGER DEFAULT 0")
+        # Backfill existing rows
+        c.execute("""
+            UPDATE consolidated_leads
+            SET has_contact = CASE
+                WHEN TRIM(COALESCE(json_extract(lead_data, '$.contact_phone'), '')) != ''
+                  OR TRIM(COALESCE(json_extract(lead_data, '$.contact_email'), '')) != ''
+                THEN 1 ELSE 0 END
+        """)
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS property_signals (
@@ -534,6 +579,39 @@ def init_web_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_cities_county ON cities(county)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_cities_tier ON cities(tier_status)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_consolidated_leads_service ON consolidated_leads(primary_service_type)")
+
+    # Compound index for swipe feed queries (city + service filtered lookups)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_consolidated_leads_city_service
+        ON consolidated_leads(city, primary_service_type)
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_consolidated_leads_has_contact
+        ON consolidated_leads(has_contact)
+    """)
+
+    # ─────────────────────────────────────────────────────
+    # Beta Feedback (created here to guarantee existence at startup)
+    # ─────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS beta_feedback (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            message    TEXT NOT NULL,
+            anon_id    TEXT,
+            user_id    INTEGER,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    # Migration: add anon_id/user_id if table already exists without them
+    for col, ddl in [
+        ("anon_id", "ALTER TABLE beta_feedback ADD COLUMN anon_id TEXT"),
+        ("user_id", "ALTER TABLE beta_feedback ADD COLUMN user_id INTEGER"),
+    ]:
+        try:
+            c.execute(f"SELECT {col} FROM beta_feedback LIMIT 1")
+        except sqlite3.OperationalError:
+            c.execute(ddl)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_beta_feedback_created ON beta_feedback(created_at)")
 
     # Phase 3: Bot users
     c.execute("CREATE INDEX IF NOT EXISTS idx_bot_users_chat ON bot_users(chat_id)")
@@ -837,9 +915,12 @@ def seed_cities_and_agents():
 
 
 def get_db_connection():
-    """Get a database connection."""
-    conn = sqlite3.connect(DB_PATH)
+    """Get a database connection with WAL mode and busy timeout."""
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 

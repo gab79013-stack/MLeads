@@ -14,6 +14,8 @@ import logging
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, g, send_file
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from utils.web_db import (
     init_web_db, seed_cities_and_agents, get_db_connection,
@@ -34,7 +36,21 @@ from utils import billing
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
-CORS(app)
+
+# ─── CORS ────────────────────────────────────────────────
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+if _allowed_origins != "*":
+    CORS(app, origins=[o.strip() for o in _allowed_origins.split(",")])
+else:
+    CORS(app)
+
+# ─── Rate Limiting ────────────────────────────────────────
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=[],          # no global limit — set per-route
+    storage_uri="memory://",
+)
 
 logger = logging.getLogger("web_api")
 
@@ -113,9 +129,10 @@ def swipe_page():
             html = f.read()
     except FileNotFoundError:
         return jsonify({"error": "Swipe page not found"}), 404
-    # Inject OAuth client identifiers from environment
+    # Inject OAuth client identifiers and API keys from environment
     html = html.replace('__GOOGLE_CLIENT_ID__', os.getenv('GOOGLE_CLIENT_ID', ''))
     html = html.replace('__FACEBOOK_APP_ID__', os.getenv('FACEBOOK_APP_ID', ''))
+    html = html.replace('__GOOGLE_MAPS_API_KEY__', os.getenv('GOOGLE_MAPS_API_KEY', ''))
     return html
 
 
@@ -138,11 +155,51 @@ def catch_all(filename):
 
 @app.route('/api/health', methods=['GET'])
 def health():
-    """Health check endpoint."""
+    """Health check endpoint with full system status."""
+    now = datetime.utcnow()
+    status = "ok"
+    details = {}
+
+    # Database connectivity + lead count
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM consolidated_leads")
+        leads_count = c.fetchone()[0]
+        c.execute("""
+            SELECT COUNT(*), MAX(created_at)
+            FROM scheduled_inspections
+            WHERE inspection_date >= date('now')
+        """)
+        row = c.fetchone()
+        future_inspections = row[0]
+        last_inspection_saved = row[1]
+        conn.close()
+        details["db"] = {
+            "status": "ok",
+            "leads_count": leads_count,
+            "future_inspections": future_inspections,
+            "last_inspection_saved": last_inspection_saved,
+        }
+    except Exception as e:
+        status = "degraded"
+        details["db"] = {"status": "error", "error": str(e)}
+
+    # Scheduler status
+    try:
+        sched = get_scheduler_status()
+        details["scheduler"] = sched
+        if not sched.get("running"):
+            status = "degraded"
+    except Exception as e:
+        status = "degraded"
+        details["scheduler"] = {"status": "error", "error": str(e)}
+
     return jsonify({
-        "status": "ok",
-        "timestamp": datetime.utcnow().isoformat()
-    })
+        "status": status,
+        "timestamp": now.isoformat() + "Z",
+        **details,
+    }), 200 if status == "ok" else 503
 
 
 # ─────────────────────────────────────────────────────────
@@ -150,6 +207,7 @@ def health():
 # ─────────────────────────────────────────────────────────
 
 @app.route('/api/auth/login', methods=['POST'])
+@limiter.limit("10 per minute")
 def login():
     """Login with username and password."""
     data = request.get_json() or {}
@@ -2090,6 +2148,9 @@ def stripe_webhook():
 # Anonymous visitors can view up to this many leads before being asked
 # to log in with Google or Facebook.
 ANON_LEAD_LIMIT = int(os.getenv("SWIPE_ANON_LIMIT", "10"))
+FREE_USER_LEAD_LIMIT = int(os.getenv("SWIPE_FREE_LIMIT", "40"))
+PRO_LEAD_LIMIT = int(os.getenv("SWIPE_PRO_LIMIT", "200"))   # $29/mo tier
+# PREMIUM = is_paid flag + no limit ($99/mo)
 
 
 def _resolve_swipe_identity():
@@ -2162,19 +2223,121 @@ def _already_swiped_ids(user_id, anon_id) -> set:
     return ids
 
 
+# ── City coordinates for radius filtering ─────────────────────────────────────
+import math as _math
+
+_CITY_COORDS: dict[str, tuple[float, float]] = {
+    # California – Bay Area
+    "san francisco": (37.7749, -122.4194),
+    "oakland": (37.8044, -122.2712),
+    "berkeley": (37.8716, -122.2727),
+    "san jose": (37.3382, -121.8863),
+    "fremont": (37.5485, -121.9886),
+    "hayward": (37.6688, -122.0808),
+    "sunnyvale": (37.3688, -122.0363),
+    "santa clara": (37.3541, -121.9552),
+    "mountain view": (37.3861, -122.0839),
+    "palo alto": (37.4419, -122.1430),
+    "redwood city": (37.4852, -122.2364),
+    "san mateo": (37.5630, -122.3255),
+    "daly city": (37.6879, -122.4702),
+    "richmond": (37.9358, -122.3477),
+    "concord": (37.9780, -122.0311),
+    "vallejo": (38.1041, -122.2566),
+    "antioch": (37.9960, -121.8058),
+    "richmond ca": (37.9358, -122.3477),
+    "san leandro": (37.7249, -122.1561),
+    "livermore": (37.6819, -121.7681),
+    "pleasanton": (37.6624, -121.8747),
+    "walnut creek": (37.9101, -122.0652),
+    "san rafael": (37.9735, -122.5311),
+    "napa": (38.2975, -122.2869),
+    "santa rosa": (38.4404, -122.7141),
+    "petaluma": (38.2324, -122.6367),
+    "novato": (38.1074, -122.5697),
+    "los angeles": (34.0522, -118.2437),
+    "long beach": (33.7701, -118.1937),
+    "anaheim": (33.8366, -117.9143),
+    "santa ana": (33.7455, -117.8677),
+    "irvine": (33.6846, -117.8265),
+    "san diego": (32.7157, -117.1611),
+    "sacramento": (38.5816, -121.4944),
+    "fresno": (36.7378, -119.7871),
+    "bakersfield": (35.3733, -119.0187),
+    "stockton": (37.9577, -121.2908),
+    "modesto": (37.6391, -120.9969),
+    # Other major US cities
+    "new york": (40.7128, -74.0060),
+    "brooklyn": (40.6782, -73.9442),
+    "chicago": (41.8781, -87.6298),
+    "houston": (29.7604, -95.3698),
+    "phoenix": (33.4484, -112.0740),
+    "philadelphia": (39.9526, -75.1652),
+    "san antonio": (29.4241, -98.4936),
+    "dallas": (32.7767, -96.7970),
+    "austin": (30.2672, -97.7431),
+    "jacksonville": (30.3322, -81.6557),
+    "columbus": (39.9612, -82.9988),
+    "seattle": (47.6062, -122.3321),
+    "denver": (39.7392, -104.9903),
+    "nashville": (36.1627, -86.7816),
+    "portland": (45.5051, -122.6750),
+    "las vegas": (36.1699, -115.1398),
+    "miami": (25.7617, -80.1918),
+    "atlanta": (33.7490, -84.3880),
+    "boston": (42.3601, -71.0589),
+}
+
+
+def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Return the great-circle distance in miles between two lat/lon points."""
+    R = 3958.8  # Earth radius in miles
+    dlat = _math.radians(lat2 - lat1)
+    dlon = _math.radians(lon2 - lon1)
+    a = (_math.sin(dlat / 2) ** 2
+         + _math.cos(_math.radians(lat1))
+         * _math.cos(_math.radians(lat2))
+         * _math.sin(dlon / 2) ** 2)
+    return R * 2 * _math.asin(_math.sqrt(a))
+
+
+def _city_coords(city_name: str) -> tuple[float, float] | None:
+    """Return (lat, lon) for a city name, or None if unknown."""
+    return _CITY_COORDS.get((city_name or "").strip().lower())
+
+
+# ── Service category keyword mapping ──────────────────────────────────────────
+_SERVICE_CAT_KEYWORDS: dict[str, list[str]] = {
+    "roofing":     ["roof", "roofing", "re-roof", "reroof", "shingle", "tile roof", "torch down", "tpo"],
+    "drywall":     ["drywall", "sheetrock", "gypsum", "taping", "texturing", "wall board"],
+    "paint":       ["paint", "painting", "repaint", "painter", "stucco paint", "primer"],
+    "landscaping": ["landscap", "hardscape", "irrigation", "sprinkler", "retaining wall", "paver", "turf"],
+    "electrical":  ["electrical", "panel upgrade", "ev charger", "200 amp", "rewire", "sub panel", "wiring"],
+}
+# These map directly to primary_service_type column
+_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "energy", "rodents", "deconstruction"}
+
+
 @app.route('/api/swipe/feed', methods=['GET'])
+@limiter.limit("60 per minute")
 def swipe_feed():
     """
     Public feed of leads for the Tinder-style swipe UI.
 
     Query params:
-      - limit:    how many leads to return (default 10, max 20)
-      - anon_id:  stable client-generated id for anonymous visitors
+      - limit:         how many leads to return (default 10, max 20)
+      - anon_id:       stable client-generated id for anonymous visitors
+      - hot_only:      '1' to return only HOT leads (score >= 90)
+      - min_score:     minimum score (0-100, default 0)
+      - min_value:     minimum project value in USD (default 0)
+      - max_value:     maximum project value in USD (0 = no limit)
+      - city:          filter by city name (partial match)
+      - radius_miles:  miles radius from city (requires city param)
+      - service_cats:  comma-separated list of categories
+                       (roofing, drywall, paint, landscaping, electrical,
+                        solar, permits, construction, realestate, flood, energy)
 
-    Anonymous visitors can view up to ANON_LEAD_LIMIT leads total
-    (across the whole session). Once that budget is exhausted the
-    response includes ``auth_required: true`` and an empty ``leads``
-    array, prompting the client to show the login wall.
+    Anonymous visitors can view up to ANON_LEAD_LIMIT leads total.
     """
     user_id, anon_id = _resolve_swipe_identity()
 
@@ -2183,48 +2346,144 @@ def swipe_feed():
     except (TypeError, ValueError):
         limit = 10
 
+    # ── Filter params ──────────────────────────────────────────────────────────
+    hot_only = request.args.get("hot_only", "0") == "1"
+    try:
+        min_score = int(request.args.get("min_score", 0))
+    except (TypeError, ValueError):
+        min_score = 0
+    if hot_only:
+        min_score = max(min_score, 90)
+
+    try:
+        min_value = float(request.args.get("min_value", 0))
+    except (TypeError, ValueError):
+        min_value = 0.0
+    try:
+        max_value = float(request.args.get("max_value", 0))
+    except (TypeError, ValueError):
+        max_value = 0.0
+
+    city_filter = (request.args.get("city") or "").strip()
+    try:
+        radius_miles = float(request.args.get("radius_miles", 0))
+    except (TypeError, ValueError):
+        radius_miles = 0.0
+
+    raw_cats = (request.args.get("service_cats") or "").strip()
+    selected_cats = [c.strip().lower() for c in raw_cats.split(",") if c.strip()] if raw_cats else []
+
+    # Pre-compute origin coords for radius filtering
+    origin_coords = _city_coords(city_filter) if (city_filter and radius_miles > 0) else None
+    do_radius = origin_coords is not None or (city_filter and radius_miles > 0)
+
     already_swiped = _already_swiped_ids(user_id, anon_id)
     swipes_count = len(already_swiped)
 
     remaining = None
     if not user_id:
         if not anon_id:
-            return jsonify({
-                "error": "anon_id required for anonymous browsing",
-            }), 400
+            return jsonify({"error": "anon_id required for anonymous browsing"}), 400
 
         remaining = max(ANON_LEAD_LIMIT - swipes_count, 0)
         if remaining == 0:
             return jsonify({
-                "leads": [],
+                "leads":        [],
                 "auth_required": True,
-                "anon_limit": ANON_LEAD_LIMIT,
+                "auth_mode":    "register",
+                "anon_limit":   ANON_LEAD_LIMIT,
                 "swipes_count": swipes_count,
-                "remaining": 0,
+                "remaining":    0,
             }), 200
         limit = min(limit, remaining)
+    else:
+        # Check free-tier quota for authenticated non-paid users
+        conn2 = get_db_connection()
+        c2 = conn2.cursor()
+        c2.execute("SELECT COALESCE(is_paid, 0) FROM users WHERE id = ?", (user_id,))
+        row2 = c2.fetchone()
+        conn2.close()
+        is_paid = bool(row2 and row2[0])
+        if not is_paid and swipes_count >= FREE_USER_LEAD_LIMIT:
+            return jsonify({
+                "leads":        [],
+                "auth_required": True,
+                "auth_mode":    "upgrade",
+                "free_limit":   FREE_USER_LEAD_LIMIT,
+                "swipes_count": swipes_count,
+                "remaining":    0,
+            }), 200
 
     conn = get_db_connection()
     c = conn.cursor()
 
+    # ── Build WHERE clause ─────────────────────────────────────────────────────
+    conditions: list[str] = []
+    params: list = []
+
     if already_swiped:
         placeholders = ",".join("?" * len(already_swiped))
-        c.execute(f"""
-            SELECT address_key, address, city, agent_sources, lead_data,
-                   primary_service_type, first_seen
-            FROM consolidated_leads
-            WHERE address_key NOT IN ({placeholders})
-            ORDER BY last_updated DESC
-            LIMIT ?
-        """, list(already_swiped) + [limit])
-    else:
-        c.execute("""
-            SELECT address_key, address, city, agent_sources, lead_data,
-                   primary_service_type, first_seen
-            FROM consolidated_leads
-            ORDER BY last_updated DESC
-            LIMIT ?
-        """, (limit,))
+        conditions.append(f"address_key NOT IN ({placeholders})")
+        params.extend(already_swiped)
+
+    if min_score > 0:
+        conditions.append(
+            "CAST(json_extract(lead_data, '$._scoring.score') AS INTEGER) >= ?"
+        )
+        params.append(min_score)
+
+    if min_value > 0:
+        conditions.append(
+            "CAST(COALESCE(json_extract(lead_data, '$.value_float'), 0) AS REAL) >= ?"
+        )
+        params.append(min_value)
+
+    if max_value > 0:
+        conditions.append(
+            "CAST(COALESCE(json_extract(lead_data, '$.value_float'), 0) AS REAL) <= ?"
+        )
+        params.append(max_value)
+
+    # Contact info filter — PERMANENT POLICY: only show leads with phone or email
+    # Uses the pre-computed has_contact column for index performance
+    conditions.append("has_contact = 1")
+
+    # City filter: without radius → simple LIKE; with radius → post-process
+    if city_filter and not do_radius:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+
+    # ── Service category filter ────────────────────────────────────────────────
+    if selected_cats:
+        cat_parts: list[str] = []
+        for cat in selected_cats:
+            if cat in _SERVICE_CAT_KEYWORDS:
+                kws = _SERVICE_CAT_KEYWORDS[cat]
+                kw_sql = " OR ".join(["LOWER(lead_data) LIKE ?" for _ in kws])
+                cat_parts.append(f"({kw_sql})")
+                params.extend(f"%{k}%" for k in kws)
+            elif cat in _SERVICE_TYPE_CATS:
+                cat_parts.append("primary_service_type = ?")
+                params.append(cat)
+        if cat_parts:
+            conditions.append("(" + " OR ".join(cat_parts) + ")")
+
+    where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    # Fetch extra rows when radius filtering (post-process will trim)
+    fetch_limit = limit * 10 if do_radius else limit
+
+    query = f"""
+        SELECT address_key, address, city, agent_sources, lead_data,
+               primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY CAST(json_extract(lead_data, '$._scoring.score') AS INTEGER) DESC,
+                 last_updated DESC
+        LIMIT ?
+    """
+    params.append(fetch_limit)
+    c.execute(query, params)
 
     rows = c.fetchall()
 
@@ -2232,6 +2491,31 @@ def swipe_feed():
     service_types_map = {
         row[0]: {"label": row[1], "emoji": row[2]} for row in c.fetchall()
     }
+
+    # ── Batch-fetch upcoming scheduled inspections for all addresses ──────────
+    all_addresses = [dict(r).get("address") for r in rows if dict(r).get("address")]
+    insp_map: dict = {}
+    if all_addresses:
+        try:
+            ph = ",".join("?" * len(all_addresses))
+            c.execute(f"""
+                SELECT si.address, si.inspection_date, si.inspection_type,
+                       si.inspector_name, si.time_window_start, si.time_window_end,
+                       si.gc_presence_probability
+                FROM scheduled_inspections si
+                INNER JOIN (
+                    SELECT address, MIN(inspection_date) AS min_date
+                    FROM scheduled_inspections
+                    WHERE inspection_date >= date('now') AND address IN ({ph})
+                    GROUP BY address
+                ) best ON si.address = best.address AND si.inspection_date = best.min_date
+            """, all_addresses)
+            for r in c.fetchall():
+                rd = dict(r)
+                insp_map[rd["address"]] = rd
+        except Exception as ie:
+            logger.debug(f"Inspection batch lookup failed: {ie}")
+
     conn.close()
 
     leads = []
@@ -2242,6 +2526,36 @@ def swipe_feed():
         except Exception:
             lead_data = {}
 
+        # ── Radius filter (post-process) ───────────────────────────────────────
+        if do_radius and radius_miles > 0:
+            # Prefer actual lat/lon stored in lead_data
+            lead_lat = lead_data.get("lat")
+            lead_lon = lead_data.get("lon")
+            if lead_lat and lead_lon:
+                try:
+                    ref = origin_coords or _city_coords(city_filter)
+                    if ref:
+                        dist = _haversine_miles(ref[0], ref[1], float(lead_lat), float(lead_lon))
+                        if dist > radius_miles:
+                            continue
+                except (TypeError, ValueError):
+                    pass
+            else:
+                # Fall back to city-name lookup
+                lead_city_coords = _city_coords(row_dict.get("city", ""))
+                if lead_city_coords and origin_coords:
+                    dist = _haversine_miles(
+                        origin_coords[0], origin_coords[1],
+                        lead_city_coords[0], lead_city_coords[1],
+                    )
+                    if dist > radius_miles:
+                        continue
+                elif city_filter:
+                    # Unknown city — include only if city name matches
+                    lead_city = (row_dict.get("city") or "").lower()
+                    if city_filter.lower() not in lead_city:
+                        continue
+
         scoring = lead_data.get("_scoring", {}) or {}
         service_type = (
             row_dict.get("primary_service_type")
@@ -2250,28 +2564,90 @@ def swipe_feed():
         )
         service_info = service_types_map.get(service_type, {})
 
+        desc = (lead_data.get("description") or lead_data.get("desc") or "")[:300]
+        phone = (lead_data.get("contact_phone") or "").strip()
+        email = (lead_data.get("contact_email") or "").strip()
+        contractor = (lead_data.get("contractor") or "").strip()
+        owner = (lead_data.get("owner") or "").strip()
+        permit_type = (lead_data.get("permit_type") or "").strip()
+        issued_date = (lead_data.get("issued_date") or lead_data.get("issue_date") or "").strip()[:10]
+        lic_number  = (lead_data.get("lic_number") or lead_data.get("license") or "").strip()
+        permit_id   = (lead_data.get("permit_id") or lead_data.get("id") or "").strip()
+
+        # Inspection data: prefer calendar table, fall back to lead_data predictor
+        insp = insp_map.get(row_dict.get("address"), {})
+        inspection_date = (
+            insp.get("inspection_date")
+            or lead_data.get("next_scheduled_inspection_date")
+            or ""
+        )
+        if inspection_date:
+            inspection_date = str(inspection_date).strip()[:10]
+        inspection_type   = (insp.get("inspection_type") or lead_data.get("next_inspection_type") or "").strip()
+        inspector_name    = (insp.get("inspector_name") or "").strip()
+        tw_start          = (insp.get("time_window_start") or "").strip()
+        tw_end            = (insp.get("time_window_end") or "").strip()
+        time_window       = f"{tw_start} – {tw_end}" if tw_start and tw_end else tw_start or tw_end
+        inspection_source = (lead_data.get("inspection_source") or "").strip()
+        gc_probability    = insp.get("gc_presence_probability") or lead_data.get("_gc_presence_probability") or 0
+
         leads.append({
-            "id":            row_dict["address_key"],
-            "address":       row_dict["address"],
-            "city":          row_dict["city"],
-            "description":   (lead_data.get("description") or "")[:240],
-            "value":         lead_data.get("value_float") or 0,
-            "score":         scoring.get("score", 0),
-            "grade":         scoring.get("grade", ""),
-            "grade_emoji":   scoring.get("grade_emoji", ""),
-            "reasons":       scoring.get("reasons", [])[:3],
-            "service_type":  service_type,
-            "service_label": service_info.get("label", ""),
-            "service_emoji": service_info.get("emoji", ""),
-            "contractor":    lead_data.get("contractor", ""),
-            "created_at":    row_dict.get("first_seen", ""),
+            "id":               row_dict["address_key"],
+            "address":          row_dict["address"],
+            "city":             row_dict["city"],
+            "description":      desc,
+            "value":            lead_data.get("value_float") or 0,
+            "score":            scoring.get("score", 0),
+            "grade":            scoring.get("grade", ""),
+            "grade_emoji":      scoring.get("grade_emoji", ""),
+            "reasons":          scoring.get("reasons", [])[:4],
+            "service_type":     service_type,
+            "service_label":    service_info.get("label", ""),
+            "service_emoji":    service_info.get("emoji", ""),
+            "contractor":       contractor,
+            "owner":            owner,
+            "phone":            phone,
+            "email":            email,
+            "permit_type":      permit_type,
+            "issued_date":      issued_date,
+            "lic_number":       lic_number,
+            "permit_id":        permit_id,
+            "inspection_date":  inspection_date,
+            "inspection_type":  inspection_type,
+            "inspector_name":   inspector_name,
+            "time_window":      time_window,
+            "inspection_source":inspection_source,
+            "gc_probability":   round(float(gc_probability or 0), 2),
+            "created_at":       row_dict.get("first_seen", ""),
         })
+
+        if len(leads) >= limit:
+            break
+
+    # Smart sort: leads with imminent inspections get priority over raw score
+    from datetime import date as _date
+    _today = _date.today()
+    def _sort_key(ld):
+        insp = ld.get("inspection_date", "")
+        urgency = 0
+        if insp:
+            try:
+                days = (_date.fromisoformat(insp[:10]) - _today).days
+                if 0 <= days <= 1:   urgency = 300
+                elif days <= 3:      urgency = 200
+                elif days <= 7:      urgency = 100
+            except Exception:
+                pass
+        return -(int(ld.get("score", 0)) + urgency)
+    leads.sort(key=_sort_key)
 
     response = {
         "leads":         leads,
         "auth_required": False,
         "anon_limit":    ANON_LEAD_LIMIT,
+        "free_limit":    FREE_USER_LEAD_LIMIT,
         "swipes_count":  swipes_count,
+        "is_paid":       locals().get('is_paid', False) if user_id else None,
     }
     if remaining is not None:
         response["remaining"] = remaining
@@ -2279,6 +2655,7 @@ def swipe_feed():
 
 
 @app.route('/api/swipe/action', methods=['POST'])
+@limiter.limit("30 per minute")
 def swipe_action():
     """
     Record a like/dislike swipe.
@@ -2305,9 +2682,28 @@ def swipe_action():
             return jsonify({
                 "ok": False,
                 "auth_required": True,
+                "auth_mode":    "register",
                 "anon_limit": ANON_LEAD_LIMIT,
                 "swipes_count": current,
                 "remaining": 0,
+            }), 200
+    else:
+        # Check free-tier quota for authenticated non-paid users
+        _conn = get_db_connection()
+        _c = _conn.cursor()
+        _c.execute("SELECT COALESCE(is_paid, 0) FROM users WHERE id = ?", (user_id,))
+        _row = _c.fetchone()
+        _conn.close()
+        _is_paid = bool(_row and _row[0])
+        _current = _count_swipes(user_id, None)
+        if not _is_paid and _current >= FREE_USER_LEAD_LIMIT:
+            return jsonify({
+                "ok": False,
+                "auth_required": True,
+                "auth_mode":    "upgrade",
+                "free_limit":   FREE_USER_LEAD_LIMIT,
+                "swipes_count": _current,
+                "remaining":    0,
             }), 200
 
     conn = get_db_connection()
@@ -2317,6 +2713,15 @@ def swipe_action():
             INSERT INTO swipe_actions (user_id, anon_id, lead_id, action)
             VALUES (?, ?, ?, ?)
         """, (user_id, anon_id, lead_id, action))
+        # If an authenticated user liked the lead, also log it as a contact
+        if action == 'like' and user_id:
+            try:
+                c.execute("""
+                    INSERT OR IGNORE INTO lead_contacts (user_id, lead_id, contact_type, notes)
+                    VALUES (?, ?, 'swipe_like', '')
+                """, (user_id, lead_id))
+            except Exception as log_err:
+                logger.debug(f"lead_contacts log failed: {log_err}")
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -2338,6 +2743,32 @@ def swipe_action():
         "anon_limit":    ANON_LEAD_LIMIT,
         "swipes_count":  swipes_count,
         "remaining":     remaining,
+    }), 200
+
+
+@app.route('/api/swipe/upgrade-info', methods=['GET'])
+def swipe_upgrade_info():
+    """Return current user's quota status."""
+    user_id, _ = _resolve_swipe_identity()
+    if not user_id:
+        return jsonify({"anon": True, "limit": ANON_LEAD_LIMIT}), 200
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT COALESCE(is_paid, 0) FROM users WHERE id = ?", (user_id,))
+    row = c.fetchone()
+    conn.close()
+    is_paid = bool(row and row[0])
+    swipes = _count_swipes(user_id, None)
+    return jsonify({
+        "is_paid":     is_paid,
+        "swipes":      swipes,
+        "free_limit":  FREE_USER_LEAD_LIMIT,
+        "pro_limit":   PRO_LEAD_LIMIT,
+        "remaining":   None if is_paid else max(FREE_USER_LEAD_LIMIT - swipes, 0),
+        "tiers": [
+            {"id": "pro",     "price": 29,  "limit": PRO_LEAD_LIMIT, "label": "Pro"},
+            {"id": "premium", "price": 99,  "limit": None,           "label": "Premium"},
+        ],
     }), 200
 
 
@@ -2571,12 +3002,166 @@ def swipe_claim_anon():
     return jsonify({"ok": True, "migrated": migrated}), 200
 
 
+@app.route('/api/swipe/cities', methods=['GET'])
+def swipe_cities():
+    """Return a list of known city names for autocomplete (no auth required)."""
+    q = (request.args.get('q') or '').strip().lower()
+    cities = sorted(_CITY_COORDS.keys())
+    if q:
+        # Prefix matches first, then contains matches
+        prefix = [c for c in cities if c.startswith(q)]
+        contains = [c for c in cities if q in c and not c.startswith(q)]
+        cities = (prefix + contains)[:20]
+    else:
+        cities = cities[:40]
+    return jsonify([c.title() for c in cities]), 200
+
+
+@app.route('/api/swipe/feedback', methods=['POST'])
+@limiter.limit("5 per minute")
+def swipe_feedback():
+    """Store beta feedback from users (no auth required)."""
+    data = request.get_json(silent=True) or {}
+    message = (data.get('message') or '').strip()[:2000]
+    if not message:
+        return jsonify({"error": "message required"}), 400
+    anon_id = (data.get('anon_id') or '').strip()[:64] or None
+    user_id, _ = _resolve_swipe_identity()
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute(
+            "INSERT INTO beta_feedback (message, anon_id, user_id) VALUES (?, ?, ?)",
+            (message, anon_id, user_id)
+        )
+        conn.commit()
+    except Exception as e:
+        logger.warning(f"beta_feedback insert failed: {e}")
+        conn.close()
+        return jsonify({"error": "failed to save feedback"}), 500
+    conn.close()
+    return jsonify({"ok": True}), 200
+
+
+@app.route('/api/swipe/my-contacts', methods=['GET'])
+def swipe_my_contacts():
+    """Return leads the authenticated user has swiped right on (liked)."""
+    user_id, _ = _resolve_swipe_identity()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT sa.lead_id, MAX(sa.created_at) as contacted_at,
+               cl.address, cl.city, cl.lead_data
+        FROM swipe_actions sa
+        JOIN consolidated_leads cl ON cl.address_key = sa.lead_id
+        WHERE sa.user_id = ? AND sa.action = 'like'
+        GROUP BY sa.lead_id
+        ORDER BY contacted_at DESC
+        LIMIT 100
+    """, (user_id,))
+    rows = c.fetchall()
+    conn.close()
+
+    contacts = []
+    for row in rows:
+        rd = dict(row)
+        try:
+            ld = json.loads(rd.get('lead_data') or '{}')
+        except Exception:
+            ld = {}
+        scoring = ld.get('_scoring', {}) or {}
+        contacts.append({
+            'id':           rd['lead_id'],
+            'address':      rd['address'],
+            'city':         rd['city'],
+            'contacted_at': rd['contacted_at'],
+            'score':        scoring.get('score', 0),
+            'grade':        scoring.get('grade', ''),
+            'phone':        (ld.get('contact_phone') or '').strip(),
+            'email':        (ld.get('contact_email') or '').strip(),
+            'value':        ld.get('value_float', 0),
+        })
+    return jsonify({'contacts': contacts}), 200
+
+
+@app.route('/api/swipe/log-contact', methods=['POST'])
+def swipe_log_contact():
+    """Log that an authenticated user clicked a phone/email contact on a lead."""
+    user_id, _ = _resolve_swipe_identity()
+    if not user_id:
+        return jsonify({"ok": False}), 200  # silently ignore anon
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get('lead_id') or '').strip()
+    contact_type = data.get('contact_type', 'phone')
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            INSERT OR IGNORE INTO lead_contacts (user_id, lead_id, contact_type, notes)
+            VALUES (?, ?, ?, '')
+        """, (user_id, lead_id, contact_type))
+        conn.commit()
+    except Exception as e:
+        logger.debug(f"swipe_log_contact failed: {e}")
+    conn.close()
+    return jsonify({"ok": True}), 200
+
+
+@app.route('/api/admin/feedback', methods=['GET'])
+@require_admin
+def list_feedback():
+    """List all beta feedback (admin only)."""
+    user_id = g.user_id
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+    offset = (page - 1) * per_page
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT COUNT(*) FROM beta_feedback")
+        total = c.fetchone()[0]
+        c.execute("""
+            SELECT id, message, anon_id, user_id, created_at
+            FROM beta_feedback ORDER BY created_at DESC LIMIT ? OFFSET ?
+        """, (per_page, offset))
+        rows = [dict(r) for r in c.fetchall()]
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+    conn.close()
+    return jsonify({"feedback": rows, "total": total, "page": page, "pages": (total + per_page - 1) // per_page}), 200
+
+
+@app.route('/api/admin/feedback/<int:fb_id>', methods=['DELETE'])
+@require_admin
+def delete_feedback(fb_id):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM beta_feedback WHERE id = ?", (fb_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True}), 200
+
+
 # ─────────────────────────────────────────────────────────
 # App Initialization
 # ─────────────────────────────────────────────────────────
 
 def create_app():
     """Application factory."""
+    # Validate required secrets before accepting traffic
+    jwt_secret = os.getenv("JWT_SECRET", "")
+    if not jwt_secret:
+        raise RuntimeError(
+            "JWT_SECRET environment variable is not set. "
+            "Set it to a long random string before starting the server."
+        )
+
     init_web_db()
     seed_cities_and_agents()
 

@@ -1106,6 +1106,10 @@
                     <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="2" y="8" width="20" height="14" rx="2"/><path d="M6 16h0"/><path d="M18 16h0"/><path d="M9 20v-4h6v4"/></svg></span>
                     <span class="nav-label">Bot Users</span>
                 </button>
+                <button class="nav-item" data-view="feedback">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    Feedback
+                </button>
                 <button class="nav-item" data-view="settings">
                     <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
                     <span class="nav-label">Settings</span>
@@ -1418,6 +1422,23 @@
                     </div>
                 </div>
 
+                <!-- Feedback View -->
+                <div class="view" id="feedback-view">
+                    <div class="page-header">
+                        <h1>💬 Feedback de Usuarios (BETA)</h1>
+                        <button class="btn btn-primary" onclick="loadFeedback()">🔄 Recargar</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Comentarios recibidos</h3>
+                            <span id="feedbackCount" style="font-size:12px;color:#6b7280"></span>
+                        </div>
+                        <div id="feedbackList" style="display:flex;flex-direction:column;gap:10px;padding:16px">
+                            <p style="color:#6b7280">Cargando...</p>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -1608,7 +1629,8 @@
             users: 'Users',
             inspections: 'Inspections',
             bot: 'Bot Users',
-            settings: 'Settings'
+            settings: 'Settings',
+            feedback: 'Feedback'
         };
 
         // ── Sidebar toggle ──
@@ -1634,6 +1656,7 @@
                 if (viewName === 'inspections') loadInspections();
                 if (viewName === 'bot') loadBotUsers();
                 if (viewName === 'settings') loadSettings();
+                if (viewName === 'feedback') loadFeedback();
             });
         });
 
@@ -2367,6 +2390,37 @@
                 if (response.ok) alert('Settings saved successfully!');
                 else alert('Failed to save settings');
             } catch (e) { alert('Error saving settings'); }
+        }
+
+        async function loadFeedback() {
+            const list = document.getElementById('feedbackList');
+            list.innerHTML = '<p style="color:#6b7280">Cargando...</p>';
+            try {
+                const resp = await fetch('/api/admin/feedback?page=1', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
+                const data = await resp.json();
+                document.getElementById('feedbackCount').textContent = `${data.total} comentarios`;
+                if (!data.feedback.length) {
+                    list.innerHTML = '<p style="color:#6b7280">No hay comentarios aún.</p>';
+                    return;
+                }
+                list.innerHTML = data.feedback.map(fb => `
+                    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px;position:relative">
+                        <div style="font-size:12px;color:#9ca3af;margin-bottom:6px">${fb.created_at}</div>
+                        <div style="font-size:14px;color:#111827;line-height:1.5;white-space:pre-wrap">${escHtml(fb.message)}</div>
+                        <button onclick="deleteFeedback(${fb.id})" style="position:absolute;top:10px;right:10px;background:none;border:none;color:#ef4444;cursor:pointer;font-size:18px" title="Eliminar">×</button>
+                    </div>
+                `).join('');
+            } catch(e) {
+                list.innerHTML = '<p style="color:#ef4444">Error al cargar feedback.</p>';
+            }
+        }
+        async function deleteFeedback(id) {
+            if (!confirm('¿Eliminar este comentario?')) return;
+            await fetch(`/api/admin/feedback/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
+            loadFeedback();
+        }
+        function escHtml(s) {
+            return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         }
 
         // ── Settings event listeners ──
