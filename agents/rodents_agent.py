@@ -1561,8 +1561,9 @@ def _attom_property_lookup(address: str, city: str = "") -> dict:
             "sqft":           building.get("livingsize", 0),
             "bedrooms":       building.get("bedrooms", 0),
             "bathrooms":      building.get("bathstotal", 0),
-            # Score de necesidad de insulación basado en antigüedad
-            "insulation_need": (
+            # Score de necesidad de renovación basado en antigüedad
+            # (roofing / paint / electrical / drywall)
+            "renovation_need": (
                 "🔴 CRÍTICA" if age > 50 else
                 "🟠 ALTA" if age > 30 else
                 "🟡 MEDIA" if age > 15 else
@@ -1784,7 +1785,7 @@ class RodentsAgent(BaseAgent):
                                 lead["assessed_value"]   = prop.get("assessed_value")
                                 lead["property_type"]    = prop.get("property_type")
                                 lead["sqft"]             = prop.get("sqft")
-                                lead["insulation_need"]  = prop.get("insulation_need")
+                                lead["renovation_need"]  = prop.get("renovation_need")
                                 # Si ATTOM tiene propietario y no tenemos contacto
                                 if prop.get("owner_name") and not lead.get("contact_name"):
                                     lead["owner_name"] = prop["owner_name"]
@@ -1908,8 +1909,8 @@ class RodentsAgent(BaseAgent):
         # Datos de propiedad (ATTOM)
         if lead.get("property_age"):
             fields["🏗️ Antigüedad"] = f"{lead['property_age']} años (construida {lead.get('year_built', '?')})"
-        if lead.get("insulation_need"):
-            fields["🧱 Necesidad Insulación"] = lead["insulation_need"]
+        if lead.get("renovation_need"):
+            fields["🔨 Necesidad Renovación"] = lead["renovation_need"]
         if lead.get("assessed_value"):
             fields["💰 Valor Tasado"] = f"${lead['assessed_value']:,}"
         if lead.get("sqft"):

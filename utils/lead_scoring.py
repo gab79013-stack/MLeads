@@ -3,8 +3,11 @@ utils/lead_scoring.py
 ━━━━━━━━━━━━━━━━━━━━━
 Motor de Lead Scoring — prioriza leads por probabilidad de conversión.
 
-Score = f(valor_proyecto, antigüedad_zona, tipo_proyecto, potencial_solar,
-          severidad_plaga, datos_contacto, demografía)
+Enfoque en 5 servicios clave:
+  Roofing, Drywall, Paint, Landscaping, Electrical
+
+Score = f(valor_proyecto, tipo_proyecto, datos_contacto, recencia,
+          demografía, fuente, señales_servicio, inspección_próxima)
 
 Escala: 0-100
   90-100: 🔥 HOT    — contactar de inmediato
@@ -29,29 +32,43 @@ _WEIGHTS = {
     "recency":          15,   # Qué tan reciente es el lead
     "geography":        10,   # Zona demográfica favorable
     "source_type":      10,   # Fuente del lead (permit > solar > rodent > etc.)
-    "insulation_signal": 10,  # Señales directas de necesidad de insulación
-    "inspection_timing":  8,  # Próxima inspección programada (nuevo)
+    "service_signal":   10,   # Señales directas de los 5 servicios target
+    "inspection_timing": 8,   # Próxima inspección programada
 }
 
 
-# ── Keywords de alta intención ───────────────────────────────────────
+# ── Keywords de alta intención (servicios target) ────────────────────
+# Roofing, Drywall, Paint, Landscaping, Electrical
 
 _HIGH_INTENT_KEYWORDS = [
-    "insulation", "insulate", "weatherization", "energy retrofit",
-    "energy upgrade", "attic", "crawlspace", "crawl space",
-    "air sealing", "thermal barrier", "r-value", "fiberglass",
-    "spray foam", "blown-in", "cellulose insulation",
+    # Roofing
+    "roof", "roofing", "re-roof", "reroof", "roof replacement",
+    "shingle", "shingles", "tile roof", "flat roof", "torch down",
+    # Drywall
+    "drywall", "sheetrock", "gypsum board", "wall board",
+    "taping", "texturing", "patch drywall",
+    # Paint
+    "paint", "painting", "repaint", "exterior paint", "interior paint",
+    "painter", "primer", "stucco paint",
+    # Landscaping
+    "landscaping", "landscape", "hardscape", "irrigation",
+    "sprinkler system", "sod", "retaining wall", "paver",
+    "artificial turf", "drought tolerant",
+    # Electrical
+    "electrical", "electric", "panel upgrade", "service upgrade",
+    "200 amp", "rewire", "wiring", "ev charger", "sub panel",
+    "main panel", "electrical panel",
 ]
 
 _MEDIUM_INTENT_KEYWORDS = [
     "adu", "accessory dwelling", "addition", "new construction",
-    "remodel", "renovation", "garage conversion", "hvac",
-    "solar", "photovoltaic", "roofing", "re-roof",
+    "remodel", "renovation", "garage conversion", "tenant improvement",
+    "single family", "residential", "kitchen remodel", "bath remodel",
 ]
 
 _LOW_INTENT_KEYWORDS = [
     "demolition", "swimming pool", "fence", "sign",
-    "electrical panel", "plumbing", "fire sprinkler",
+    "plumbing", "fire sprinkler", "solar", "photovoltaic", "hvac",
 ]
 
 
@@ -87,10 +104,10 @@ def score_lead(lead: dict) -> dict:
 
     if any(kw in desc for kw in _HIGH_INTENT_KEYWORDS):
         total += 15
-        reasons.append("Mención directa de insulación/energía")
+        reasons.append("Servicio target (roofing/drywall/paint/landscape/electrical)")
     elif any(kw in desc for kw in _MEDIUM_INTENT_KEYWORDS):
         total += 10
-        reasons.append("Proyecto relacionado (ADU/solar/remodelación)")
+        reasons.append("Proyecto relacionado (ADU/remodelación/construcción)")
     elif any(kw in desc for kw in _LOW_INTENT_KEYWORDS):
         total += 3
     else:
@@ -141,7 +158,7 @@ def score_lead(lead: dict) -> dict:
             total += 5  # fecha no parseable, asumir reciente
 
     # ── 5. Geografía (0-10 pts) ──────────────────────────────────
-    # Zonas con casas más antiguas = más demanda de insulación
+    # Zonas con casas antiguas y alto volumen de remodelación
     city = (lead.get("city") or "").lower()
     _high_demand_cities = {
         # Tier 1 — casas antiguas, alta densidad, alta demanda
@@ -185,24 +202,35 @@ def score_lead(lead: dict) -> dict:
     }
     total += _source_scores.get(agent_key, 5)
 
-    # ── 7. Señales de insulación (0-10 pts) ──────────────────────
-    insulation_signals = 0
-    pest_type = lead.get("pest_type", "")
-    if pest_type in ("rodent", "termite"):
-        insulation_signals += 8
-        reasons.append(f"Plaga ({pest_type}) = daño a insulación")
-    elif pest_type in ("wildlife",):
-        insulation_signals += 6
+    # ── 7. Señales de servicio target (0-10 pts) ─────────────────
+    # Detecta menciones explícitas a Roofing / Drywall / Paint /
+    # Landscaping / Electrical en campos específicos del lead.
+    service_signals = 0
+    service_type = (lead.get("service_type") or
+                    lead.get("trade") or
+                    lead.get("category") or "").lower()
 
-    if lead.get("solar_potential"):
-        insulation_signals += 4
-        reasons.append("Zona con alto potencial solar")
+    target_services = {
+        "roof": 10, "roofing": 10, "reroof": 10,
+        "drywall": 10, "sheetrock": 10,
+        "paint": 9, "painting": 9, "painter": 9,
+        "landscape": 9, "landscaping": 9, "irrigation": 8,
+        "electrical": 10, "electric": 9,
+    }
+    for key, pts in target_services.items():
+        if key in service_type:
+            service_signals = max(service_signals, pts)
+            reasons.append(f"Servicio target: {key}")
+            break
 
-    if lead.get("energy_score") and lead["energy_score"] < 50:
-        insulation_signals += 6
-        reasons.append("Baja eficiencia energética en la zona")
+    # Permits con trabajo estructural o envolvente suelen derivar
+    # en roofing/drywall/paint
+    if "reroof" in desc or "re-roof" in desc or "roof replace" in desc:
+        service_signals = max(service_signals, 10)
+    if "panel upgrade" in desc or "service upgrade" in desc:
+        service_signals = max(service_signals, 9)
 
-    total += min(insulation_signals, 10)
+    total += min(service_signals, 10)
 
     # ── 8. Inspección próxima (0-8 pts) ──────────────────────────────
     # Leads con inspecciones próximas merecen prioridad (GC en sitio)

@@ -36,47 +36,75 @@ SUBSCRIPTION_PRICE_USD = float(os.getenv("BOT_PRICE_USD", "99"))
 
 # Services the user can subscribe to. Keys align with agent_key values
 # so we can filter leads purely by matching against this list.
+# The 5 target services appear first; auxiliary sources follow.
 AVAILABLE_SERVICES = [
+    ("roofing", "🏠 Roofing"),
+    ("drywall", "🧱 Drywall"),
+    ("paint", "🎨 Paint"),
+    ("landscaping", "🌳 Landscaping"),
+    ("electrical", "⚡ Electrical"),
     ("permits", "🏗️ Building Permits"),
-    ("solar", "☀️ Solar"),
-    ("energy", "⚡ Energy Efficiency"),
     ("construction", "👷 Construction"),
-    ("deconstruction", "💥 Demolition"),
     ("realestate", "🏠 Real Estate"),
+    ("deconstruction", "💥 Demolition"),
     ("flood", "💧 Water Damage"),
     ("rodents", "🐭 Pest Control"),
+    ("solar", "☀️ Solar"),
 ]
 
 # Keyword → service_key mapping used by the lead filter so we also catch
-# leads tagged as "framing", "paint", "roofing", etc.  (user request).
+# leads tagged as "framing", "paint", "roofing", etc.
 KEYWORD_SERVICE_MAP = {
+    # Roofing
+    "roof": "roofing",
+    "roofing": "roofing",
+    "reroof": "roofing",
+    "re-roof": "roofing",
+    "shingle": "roofing",
+    "shingles": "roofing",
+    # Drywall
+    "drywall": "drywall",
+    "sheetrock": "drywall",
+    "gypsum": "drywall",
+    # Paint
+    "paint": "paint",
+    "painter": "paint",
+    "painting": "paint",
+    "repaint": "paint",
+    # Landscaping
+    "landscape": "landscaping",
+    "landscaping": "landscaping",
+    "irrigation": "landscaping",
+    "sprinkler": "landscaping",
+    "hardscape": "landscaping",
+    "sod": "landscaping",
+    # Electrical
+    "electrical": "electrical",
+    "electric": "electrical",
+    "panel upgrade": "electrical",
+    "service upgrade": "electrical",
+    "rewire": "electrical",
+    "wiring": "electrical",
+    "ev charger": "electrical",
+    # Construction (generic fall-through)
     "framing": "construction",
     "framer": "construction",
     "carpenter": "construction",
     "carpentry": "construction",
-    "drywall": "construction",
-    "paint": "construction",
-    "painter": "construction",
-    "painting": "construction",
-    "roof": "construction",
-    "roofing": "construction",
-    "solar": "solar",
-    "pv": "solar",
-    "photovoltaic": "solar",
     "permit": "permits",
-    "insulation": "energy",
-    "hvac": "energy",
-    "energy": "energy",
     "demolition": "deconstruction",
     "demo": "deconstruction",
     "deconstruction": "deconstruction",
+    "sale": "realestate",
+    "sold": "realestate",
+    "listing": "realestate",
     "flood": "flood",
     "water damage": "flood",
     "rodent": "rodents",
     "pest": "rodents",
-    "sale": "realestate",
-    "sold": "realestate",
-    "listing": "realestate",
+    "solar": "solar",
+    "pv": "solar",
+    "photovoltaic": "solar",
 }
 
 

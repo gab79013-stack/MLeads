@@ -116,7 +116,7 @@ def send_lead_email(lead: dict, scoring: dict = None) -> bool:
                 {fields_html}
             </table>
             <div style='margin-top:15px;padding:10px;background:#e8f5e9;border-radius:5px'>
-                <strong>Accion:</strong> Contacta al contratista y ofrece servicios de insulacion.
+                <strong>Accion:</strong> Contacta al contratista y ofrece servicios de roofing, drywall, paint, landscaping o electrical.
             </div>
             <p style='color:#888;font-size:12px;margin-top:15px'>
                 Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}

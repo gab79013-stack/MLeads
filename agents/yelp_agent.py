@@ -25,14 +25,15 @@ logger = logging.getLogger(__name__)
 
 YELP_API_KEY = os.getenv("YELP_API_KEY", "")  # Gratis: https://www.yelp.com/developers/v3/manage_app
 
-# Categorías de Yelp relacionadas con insulación
+# Categorías de Yelp para los 5 servicios target
+# (Roofing · Drywall · Paint · Landscaping · Electrical)
 _YELP_CATEGORIES = [
-    "contractors",          # General contractors
-    "hvac",                 # HVAC
-    "roofing",              # Roofing
-    "insulation_installation",  # Insulación directa
-    "handyman",             # Handyman (remodeling)
-    "home_energy_auditors", # Auditorías energéticas
+    "roofing",          # Roofing contractors
+    "drywall",          # Drywall installation
+    "painters",         # Painting contractors
+    "landscaping",      # Landscapers
+    "electricians",     # Electricians
+    "contractors",      # General contractors (fallback)
 ]
 
 # Ciudades Bay Area para búsqueda

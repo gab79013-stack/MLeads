@@ -10,33 +10,40 @@ from typing import Dict, Optional, List
 logger = logging.getLogger(__name__)
 
 # Standard construction inspection sequence
+# Focused on the 5 target services: roofing, electrical, drywall, paint, landscaping
 INSPECTION_SEQUENCE = [
     "foundation",
     "framing",
-    "rough_mep",
-    "insulation",
+    "electrical",
+    "roofing",
     "drywall",
+    "paint",
+    "landscaping",
     "final",
 ]
 
 # Typical days between inspections (based on historical data)
 DAYS_BETWEEN_INSPECTIONS = {
     "foundation": 7,     # Foundation → Framing (usually 7 days)
-    "framing": 14,       # Framing → Rough MEP (2 weeks)
-    "rough_mep": 10,     # Rough MEP → Insulation (1-2 weeks)
-    "insulation": 7,     # Insulation → Drywall (1 week)
-    "drywall": 14,       # Drywall → Final (2 weeks)
+    "framing": 14,       # Framing → Electrical rough-in (2 weeks)
+    "electrical": 7,     # Electrical rough → Roofing (1 week)
+    "roofing": 10,       # Roofing → Drywall (1-2 weeks)
+    "drywall": 10,       # Drywall → Paint (1-2 weeks)
+    "paint": 7,          # Paint → Landscaping (1 week)
+    "landscaping": 7,    # Landscaping → Final (1 week)
     "final": None,       # No more inspections
 }
 
 # Map inspection types to phases
 PHASE_KEYWORDS = {
     "foundation": ["FOUNDATION", "FOOTING", "CONCRETE"],
-    "framing": ["FRAMING", "FRAME", "WOOD", "STRUCTURAL"],
-    "rough_mep": ["MEP", "MECHANICAL", "ELECTRICAL", "PLUMBING", "ROUGH"],
-    "insulation": ["INSULATION", "INSULATE"],
-    "drywall": ["DRYWALL", "GYPSUM", "SHEETROCK"],
-    "final": ["FINAL", "COMPLETION", "OCCUPANCY", "CO"],
+    "framing":    ["FRAMING", "FRAME", "WOOD", "STRUCTURAL"],
+    "electrical": ["ELECTRICAL", "ELECTRIC", "WIRING", "PANEL", "MEP", "ROUGH"],
+    "roofing":    ["ROOF", "ROOFING", "RE-ROOF", "REROOF", "SHINGLE", "TILE ROOF"],
+    "drywall":    ["DRYWALL", "GYPSUM", "SHEETROCK", "WALLBOARD"],
+    "paint":      ["PAINT", "PAINTING", "REPAINT", "PRIMER", "STUCCO PAINT"],
+    "landscaping": ["LANDSCAPE", "LANDSCAPING", "IRRIGATION", "SPRINKLER", "HARDSCAPE"],
+    "final":      ["FINAL", "COMPLETION", "OCCUPANCY", "CO"],
 }
 
 
@@ -127,16 +134,20 @@ def estimate_gc_presence(
             high_probability_phases = [
                 "FOUNDATION",
                 "FRAMING",
-                "ROUGH_MEP",
+                "ELECTRICAL",
                 "FINAL",
             ]
 
             if any(phase in inspection_type for phase in high_probability_phases):
                 return 0.85
-            elif "INSULATION" in inspection_type:
-                return 0.70
+            elif "ROOFING" in inspection_type:
+                return 0.75
             elif "DRYWALL" in inspection_type:
                 return 0.65
+            elif "PAINT" in inspection_type:
+                return 0.60
+            elif "LANDSCAPING" in inspection_type:
+                return 0.55
             else:
                 return 0.60
 

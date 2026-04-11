@@ -960,7 +960,7 @@ def create_scheduled_inspection():
         "permit_id": "string",
         "address": "string",
         "inspection_date": "YYYY-MM-DD",
-        "inspection_type": "FOUNDATION|FRAMING|ROUGH_MEP|INSULATION|DRYWALL|FINAL",
+        "inspection_type": "FOUNDATION|FRAMING|ELECTRICAL|ROOFING|DRYWALL|PAINT|LANDSCAPING|FINAL",
         "jurisdiction": "string",
         "inspector_name": "string (optional)",
         "time_window_start": "HH:MM (optional)",

@@ -621,10 +621,22 @@ def _build_sources() -> list:
     ]
 
 
-INSULATION_KEYWORDS = [
-    "insulation","insulate","adu","accessory dwelling","addition","remodel",
-    "renovation","attic","crawl","energy","retrofit","new construction",
-    "garage conversion","dwelling","residential","hvac","weatherization",
+TARGET_SERVICE_KEYWORDS = [
+    # Roofing
+    "roof","roofing","re-roof","reroof","shingle","shingles","tile roof",
+    # Drywall
+    "drywall","sheetrock","gypsum","wallboard",
+    # Paint
+    "paint","painting","repaint","stucco",
+    # Landscaping
+    "landscape","landscaping","irrigation","sprinkler","hardscape","paver",
+    # Electrical
+    "electrical","electric","panel upgrade","service upgrade","rewire",
+    "wiring","ev charger","sub panel","main panel",
+    # Generic relevant project types
+    "adu","accessory dwelling","addition","remodel","renovation",
+    "new construction","garage conversion","dwelling","residential",
+    "tenant improvement",
 ]
 
 
@@ -770,7 +782,7 @@ def _is_relevant(lead: dict) -> bool:
     if lead["value_float"] < MIN_PERMIT_VALUE:
         return False
     haystack = ((lead.get("description") or "") + " " + (lead.get("permit_type") or "")).lower()
-    return any(kw in haystack for kw in INSULATION_KEYWORDS)
+    return any(kw in haystack for kw in TARGET_SERVICE_KEYWORDS)
 
 
 def _is_recent(lead: dict) -> bool:

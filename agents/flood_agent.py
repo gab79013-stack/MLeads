@@ -1,7 +1,7 @@
 """
 agents/flood_agent.py
 🌊 Alertas NOAA de Inundación — Bay Area
-Agua/humedad = crawlspace insulation dañada
+Agua/humedad = oportunidad para roofing, drywall reparado y paint
 """
 
 import logging

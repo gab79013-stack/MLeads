@@ -1,8 +1,8 @@
 
 
-Sistema automatizado de generacion de leads para contratistas de insulacion en el Bay Area.
+Sistema automatizado de generacion de leads para contratistas de Roofing, Drywall, Paint, Landscaping y Electrical en el Bay Area.
 
-Monitorea **54 ciudades** en **9 condados** del Bay Area usando APIs publicas y de pago, detecta oportunidades de insulacion, y envia alertas en tiempo real a Telegram con datos de contacto del GC.
+Monitorea **54 ciudades** en **9 condados** del Bay Area usando APIs publicas y de pago, detecta oportunidades de roofing, drywall, paint, landscaping y electrical, y envia alertas en tiempo real a Telegram con datos de contacto del GC.
 
 Incluye **dashboard multi-usuario** con control de acceso por ciudad/agente, acceso temporal por tiempo, y soporte para 50+ usuarios simultaneos.
 
@@ -29,15 +29,15 @@ curl -s https://raw.githubusercontent.com/gab79013-stack/MLeads/main/quick-insta
 
 | Agente | Fuentes | Ciudades | Intervalo | Oportunidad |
 |--------|---------|----------|-----------|-------------|
-| Permisos de Construccion | Socrata, CKAN | 54 (26 fuentes) | 60 min | ADU/remodel/addition = necesitan insulacion |
-| Instalaciones Solares | Socrata, CKAN, NREL, Google Solar, Aurora, EnergySage | 54 (15 fuentes) | 60 min | Solar nuevo = mejorar aislamiento |
-| Reportes 311 Plagas | SeeClickFix, Socrata, CKAN, Thumbtack | 54 (55 fuentes) | 2 hrs | Roedores/plagas = insulacion danada |
-| Alertas NOAA Inundacion | NOAA Weather API | 13 zonas | 30 min | Agua = crawlspace danado |
-| Construcciones Activas | Socrata, CKAN, BuildZoom | 54 (14 fuentes) | 60 min | Fase framing = insulacion es siguiente paso |
+| Permisos de Construccion | Socrata, CKAN | 54 (26 fuentes) | 60 min | ADU/remodel/roofing/electrical = servicio target |
+| Instalaciones Solares | Socrata, CKAN, NREL, Google Solar, Aurora, EnergySage | 54 (15 fuentes) | 60 min | Solar nuevo = roofing/electrical/paint |
+| Reportes 311 Plagas | SeeClickFix, Socrata, CKAN, Thumbtack | 54 (55 fuentes) | 2 hrs | Roedores/plagas = drywall/paint reparacion |
+| Alertas NOAA Inundacion | NOAA Weather API | 13 zonas | 30 min | Agua = drywall/paint/roofing |
+| Construcciones Activas | Socrata, CKAN, BuildZoom | 54 (14 fuentes) | 60 min | Fase framing = roofing/electrical siguientes |
 | **Calendario de Inspecciones** | **PDF (CC, Berkeley) + CKAN (San Jose) + Predicción** | **54 (3 públicos)** | **Daily 9 AM** | **GC estará en sitio próximamente — timing perfecto** |
-| Deconstruccion | Socrata, CKAN, ATTOM | 54 (14 fuentes) | 2 hrs | Demolicion/asbesto = insulacion nueva |
+| Deconstruccion | Socrata, CKAN, ATTOM | 54 (14 fuentes) | 2 hrs | Demolicion = roofing/drywall nuevo |
 | Propiedades Vendidas | Socrata (assessor data) | 10 condados | 2 hrs | Nuevo dueno = renovacion probable |
-| Eficiencia Energetica | Socrata (benchmarking) | SF, Oakland, SJ + condados | 6 hrs | Baja eficiencia = oportunidad insulacion |
+| Eficiencia Energetica | Socrata (benchmarking) | SF, Oakland, SJ + condados | 6 hrs | Baja eficiencia = panel upgrade (electrical) |
 | Google Places | Google Places API | Bay Area | 24 hrs | Negocios de construccion activos |
 | Yelp Contractors | Yelp Fusion API | Bay Area | 24 hrs | Contratistas activos en la zona |
 
@@ -76,7 +76,7 @@ Cuando la misma propiedad aparece en multiples agentes (ej: permiso de construcc
 Clustering geografico en tiempo real. Cuando 3+ leads caen dentro de un radio de 500m, genera una alerta de "zona caliente" con link a Google Maps y recomendacion de campana puerta-a-puerta.
 
 ### Lead Scoring (0-100)
-Score automatico basado en: valor del proyecto, tipo de proyecto, calidad de contacto, recencia, geografia, fuente, senales de insulacion, **y proximidad de inspecciones**.
+Score automatico basado en: valor del proyecto, tipo de proyecto, calidad de contacto, recencia, geografia, fuente, senales de servicio (roofing/drywall/paint/landscaping/electrical), **y proximidad de inspecciones**.
 
 | Score | Grado | Accion |
 |-------|-------|--------|
@@ -883,9 +883,12 @@ Insulleads/
 │
 ├── contacts/                       # CSVs de contratistas (tu data)
 │   ├── B_CONTACTS_GC.csv
-│   ├── C-2 INSULATION - CSLBSearchData.csv
+│   ├── C-33 PAINTING - CSLBSearchData.csv
+│   ├── C-39 ROOFING - CSLBSearchData.csv
+│   ├── C-10 ELECTRICAL - CSLBSearchData.csv
+│   ├── C-27 LANDSCAPING - CSLBSearchData.csv
 │   ├── Real_State_The_Bay_Area.csv
-│   └── ... (24 archivos CSV)
+│   └── ... (otros archivos CSV)
 │
 ├── CALENDAR_INTEGRATION.md         # Documentacion del calendario de inspecciones
 │
@@ -904,7 +907,7 @@ Insulleads/
 
 ▸ Ciudad: Walnut Creek
 ▸ Tipo de Permiso: REMODEL
-▸ Descripcion: Kitchen and bathroom remodel with new insulation...
+▸ Descripcion: Kitchen and bathroom remodel with new roofing and paint...
 ▸ Fecha Emision: 2026-03-28
 ▸ Valor Estimado: $85,000
 ▸ Contratista (GC): BAY AREA REMODELING INC
@@ -922,7 +925,7 @@ Insulleads/
 
 ▸ Lead Score: 🔥 100/100 (HOT) — Proyecto alto valor | Inspección en 3 días (GC en sitio)
 
-📲 ¡CONTACTA AHORA! GC estará en el sitio el 8/4 — timing perfecto para insulacion
+📲 ¡CONTACTA AHORA! GC estará en el sitio el 8/4 — timing perfecto para roofing/electrical/paint
 ```
 
 ---
@@ -1029,7 +1032,7 @@ Sistema automático que obtiene calendarios de inspecciones públicos (Contra Co
 **De donde saca el Calendario de Inspecciones?**
 - **Contra Costa & Berkeley:** PDFs diarios descargados y parseados con pdfplumber
 - **San Jose:** Open Data Portal (CKAN API)
-- **Otras ciudades:** Predicción automática basada en la fase de construcción (FOUNDATION → FRAMING → ROUGH_MEP → INSULATION → DRYWALL → FINAL)
+- **Otras ciudades:** Predicción automática basada en la fase de construcción (FOUNDATION → FRAMING → ELECTRICAL → ROOFING → DRYWALL → PAINT → LANDSCAPING → FINAL)
 
 **Con que frecuencia se actualiza el Calendario?**
 Diariamente a las 9:00 AM UTC. Puedes disparar un fetch manual con `POST /api/admin/scheduler/fetch-now`.

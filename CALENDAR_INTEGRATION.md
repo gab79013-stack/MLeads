@@ -38,7 +38,7 @@ This integration covers **three jurisdictions with public calendar data** (Contr
 
 For jurisdictions without public calendar data (San Francisco, Oakland, Alameda, etc.):
 
-- Uses construction phase sequence: `FOUNDATION → FRAMING → ROUGH_MEP → INSULATION → DRYWALL → FINAL`
+- Uses construction phase sequence: `FOUNDATION → FRAMING → ELECTRICAL → ROOFING → DRYWALL → PAINT → LANDSCAPING → FINAL`
 - Estimates days between phases based on historical data (7-14 days typical)
 - Provides confidence score (0.6 for predictions vs 0.85+ for public data)
 

@@ -347,12 +347,14 @@ class SanJoseFetcher(ScheduledInspectionFetcher):
         work_desc = str(work_desc).upper()
 
         keywords = {
-            'FOUNDATION': ['FOUNDATION', 'FOOTING'],
-            'FRAMING': ['FRAMING', 'FRAME', 'WOOD', 'STRUCTURAL'],
-            'ROUGH_MEP': ['MEP', 'MECHANICAL', 'ELECTRICAL', 'PLUMBING', 'ROUGH'],
-            'INSULATION': ['INSULATION', 'INSULATE'],
-            'DRYWALL': ['DRYWALL', 'GYPSUM', 'SHEETROCK'],
-            'FINAL': ['FINAL', 'COMPLETION', 'OCCUPANCY', 'CO'],
+            'FOUNDATION':  ['FOUNDATION', 'FOOTING'],
+            'FRAMING':     ['FRAMING', 'FRAME', 'WOOD', 'STRUCTURAL'],
+            'ELECTRICAL':  ['ELECTRICAL', 'ELECTRIC', 'WIRING', 'PANEL', 'MEP', 'ROUGH'],
+            'ROOFING':     ['ROOF', 'ROOFING', 'RE-ROOF', 'REROOF', 'SHINGLE'],
+            'DRYWALL':     ['DRYWALL', 'GYPSUM', 'SHEETROCK', 'WALLBOARD'],
+            'PAINT':       ['PAINT', 'PAINTING', 'REPAINT'],
+            'LANDSCAPING': ['LANDSCAPE', 'LANDSCAPING', 'IRRIGATION', 'SPRINKLER'],
+            'FINAL':       ['FINAL', 'COMPLETION', 'OCCUPANCY', 'CO'],
         }
 
         for insp_type, keywords_list in keywords.items():

@@ -1025,7 +1025,7 @@ class SolarAgent(BaseAgent):
             agent_name=self.name, emoji=self.emoji,
             title=f"{lead['city']} — {lead['address']}",
             fields=fields,
-            cta="☀️ Solar nuevo = oportunidad de mejorar aislamiento. ¡Contáctalos!",
+            cta="☀️ Solar nuevo = oportunidad de roofing/electrical/paint. ¡Contáctalos!",
         )
 
         # Multi-canal para leads calientes
