@@ -3,365 +3,551 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MLeads Dashboard</title>
+    <title>MLeads</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --primary: #0070d2;
-            --primary-dark: #003d82;
-            --primary-light: #e7f1f9;
-            --danger: #ea001e;
-            --success: #04844b;
-            --warning: #ff9900;
-            --cool: #54698d;
-            --warm: #ffb81c;
-            --text-dark: #1f2937;
-            --text-light: #6b7280;
-            --border: #e5e7eb;
-            --bg-light: #f9fafb;
-            --bg-white: #ffffff;
-        }
-
-        /* Dark theme */
-        body.dark-theme {
-            --text-dark: #e5e7eb;
-            --text-light: #9ca3af;
-            --border: #374151;
-            --bg-light: #111827;
-            --bg-white: #1f2937;
-            --primary-light: #1e3a8a;
-        }
-
-        body.dark-theme {
-            background: var(--bg-light) !important;
-            color: var(--text-dark);
-        }
-
-        body.dark-theme .sidebar,
-        body.dark-theme .modal-content,
-        body.dark-theme .side-panel,
-        body.dark-theme input[type="text"],
-        body.dark-theme input[type="email"],
-        body.dark-theme input[type="password"],
-        body.dark-theme input[type="number"],
-        body.dark-theme select,
-        body.dark-theme textarea {
-            background: var(--bg-white);
-            color: var(--text-dark);
-            border-color: var(--border);
-        }
-
-        body.dark-theme .main-content {
-            background: var(--bg-light);
-        }
-
-        body.dark-theme table {
-            background: var(--bg-white);
-            color: var(--text-dark);
-        }
-
-        body.dark-theme table thead {
-            background: var(--primary-dark);
-            color: white;
-        }
-
-        body.dark-theme table tbody tr:hover {
-            background: var(--primary-light);
+            --fg: #171717;
+            --fg-secondary: #6c7278;
+            --fg-muted: #9ca3af;
+            --bg-page: #f4f5f6;
+            --bg-surface: #ffffff;
+            --bg-subtle: #f8f9fa;
+            --bg-hover: #f0f1f2;
+            --bg-active: #ebeef0;
+            --border: #e2e2e3;
+            --border-light: #efefef;
+            --accent: #2490ef;
+            --accent-light: #e8f3fd;
+            --accent-dark: #1a6fbd;
+            --red: #d1293d;
+            --red-light: #fff0f0;
+            --green: #10b981;
+            --green-light: #ecfdf5;
+            --orange: #f59e0b;
+            --orange-light: #fffbeb;
+            --purple: #8b5cf6;
+            --purple-light: #f3f0ff;
+            --sidebar-w: 220px;
+            --sidebar-collapsed: 56px;
+            --header-h: 52px;
+            --radius: 8px;
+            --radius-lg: 12px;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+            --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+            --transition: 0.15s ease;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: var(--bg-light);
-            color: var(--text-dark);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-page);
+            color: var(--fg);
             line-height: 1.5;
+            font-size: 14px;
+            -webkit-font-smoothing: antialiased;
         }
 
-        .container {
+        /* ── LAYOUT ── */
+        .app {
             display: flex;
             height: 100vh;
             overflow: hidden;
         }
 
-        /* ─── SIDEBAR ─── */
+        /* ── SIDEBAR ── */
         .sidebar {
-            width: 60px;
-            background: var(--primary-dark);
-            color: white;
+            width: var(--sidebar-w);
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
+            flex-shrink: 0;
+            transition: width var(--transition);
+            overflow: hidden;
+            z-index: 100;
+        }
+
+        .sidebar.collapsed {
+            width: var(--sidebar-collapsed);
+        }
+
+        .sidebar-header {
+            height: var(--header-h);
+            padding: 0 12px;
+            display: flex;
             align-items: center;
-            padding: 20px 0;
-            transition: width 0.3s ease;
-            position: relative;
-            z-index: 1000;
-            overflow-y: auto;
+            gap: 10px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
         }
 
-        .sidebar.expanded {
-            width: 250px;
-            align-items: flex-start;
-            padding-left: 15px;
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            overflow: hidden;
         }
 
-        .sidebar-toggle {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 24px;
-            cursor: pointer;
-            padding: 10px;
-            width: 40px;
-            height: 40px;
+        .sidebar-logo {
+            width: 32px;
+            height: 32px;
+            background: var(--fg);
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 20px;
-            border-radius: 6px;
-            transition: background 0.2s;
+            flex-shrink: 0;
         }
 
-        .sidebar-toggle:hover {
-            background: rgba(255, 255, 255, 0.1);
+        .sidebar-logo svg {
+            width: 18px;
+            height: 18px;
+            color: white;
+        }
+
+        .sidebar-brand-name {
+            font-size: 16px;
+            font-weight: 700;
+            white-space: nowrap;
+            letter-spacing: -0.3px;
+        }
+
+        .collapsed .sidebar-brand-name { display: none; }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 8px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
         }
 
         .nav-item {
             width: 100%;
-            padding: 12px 10px;
-            color: rgba(255, 255, 255, 0.7);
-            border: none;
-            background: none;
-            cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 15px;
-            font-size: 14px;
-            transition: all 0.2s;
-            margin-bottom: 5px;
-            border-radius: 6px;
+            gap: 10px;
+            padding: 8px 10px;
+            border: none;
+            background: none;
+            color: var(--fg-secondary);
+            font-size: 13px;
+            font-weight: 500;
+            font-family: inherit;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all var(--transition);
             text-align: left;
+            white-space: nowrap;
+            overflow: hidden;
         }
 
         .nav-item:hover {
-            color: white;
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--bg-hover);
+            color: var(--fg);
         }
 
         .nav-item.active {
-            color: white;
-            background: var(--primary);
+            background: var(--bg-active);
+            color: var(--fg);
+            font-weight: 600;
         }
 
         .nav-icon {
-            font-size: 20px;
-            min-width: 20px;
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-icon svg {
+            width: 18px;
+            height: 18px;
         }
 
         .nav-label {
-            display: none;
-            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        .sidebar.expanded .nav-label {
-            display: inline;
+        .collapsed .nav-label { display: none; }
+
+        .sidebar-footer {
+            border-top: 1px solid var(--border);
+            padding: 8px;
         }
 
-        /* ─── MAIN CONTENT ─── */
-        .main-content {
+        .sidebar-toggle-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border: none;
+            background: none;
+            color: var(--fg-muted);
+            font-size: 13px;
+            font-family: inherit;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+
+        .sidebar-toggle-btn:hover {
+            background: var(--bg-hover);
+            color: var(--fg);
+        }
+
+        .sidebar-toggle-btn svg {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+
+        .collapsed .toggle-label { display: none; }
+
+        /* ── MAIN ── */
+        .main {
             flex: 1;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            min-width: 0;
         }
 
-        /* ─── HEADER ─── */
+        /* ── HEADER ── */
         .header {
-            background: var(--bg-white);
+            height: var(--header-h);
+            background: var(--bg-surface);
             border-bottom: 1px solid var(--border);
-            padding: 15px 30px;
+            padding: 0 24px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            height: 60px;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
 
         .header-title {
-            font-size: 24px;
+            font-size: 16px;
             font-weight: 600;
-            color: var(--text-dark);
+            letter-spacing: -0.2px;
         }
 
         .header-right {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 12px;
         }
 
-        .user-info {
+        .header-user {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
+            padding: 4px 10px 4px 4px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+
+        .header-user:hover {
+            background: var(--bg-hover);
         }
 
         .avatar {
-            width: 36px;
-            height: 36px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
-            background: var(--primary);
+            background: var(--fg);
             color: white;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-size: 12px;
             font-weight: 600;
+            flex-shrink: 0;
         }
 
-        .logout-btn {
-            background: var(--danger);
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
+        .avatar-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--fg);
+        }
+
+        .btn-logout {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--fg-secondary);
+            font-size: 13px;
+            font-family: inherit;
+            font-weight: 500;
             cursor: pointer;
-            font-size: 14px;
-            transition: background 0.2s;
+            transition: all var(--transition);
         }
 
-        .logout-btn:hover {
-            background: #c80015;
+        .btn-logout:hover {
+            background: var(--red-light);
+            border-color: var(--red);
+            color: var(--red);
         }
 
-        /* ─── CONTENT AREA ─── */
+        .btn-logout svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* ── CONTENT ── */
         .content {
             flex: 1;
             overflow-y: auto;
-            padding: 30px;
+            padding: 24px;
         }
 
-        .view {
-            display: none;
-        }
+        .view { display: none; }
+        .view.active { display: block; }
 
-        .view.active {
-            display: block;
-        }
-
-        /* ─── STATS GRID ─── */
-        .stats-grid {
+        /* ── STATS ── */
+        .stats-row {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 40px;
+            gap: 16px;
+            margin-bottom: 24px;
         }
 
         .stat-card {
-            background: var(--bg-white);
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
             padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid var(--primary);
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: box-shadow var(--transition);
         }
 
         .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-
-        .stat-value {
-            font-size: 32px;
-            font-weight: 700;
-            color: var(--primary);
-            margin-bottom: 5px;
+            box-shadow: var(--shadow);
         }
 
         .stat-label {
             font-size: 12px;
-            color: var(--text-light);
+            font-weight: 500;
+            color: var(--fg-muted);
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            margin-bottom: 8px;
         }
 
-        /* ─── FILTERS ─── */
-        .filters {
-            background: var(--bg-white);
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            align-items: end;
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--fg);
+            letter-spacing: -0.5px;
+        }
+
+        /* ── SECTION HEADER ── */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--fg);
+        }
+
+        /* ── BUTTONS ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: var(--radius);
+            font-size: 13px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all var(--transition);
+            white-space: nowrap;
+        }
+
+        .btn svg { width: 16px; height: 16px; }
+
+        .btn-primary {
+            background: var(--fg);
+            color: white;
+            border-color: var(--fg);
+        }
+
+        .btn-primary:hover { background: #333; border-color: #333; }
+
+        .btn-secondary {
+            background: var(--bg-surface);
+            color: var(--fg);
+            border-color: var(--border);
+        }
+
+        .btn-secondary:hover { background: var(--bg-hover); }
+
+        .btn-accent {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .btn-accent:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+
+        .btn-danger {
+            background: var(--red);
+            color: white;
+            border-color: var(--red);
+        }
+
+        .btn-danger:hover { background: #b91c2e; }
+
+        .btn-success {
+            background: var(--green);
+            color: white;
+            border-color: var(--green);
+        }
+
+        .btn-success:hover { background: #059669; }
+
+        .btn-ghost {
+            background: none;
+            color: var(--fg-secondary);
+            border-color: transparent;
+            padding: 6px 8px;
+        }
+
+        .btn-ghost:hover { background: var(--bg-hover); color: var(--fg); }
+
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        /* ── FILTERS ── */
+        .filters-bar {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 16px 20px;
+            margin-bottom: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: flex-end;
         }
 
         .filter-group {
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 4px;
+            min-width: 140px;
         }
 
-        .filter-label {
+        .filter-group label {
             font-size: 12px;
-            font-weight: 600;
-            color: var(--text-dark);
-            text-transform: uppercase;
+            font-weight: 500;
+            color: var(--fg-secondary);
         }
 
-        select, input[type="text"], input[type="number"] {
-            padding: 8px 12px;
+        .filter-group select,
+        .filter-group input {
+            padding: 7px 10px;
             border: 1px solid var(--border);
-            border-radius: 4px;
-            font-size: 14px;
-            background: var(--bg-white);
-            color: var(--text-dark);
+            border-radius: var(--radius);
+            font-size: 13px;
+            font-family: inherit;
+            color: var(--fg);
+            background: var(--bg-surface);
+            transition: border-color var(--transition);
         }
 
-        select:focus, input:focus {
+        .filter-group select:focus,
+        .filter-group input:focus {
             outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px var(--primary-light);
+            border-color: var(--fg);
+            box-shadow: 0 0 0 3px rgba(23,23,23,0.06);
         }
 
-        .btn-search {
-            background: var(--primary);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
+        .filter-actions {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        /* ── SAVED VIEWS ── */
+        .saved-views-bar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .saved-views-bar .view-chip {
+            padding: 5px 12px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--fg-secondary);
+            background: var(--bg-surface);
             cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: background 0.2s;
+            transition: all var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
-        .btn-search:hover {
-            background: var(--primary-dark);
+        .view-chip:hover {
+            border-color: var(--fg);
+            color: var(--fg);
         }
 
-        .btn-reset {
-            background: var(--border);
-            color: var(--text-dark);
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
+        .view-chip .chip-delete {
+            width: 14px;
+            height: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            color: var(--fg-muted);
             cursor: pointer;
-            font-size: 14px;
-            transition: background 0.2s;
+            transition: all var(--transition);
         }
 
-        .btn-reset:hover {
-            background: #d1d5db;
+        .view-chip .chip-delete:hover {
+            background: var(--red-light);
+            color: var(--red);
         }
 
-        /* ─── TABLE ─── */
-        .table-container {
-            background: var(--bg-white);
-            border-radius: 8px;
+        /* ── TABLE ── */
+        .table-wrap {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
             overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
         table {
@@ -370,106 +556,37 @@
         }
 
         thead {
-            background: var(--bg-light);
-            border-bottom: 2px solid var(--border);
+            background: var(--bg-subtle);
         }
 
         th {
-            padding: 15px;
+            padding: 10px 16px;
             text-align: left;
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--text-dark);
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--fg-muted);
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
         }
 
         td {
-            padding: 15px;
-            border-bottom: 1px solid var(--border);
-            font-size: 14px;
+            padding: 12px 16px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border-light);
+            color: var(--fg);
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr {
+            transition: background var(--transition);
         }
 
         tbody tr:hover {
-            background: var(--primary-light);
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .badge-hot {
-            background: #fce7e6;
-            color: var(--danger);
-        }
-
-        .badge-warm {
-            background: #fff4e5;
-            color: #d97706;
-        }
-
-        .badge-medium {
-            background: #e0e7ff;
-            color: #4338ca;
-        }
-
-        .badge-cool {
-            background: #e8eef7;
-            color: var(--cool);
-        }
-
-        .badge-cold {
-            background: #f3f4f6;
-            color: #6b7280;
-        }
-
-        .badge-success {
-            background: #d1fae5;
-            color: #065f46;
-        }
-
-        .badge-danger {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .badge-warning {
-            background: #fef3c7;
-            color: #92400e;
-        }
-
-        .badge-info {
-            background: #dbeafe;
-            color: #1e40af;
-        }
-
-        .contact-info {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-        }
-
-        .contact-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 13px;
-        }
-
-        .icon-small {
-            font-size: 12px;
-        }
-
-        .inspection-badge {
-            background: #dbeafe;
-            color: #0369a1;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
+            background: var(--bg-subtle);
         }
 
         .lead-row {
@@ -477,365 +594,498 @@
         }
 
         .lead-row td:first-child {
-            color: var(--primary);
-            font-weight: 600;
+            font-weight: 500;
+            color: var(--accent);
         }
 
-        /* ─── SIDE PANEL ─── */
+        /* ── BADGES ── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .badge-hot { background: var(--red-light); color: var(--red); }
+        .badge-warm { background: var(--orange-light); color: #b45309; }
+        .badge-medium { background: var(--purple-light); color: var(--purple); }
+        .badge-cool { background: var(--accent-light); color: var(--accent); }
+        .badge-cold { background: var(--bg-hover); color: var(--fg-muted); }
+        .badge-success { background: var(--green-light); color: #065f46; }
+        .badge-danger { background: var(--red-light); color: var(--red); }
+        .badge-warning { background: var(--orange-light); color: #92400e; }
+        .badge-info { background: var(--accent-light); color: var(--accent); }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        .dot-green { background: var(--green); }
+        .dot-red { background: var(--red); }
+        .dot-orange { background: var(--orange); }
+        .dot-gray { background: var(--fg-muted); }
+
+        .contact-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--fg-secondary);
+        }
+
+        .contact-item svg {
+            width: 13px;
+            height: 13px;
+            flex-shrink: 0;
+        }
+
+        .inspection-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            background: var(--accent-light);
+            color: var(--accent);
+            border-radius: var(--radius);
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .inspection-tag svg {
+            width: 13px;
+            height: 13px;
+        }
+
+        /* ── SIDE PANEL ── */
         .side-panel {
             position: fixed;
-            right: -400px;
-            top: 60px;
-            width: 400px;
-            height: calc(100vh - 60px);
-            background: var(--bg-white);
-            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.15);
-            transition: right 0.3s ease;
-            overflow-y: auto;
-            z-index: 999;
+            right: -420px;
+            top: 0;
+            width: 420px;
+            height: 100vh;
+            background: var(--bg-surface);
+            border-left: 1px solid var(--border);
+            box-shadow: -4px 0 24px rgba(0,0,0,0.08);
+            transition: right 0.25s ease;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
         }
 
-        .side-panel.open {
-            right: 0;
+        .side-panel.open { right: 0; }
+
+        .panel-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.2);
+            z-index: 199;
         }
+
+        .side-panel.open ~ .panel-overlay { display: block; }
 
         .panel-header {
-            padding: 20px;
+            padding: 16px 20px;
             border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
         }
 
         .panel-title {
-            font-size: 18px;
+            font-size: 15px;
             font-weight: 600;
         }
 
         .panel-close {
-            background: none;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             border: none;
-            font-size: 20px;
+            background: none;
+            color: var(--fg-muted);
+            border-radius: var(--radius);
             cursor: pointer;
-            color: var(--text-light);
+            transition: all var(--transition);
         }
 
-        .panel-content {
+        .panel-close:hover { background: var(--bg-hover); color: var(--fg); }
+
+        .panel-body {
+            flex: 1;
+            overflow-y: auto;
             padding: 20px;
         }
 
         .panel-section {
-            margin-bottom: 25px;
+            margin-bottom: 24px;
         }
 
         .panel-section-title {
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--text-light);
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--fg-muted);
             text-transform: uppercase;
-            margin-bottom: 10px;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
             padding-bottom: 8px;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid var(--border-light);
         }
 
         .panel-field {
-            margin-bottom: 12px;
+            margin-bottom: 10px;
         }
 
         .panel-label {
             font-size: 12px;
-            color: var(--text-light);
-            font-weight: 600;
-            margin-bottom: 3px;
+            color: var(--fg-muted);
+            font-weight: 500;
+            margin-bottom: 2px;
         }
 
         .panel-value {
-            font-size: 14px;
-            color: var(--text-dark);
+            font-size: 13px;
+            color: var(--fg);
         }
 
-        .panel-actions {
-            display: flex;
-            gap: 10px;
-            padding: 20px;
+        .panel-footer {
+            padding: 16px 20px;
             border-top: 1px solid var(--border);
-            position: sticky;
-            bottom: 0;
-            background: var(--bg-white);
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
         }
 
-        .btn-action {
-            flex: 1;
-            padding: 10px;
-            border-radius: 4px;
-            border: none;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
+        .panel-footer .btn { flex: 1; justify-content: center; }
 
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: var(--primary-dark);
-        }
-
-        .btn-secondary {
-            background: var(--border);
-            color: var(--text-dark);
-        }
-
-        .btn-secondary:hover {
-            background: #d1d5db;
-        }
-
-        /* ─── MODAL ─── */
+        /* ── MODAL ── */
         .modal {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 2000;
+            inset: 0;
+            background: rgba(0,0,0,0.3);
+            z-index: 300;
             align-items: center;
             justify-content: center;
         }
 
-        .modal.open {
-            display: flex;
-        }
+        .modal.open { display: flex; }
 
-        .modal-content {
-            background: var(--bg-white);
-            border-radius: 8px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        .modal-box {
+            background: var(--bg-surface);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
             width: 90%;
-            max-width: 500px;
-            max-height: 80vh;
+            max-width: 480px;
+            max-height: 85vh;
             overflow-y: auto;
         }
 
         .modal-header {
-            padding: 20px;
-            border-bottom: 1px solid var(--border);
+            padding: 20px 24px 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         .modal-title {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
         }
 
         .modal-close {
-            background: none;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             border: none;
-            font-size: 24px;
+            background: none;
+            color: var(--fg-muted);
+            border-radius: var(--radius);
             cursor: pointer;
-            color: var(--text-light);
+            font-size: 18px;
         }
 
+        .modal-close:hover { background: var(--bg-hover); }
+
         .modal-body {
-            padding: 20px;
+            padding: 20px 24px;
         }
 
         .form-group {
-            margin-bottom: 15px;
-            display: flex;
-            flex-direction: column;
+            margin-bottom: 14px;
         }
 
         .form-group label {
+            display: block;
             font-size: 13px;
-            font-weight: 600;
+            font-weight: 500;
             margin-bottom: 5px;
-            color: var(--text-dark);
+            color: var(--fg);
         }
 
-        .form-group input {
-            padding: 10px;
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
             border: 1px solid var(--border);
-            border-radius: 4px;
-            font-size: 14px;
+            border-radius: var(--radius);
+            font-size: 13px;
+            font-family: inherit;
+            color: var(--fg);
+            background: var(--bg-surface);
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--fg);
+            box-shadow: 0 0 0 3px rgba(23,23,23,0.06);
+        }
+
+        .form-hint {
+            font-size: 11px;
+            color: var(--fg-muted);
+            margin-top: 4px;
         }
 
         .modal-footer {
-            padding: 20px;
-            border-top: 1px solid var(--border);
+            padding: 16px 24px 20px;
             display: flex;
-            gap: 10px;
+            gap: 8px;
             justify-content: flex-end;
         }
 
-        .btn-modal {
-            padding: 10px 20px;
-            border-radius: 4px;
-            border: none;
-            cursor: pointer;
+        /* ── SETTINGS ── */
+        .settings-page {
+            max-width: 680px;
+        }
+
+        .settings-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 16px;
+        }
+
+        .settings-card-title {
+            font-size: 14px;
             font-weight: 600;
+            color: var(--fg);
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-light);
         }
 
-        .btn-submit {
-            background: var(--primary);
-            color: white;
+        .settings-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
         }
 
-        .btn-submit:hover {
-            background: var(--primary-dark);
+        .settings-row:last-child { margin-bottom: 0; }
+
+        .settings-row label {
+            font-size: 13px;
+            color: var(--fg);
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .btn-cancel {
-            background: var(--border);
-            color: var(--text-dark);
+        .toggle-btns {
+            display: flex;
+            gap: 6px;
         }
 
-        .btn-cancel:hover {
-            background: #d1d5db;
-        }
-
-        /* ─── USERS TABLE ─── */
-        .btn-add-user {
-            background: var(--success);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
+        .toggle-btn {
+            padding: 6px 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg-surface);
+            font-size: 13px;
+            font-family: inherit;
             cursor: pointer;
-            font-weight: 600;
-            margin-bottom: 20px;
-            transition: background 0.2s;
+            color: var(--fg-secondary);
+            transition: all var(--transition);
         }
 
-        .btn-add-user:hover {
-            background: #036340;
+        .toggle-btn.active {
+            background: var(--fg);
+            color: white;
+            border-color: var(--fg);
         }
 
-        /* ─── EMPTY STATE ─── */
+        .account-info {
+            padding: 14px;
+            background: var(--bg-subtle);
+            border-radius: var(--radius);
+            margin-bottom: 16px;
+        }
+
+        .account-info p {
+            font-size: 13px;
+            margin: 4px 0;
+        }
+
+        .account-info strong {
+            color: var(--fg);
+        }
+
+        /* ── EMPTY STATE ── */
         .empty-state {
             text-align: center;
-            padding: 40px;
-            color: var(--text-light);
+            padding: 40px 20px;
+            color: var(--fg-muted);
         }
 
-        .empty-state-icon {
-            font-size: 48px;
-            margin-bottom: 15px;
+        .empty-state svg {
+            width: 40px;
+            height: 40px;
+            margin-bottom: 12px;
+            color: var(--border);
         }
 
-        /* ─── RESPONSIVE ─── */
+        .empty-state p {
+            font-size: 13px;
+        }
+
+        /* ── RESPONSIVE ── */
         @media (max-width: 768px) {
-            .sidebar {
-                width: 60px;
-            }
+            .sidebar { width: var(--sidebar-collapsed); }
+            .sidebar .nav-label,
+            .sidebar .sidebar-brand-name,
+            .sidebar .toggle-label { display: none; }
+            .side-panel { width: 100%; right: -100%; }
+            .stats-row { grid-template-columns: 1fr 1fr; }
+            .filters-bar { flex-direction: column; }
+            .header { padding: 0 16px; }
+            .content { padding: 16px; }
+            .modal-box { width: 95%; }
+        }
 
-            .sidebar.expanded {
-                width: 60px;
-            }
+        /* scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }
 
-            .nav-label {
-                display: none !important;
-            }
-
-            .side-panel {
-                width: 100%;
-                right: -100%;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .filters {
-                grid-template-columns: 1fr;
-            }
-
-            table {
-                font-size: 12px;
-            }
-
-            td, th {
-                padding: 10px;
-            }
-
-            .modal-content {
-                width: 95%;
-            }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="app">
         <!-- SIDEBAR -->
-        <div class="sidebar" id="sidebar">
-            <button class="sidebar-toggle" id="sidebarToggle">☰</button>
-            <button class="nav-item active" data-view="dashboard">
-                <span class="nav-icon">📊</span>
-                <span class="nav-label">Dashboard</span>
-            </button>
-            <button class="nav-item" data-view="leads">
-                <span class="nav-icon">👥</span>
-                <span class="nav-label">Leads</span>
-            </button>
-            <button class="nav-item" data-view="users">
-                <span class="nav-icon">👤</span>
-                <span class="nav-label">Users</span>
-            </button>
-            <button class="nav-item" data-view="inspections">
-                <span class="nav-icon">📅</span>
-                <span class="nav-label">Inspections</span>
-            </button>
-            <button class="nav-item" data-view="bot">
-                <span class="nav-icon">🤖</span>
-                <span class="nav-label">Bot Users</span>
-            </button>
-            <button class="nav-item" data-view="settings">
-                <span class="nav-icon">⚙️</span>
-                <span class="nav-label">Settings</span>
-            </button>
-        </div>
-
-        <!-- MAIN CONTENT -->
-        <div class="main-content">
-            <!-- HEADER -->
-            <div class="header">
-                <div class="header-title">🔍 MLeads Dashboard</div>
-                <div class="header-right">
-                    <div class="user-info">
-                        <div class="avatar" id="userAvatar">A</div>
-                        <span id="userName">admin</span>
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-brand">
+                    <div class="sidebar-logo">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     </div>
-                    <button class="logout-btn" id="logoutBtn">Logout</button>
+                    <span class="sidebar-brand-name">MLeads</span>
                 </div>
             </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-view="dashboard">
+                    <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+                    <span class="nav-label">Dashboard</span>
+                </button>
+                <button class="nav-item" data-view="leads">
+                    <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></span>
+                    <span class="nav-label">Leads</span>
+                </button>
+                <button class="nav-item" data-view="users">
+                    <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                    <span class="nav-label">Users</span>
+                </button>
+                <button class="nav-item" data-view="inspections">
+                    <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+                    <span class="nav-label">Inspections</span>
+                </button>
+                <button class="nav-item" data-view="bot">
+                    <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="2" y="8" width="20" height="14" rx="2"/><path d="M6 16h0"/><path d="M18 16h0"/><path d="M9 20v-4h6v4"/></svg></span>
+                    <span class="nav-label">Bot Users</span>
+                </button>
+                <button class="nav-item" data-view="settings">
+                    <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+                    <span class="nav-label">Settings</span>
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="sidebar-toggle-btn" id="sidebarToggle">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+                    <span class="toggle-label">Collapse</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- MAIN -->
+        <div class="main">
+            <!-- HEADER -->
+            <header class="header">
+                <div class="header-left">
+                    <h1 class="header-title" id="pageTitle">Dashboard</h1>
+                </div>
+                <div class="header-right">
+                    <div class="header-user">
+                        <div class="avatar" id="userAvatar">A</div>
+                        <span class="avatar-name" id="userName">admin</span>
+                    </div>
+                    <button class="btn-logout" id="logoutBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        Log out
+                    </button>
+                </div>
+            </header>
 
             <!-- CONTENT -->
             <div class="content">
-                <!-- DASHBOARD VIEW -->
+
+                <!-- ═══ DASHBOARD VIEW ═══ -->
                 <div class="view active" id="dashboard-view">
-                    <div class="stats-grid">
+                    <div class="stats-row">
                         <div class="stat-card">
-                            <div class="stat-value" id="totalLeads">0</div>
                             <div class="stat-label">Total Leads</div>
+                            <div class="stat-value" id="totalLeads">0</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-value" id="newLeads">0</div>
                             <div class="stat-label">New Leads</div>
+                            <div class="stat-value" id="newLeads">0</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-value" id="contacted">0</div>
                             <div class="stat-label">Contacted</div>
+                            <div class="stat-value" id="contacted">0</div>
                         </div>
                     </div>
 
-                    <h3 style="margin-top: 30px; margin-bottom: 20px; color: var(--text-dark);">Recent Leads</h3>
-                    <div class="table-container">
+                    <div class="section-header">
+                        <h3 class="section-title">Recent Leads</h3>
+                    </div>
+                    <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
@@ -847,46 +1097,44 @@
                                 </tr>
                             </thead>
                             <tbody id="dashboardLeadsBody">
-                                <tr><td colspan="5" style="text-align: center; color: var(--text-light);">Loading...</td></tr>
+                                <tr><td colspan="5" class="empty-state"><p>Loading...</p></td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- LEADS VIEW -->
+                <!-- ═══ LEADS VIEW ═══ -->
                 <div class="view" id="leads-view">
-                    <div class="filters">
+                    <div class="filters-bar">
                         <div class="filter-group">
-                            <label class="filter-label">City</label>
+                            <label>City</label>
                             <select id="filterCity"><option value="">All Cities</option></select>
                         </div>
                         <div class="filter-group">
-                            <label class="filter-label">Agent</label>
+                            <label>Agent</label>
                             <select id="filterAgent"><option value="">All Agents</option></select>
                         </div>
                         <div class="filter-group">
-                            <label class="filter-label">Min Score</label>
+                            <label>Min Score</label>
                             <input type="number" id="filterMinScore" min="0" max="100" value="0">
                         </div>
-                        <div style="display: flex; gap: 10px; align-items: flex-end;">
-                            <button class="btn-search" id="searchBtn">Search</button>
-                            <button class="btn-reset" id="resetBtn">Reset</button>
-                            <button id="saveViewBtn" style="background-color: var(--warning); color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer;">💾 Save View</button>
+                        <div class="filter-actions">
+                            <button class="btn btn-primary" id="searchBtn">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                Search
+                            </button>
+                            <button class="btn btn-secondary" id="resetBtn">Reset</button>
+                            <button class="btn btn-secondary" id="saveViewBtn">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                                Save
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Saved Views -->
-                    <div style="margin-top: 15px; padding: 10px; background-color: var(--primary-light); border-radius: 6px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <span style="font-weight: 600; font-size: 14px;">📌 Saved Views</span>
-                            <span id="viewsCount" style="font-size: 12px; color: var(--text-light);">0</span>
-                        </div>
-                        <div id="savedViewsList" style="display: flex; flex-direction: column; gap: 5px;">
-                            <p style="font-size: 12px; color: var(--text-light); text-align: center;">No saved views yet</p>
-                        </div>
+                    <div class="saved-views-bar" id="savedViewsList">
                     </div>
 
-                    <div class="table-container" style="margin-top: 20px;">
+                    <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
@@ -900,19 +1148,22 @@
                                 </tr>
                             </thead>
                             <tbody id="leadsTableBody">
-                                <tr><td colspan="7" class="empty-state">No leads found</td></tr>
+                                <tr><td colspan="7" class="empty-state"><p>No leads found</p></td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- USERS VIEW -->
+                <!-- ═══ USERS VIEW ═══ -->
                 <div class="view" id="users-view">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3 style="margin: 0; color: var(--text-dark);">Dashboard Users</h3>
-                        <button class="btn-add-user" id="addUserBtn">+ Add User</button>
+                    <div class="section-header">
+                        <h3 class="section-title">Dashboard Users</h3>
+                        <button class="btn btn-primary" id="addUserBtn">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Add User
+                        </button>
                     </div>
-                    <div class="table-container">
+                    <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
@@ -926,25 +1177,28 @@
                                 </tr>
                             </thead>
                             <tbody id="usersTableBody">
-                                <tr><td colspan="7" style="text-align: center; color: var(--text-light);">Loading...</td></tr>
+                                <tr><td colspan="7" class="empty-state"><p>Loading...</p></td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- BOT USERS VIEW -->
+                <!-- ═══ BOT USERS VIEW ═══ -->
                 <div class="view" id="bot-view">
-                    <div class="stats-grid" id="botStatsGrid" style="margin-bottom: 20px;">
-                        <div class="stat-card"><div class="stat-value" id="botStatTotal">0</div><div class="stat-label">Bot Users</div></div>
-                        <div class="stat-card"><div class="stat-value" id="botStatTrial">0</div><div class="stat-label">On Trial</div></div>
-                        <div class="stat-card"><div class="stat-value" id="botStatPaid">0</div><div class="stat-label">Paying</div></div>
-                        <div class="stat-card"><div class="stat-value" id="botStatRevenue">$0</div><div class="stat-label">Est. MRR</div></div>
+                    <div class="stats-row" id="botStatsGrid">
+                        <div class="stat-card"><div class="stat-label">Bot Users</div><div class="stat-value" id="botStatTotal">0</div></div>
+                        <div class="stat-card"><div class="stat-label">On Trial</div><div class="stat-value" id="botStatTrial">0</div></div>
+                        <div class="stat-card"><div class="stat-label">Paying</div><div class="stat-value" id="botStatPaid">0</div></div>
+                        <div class="stat-card"><div class="stat-label">Est. MRR</div><div class="stat-value" id="botStatRevenue">$0</div></div>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h3 style="margin: 0; color: var(--text-dark);">🤖 Telegram Bot Subscribers</h3>
-                        <button id="refreshBotUsersBtn" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer;">🔄 Refresh</button>
+                    <div class="section-header">
+                        <h3 class="section-title">Telegram Bot Subscribers</h3>
+                        <button class="btn btn-secondary" id="refreshBotUsersBtn">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                            Refresh
+                        </button>
                     </div>
-                    <div class="table-container">
+                    <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
@@ -959,31 +1213,32 @@
                                 </tr>
                             </thead>
                             <tbody id="botUsersTableBody">
-                                <tr><td colspan="8" style="text-align: center; color: var(--text-light);">Loading...</td></tr>
+                                <tr><td colspan="8" class="empty-state"><p>Loading...</p></td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- INSPECTIONS VIEW -->
+                <!-- ═══ INSPECTIONS VIEW ═══ -->
                 <div class="view" id="inspections-view">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3 style="margin: 0; color: var(--text-dark);">Scheduled Inspections</h3>
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <div style="display: flex; gap: 8px;">
-                                <select id="inspectionDaysFilter" style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 5px; font-size: 13px;">
-                                    <option value="">All Dates</option>
-                                    <option value="7">Next 7 Days</option>
-                                    <option value="14">Next 14 Days</option>
-                                    <option value="30">Next 30 Days</option>
-                                    <option value="60">Next 60 Days</option>
-                                </select>
-                                <button id="refreshInspectionsBtn" style="padding: 6px 12px; background-color: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 13px;">🔄 Refresh</button>
-                            </div>
-                            <div style="font-size: 12px; color: var(--text-light);" id="lastFetchedTime">Last fetched: --</div>
+                    <div class="section-header">
+                        <h3 class="section-title">Scheduled Inspections</h3>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <select id="inspectionDaysFilter" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit;color:var(--fg);background:var(--bg-surface);">
+                                <option value="">All Dates</option>
+                                <option value="7">Next 7 Days</option>
+                                <option value="14">Next 14 Days</option>
+                                <option value="30">Next 30 Days</option>
+                                <option value="60">Next 60 Days</option>
+                            </select>
+                            <button class="btn btn-secondary" id="refreshInspectionsBtn">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                                Refresh
+                            </button>
+                            <span style="font-size:12px;color:var(--fg-muted);" id="lastFetchedTime">Last fetched: --</span>
                         </div>
                     </div>
-                    <div class="table-container">
+                    <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
@@ -996,37 +1251,32 @@
                                 </tr>
                             </thead>
                             <tbody id="inspectionsTableBody">
-                                <tr><td colspan="6" style="text-align: center; color: var(--text-light);">Loading...</td></tr>
+                                <tr><td colspan="6" class="empty-state"><p>Loading...</p></td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- SETTINGS VIEW -->
+                <!-- ═══ SETTINGS VIEW ═══ -->
                 <div class="view" id="settings-view">
-                    <div style="max-width: 800px; margin: 0 auto; padding: 20px;">
-                        <h1 style="margin-bottom: 30px;">Settings</h1>
-
-                        <!-- Appearance Section -->
-                        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <h3 style="margin-top: 0; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">🎨 Appearance</h3>
-
-                            <div style="margin-bottom: 15px;">
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Theme</label>
-                                <div style="display: flex; gap: 10px;">
-                                    <button id="themeLightBtn" style="padding: 8px 15px; border: 2px solid var(--border); border-radius: 5px; background: white; cursor: pointer; flex: 1;">☀️ Light</button>
-                                    <button id="themeDarkBtn" style="padding: 8px 15px; border: 2px solid var(--border); border-radius: 5px; background: white; cursor: pointer; flex: 1;">🌙 Dark</button>
+                    <div class="settings-page">
+                        <!-- Appearance -->
+                        <div class="settings-card">
+                            <div class="settings-card-title">Appearance</div>
+                            <div class="settings-row">
+                                <label>Theme</label>
+                                <div class="toggle-btns">
+                                    <button class="toggle-btn active" id="themeLightBtn">Light</button>
+                                    <button class="toggle-btn" id="themeDarkBtn">Dark</button>
                                 </div>
                             </div>
-
-                            <div style="margin-bottom: 15px;">
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Items Per Page</label>
-                                <input type="number" id="settingsItemsPerPage" min="10" max="500" value="100" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 5px;">
+                            <div class="settings-row">
+                                <label>Items Per Page</label>
+                                <input type="number" id="settingsItemsPerPage" min="10" max="500" value="100" style="width:100px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit;">
                             </div>
-
-                            <div style="margin-bottom: 15px;">
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Default Sort Column</label>
-                                <select id="settingsDefaultSort" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 5px;">
+                            <div class="settings-row">
+                                <label>Default Sort</label>
+                                <select id="settingsDefaultSort" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit;">
                                     <option value="last_updated">Last Updated</option>
                                     <option value="address">Address (A-Z)</option>
                                     <option value="score">Score (High to Low)</option>
@@ -1035,72 +1285,59 @@
                             </div>
                         </div>
 
-                        <!-- Notifications Section -->
-                        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <h3 style="margin-top: 0; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">🔔 Notifications</h3>
-
-                            <div style="margin-bottom: 15px;">
-                                <label style="display: flex; align-items: center; margin-bottom: 10px;">
-                                    <input type="checkbox" id="settingsNotificationsEnabled" checked>
-                                    <span style="margin-left: 10px;">Enable notifications</span>
-                                </label>
+                        <!-- Notifications -->
+                        <div class="settings-card">
+                            <div class="settings-card-title">Notifications</div>
+                            <div class="settings-row">
+                                <label><input type="checkbox" id="settingsNotificationsEnabled" checked style="margin-right:8px;"> Enable notifications</label>
                             </div>
-
-                            <div style="margin-bottom: 15px;">
-                                <label style="display: flex; align-items: center; margin-bottom: 10px;">
-                                    <input type="checkbox" id="settingsNotifyNewLeads" checked>
-                                    <span style="margin-left: 10px;">Notify about new leads</span>
-                                </label>
+                            <div class="settings-row">
+                                <label><input type="checkbox" id="settingsNotifyNewLeads" checked style="margin-right:8px;"> Notify about new leads</label>
                             </div>
-
-                            <div style="margin-bottom: 15px;">
-                                <label style="display: flex; align-items: center; margin-bottom: 10px;">
-                                    <input type="checkbox" id="settingsNotifyInspections">
-                                    <span style="margin-left: 10px;">Notify about scheduled inspections</span>
-                                </label>
+                            <div class="settings-row">
+                                <label><input type="checkbox" id="settingsNotifyInspections" style="margin-right:8px;"> Notify about inspections</label>
                             </div>
-
-                            <div style="margin-bottom: 15px;">
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email Digest Frequency</label>
-                                <select id="settingsNotifyFrequency" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 5px;">
+                            <div class="settings-row">
+                                <label>Email Digest</label>
+                                <select id="settingsNotifyFrequency" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit;">
                                     <option value="daily">Daily</option>
                                     <option value="weekly">Weekly</option>
                                     <option value="disabled">Disabled</option>
                                 </select>
                             </div>
-
-                            <button id="testNotificationBtn" style="padding: 8px 15px; background-color: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer;">Test Notification</button>
-                        </div>
-
-                        <!-- Export History Section -->
-                        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <h3 style="margin-top: 0; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">📥 Export History</h3>
-
-                            <div id="exportHistoryContainer" style="max-height: 300px; overflow-y: auto;">
-                                <p style="color: var(--text-light); text-align: center; padding: 20px;">Loading export history...</p>
+                            <div style="margin-top:8px;">
+                                <button class="btn btn-secondary btn-sm" id="testNotificationBtn">Test Notification</button>
                             </div>
                         </div>
 
-                        <!-- Account Section -->
-                        <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <h3 style="margin-top: 0; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">👤 Account</h3>
-
-                            <div id="accountInfo" style="margin-bottom: 20px; padding: 15px; background-color: var(--primary-light); border-radius: 5px;">
-                                <p style="margin: 5px 0;"><strong>Username:</strong> <span id="accountUsername">-</span></p>
-                                <p style="margin: 5px 0;"><strong>Email:</strong> <span id="accountEmail">-</span></p>
-                                <p style="margin: 5px 0;"><strong>Member Since:</strong> <span id="accountCreated">-</span></p>
+                        <!-- Export History -->
+                        <div class="settings-card">
+                            <div class="settings-card-title">Export History</div>
+                            <div id="exportHistoryContainer">
+                                <p style="color:var(--fg-muted);text-align:center;padding:16px;font-size:13px;">Loading export history...</p>
                             </div>
-
-                            <button id="changePasswordBtn" style="padding: 8px 15px; background-color: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px;">Change Password</button>
-                            <button id="logoutAllBtn" style="padding: 8px 15px; background-color: var(--warning); color: white; border: none; border-radius: 5px; cursor: pointer;">Logout All Sessions</button>
                         </div>
 
-                        <!-- Save Button -->
-                        <div style="text-align: center; margin-top: 30px;">
-                            <button id="saveSettingsBtn" style="padding: 10px 30px; background-color: var(--success); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Save All Settings</button>
+                        <!-- Account -->
+                        <div class="settings-card">
+                            <div class="settings-card-title">Account</div>
+                            <div class="account-info">
+                                <p><strong>Username:</strong> <span id="accountUsername">-</span></p>
+                                <p><strong>Email:</strong> <span id="accountEmail">-</span></p>
+                                <p><strong>Member Since:</strong> <span id="accountCreated">-</span></p>
+                            </div>
+                            <div style="display:flex;gap:8px;">
+                                <button class="btn btn-secondary btn-sm" id="changePasswordBtn">Change Password</button>
+                                <button class="btn btn-secondary btn-sm" id="logoutAllBtn">Logout All Sessions</button>
+                            </div>
+                        </div>
+
+                        <div style="text-align:center;margin-top:16px;">
+                            <button class="btn btn-success" id="saveSettingsBtn">Save Settings</button>
                         </div>
                     </div>
                 </div>
+
             </div>
         </div>
     </div>
@@ -1109,9 +1346,11 @@
     <div class="side-panel" id="sidePanel">
         <div class="panel-header">
             <div class="panel-title">Lead Details</div>
-            <button class="panel-close" id="panelClose">&times;</button>
+            <button class="panel-close" id="panelClose">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
         </div>
-        <div class="panel-content">
+        <div class="panel-body">
             <div class="panel-section">
                 <div class="panel-section-title">Lead Info</div>
                 <div class="panel-field"><div class="panel-label">Address</div><div class="panel-value" id="panelAddress"></div></div>
@@ -1119,14 +1358,12 @@
                 <div class="panel-field"><div class="panel-label">Score</div><div class="panel-value" id="panelScore"></div></div>
                 <div class="panel-field"><div class="panel-label">Estimated Value</div><div class="panel-value" id="panelValue"></div></div>
             </div>
-
             <div class="panel-section">
                 <div class="panel-section-title">Contact Info</div>
                 <div class="panel-field"><div class="panel-label">Contractor</div><div class="panel-value" id="panelContractor"></div></div>
                 <div class="panel-field"><div class="panel-label">Phone</div><div class="panel-value" id="panelPhone"></div></div>
                 <div class="panel-field"><div class="panel-label">Email</div><div class="panel-value" id="panelEmail"></div></div>
             </div>
-
             <div class="panel-section">
                 <div class="panel-section-title">Project Details</div>
                 <div class="panel-field"><div class="panel-label">Service Type</div><div class="panel-value" id="panelServiceType"></div></div>
@@ -1134,26 +1371,26 @@
                 <div class="panel-field"><div class="panel-label">Next Inspection</div><div class="panel-value" id="panelInspection"></div></div>
                 <div class="panel-field"><div class="panel-label">Inspection Source</div><div class="panel-value" id="panelInspectionSource"></div></div>
             </div>
-
             <div class="panel-section">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <div class="panel-section-title">Notes</div>
-                    <button id="addNoteBtn" style="padding: 4px 8px; background-color: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">+ Add</button>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <div class="panel-section-title" style="margin-bottom:0;padding-bottom:0;border:none;">Notes</div>
+                    <button class="btn btn-sm btn-accent" id="addNoteBtn">+ Add</button>
                 </div>
-                <div id="panelNotesList" style="max-height: 200px; overflow-y: auto;">
-                    <p style="color: var(--text-light); font-size: 12px; text-align: center;">No notes yet</p>
+                <div id="panelNotesList">
+                    <p style="color:var(--fg-muted);font-size:12px;text-align:center;">No notes yet</p>
                 </div>
             </div>
         </div>
-        <div class="panel-actions">
-            <button class="btn-action btn-primary" id="markContactedBtn">Mark as Contacted</button>
-            <button class="btn-action btn-secondary" id="panelCloseBtn">Close</button>
+        <div class="panel-footer">
+            <button class="btn btn-accent" id="markContactedBtn">Mark as Contacted</button>
+            <button class="btn btn-secondary" id="panelCloseBtn">Close</button>
         </div>
     </div>
+    <div class="panel-overlay" id="panelOverlay"></div>
 
-    <!-- MODAL: Add/Create User -->
+    <!-- MODAL: Add User -->
     <div class="modal" id="userModal">
-        <div class="modal-content">
+        <div class="modal-box">
             <div class="modal-header">
                 <div class="modal-title">Add New User</div>
                 <button class="modal-close" id="modalClose">&times;</button>
@@ -1195,22 +1432,20 @@
                     <div class="form-group" id="formTrialDaysGroup">
                         <label>Trial Length (days)</label>
                         <input type="number" id="formTrialDays" value="7" min="1" max="365">
-                        <div style="font-size: 11px; color: var(--text-light); margin-top: 4px;">
-                            After this period the user's access will expire automatically.
-                        </div>
+                        <div class="form-hint">After this period the user's access will expire automatically.</div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button class="btn-modal btn-cancel" id="modalCancelBtn">Cancel</button>
-                <button class="btn-modal btn-submit" id="modalSubmitBtn">Create User</button>
+                <button class="btn btn-secondary" id="modalCancelBtn">Cancel</button>
+                <button class="btn btn-primary" id="modalSubmitBtn">Create User</button>
             </div>
         </div>
     </div>
 
     <!-- MODAL: Edit User -->
     <div class="modal" id="editUserModal">
-        <div class="modal-content">
+        <div class="modal-box">
             <div class="modal-header">
                 <div class="modal-title">Edit User</div>
                 <button class="modal-close" id="editUserModalClose">&times;</button>
@@ -1220,7 +1455,7 @@
                     <input type="hidden" id="editUserId">
                     <div class="form-group">
                         <label>Username (Read-only)</label>
-                        <input type="text" id="editUsername" readonly style="background-color: #f0f0f0;">
+                        <input type="text" id="editUsername" readonly style="background:var(--bg-subtle);color:var(--fg-muted);">
                     </div>
                     <div class="form-group">
                         <label>Email</label>
@@ -1240,52 +1475,70 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button class="btn-modal btn-cancel" id="editUserCancelBtn">Cancel</button>
-                <button class="btn-modal btn-submit" id="editUserSubmitBtn">Save Changes</button>
+                <button class="btn btn-secondary" id="editUserCancelBtn">Cancel</button>
+                <button class="btn btn-primary" id="editUserSubmitBtn">Save Changes</button>
             </div>
         </div>
     </div>
 
     <!-- MODAL: Delete User -->
     <div class="modal" id="deleteUserModal">
-        <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-box" style="max-width:420px;">
             <div class="modal-header">
                 <div class="modal-title">Delete User</div>
                 <button class="modal-close" id="deleteUserModalClose">&times;</button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="deleteUserId">
-                <p style="margin-bottom: 15px; color: var(--text-dark);">
-                    Are you sure you want to delete user <strong id="deleteUserName"></strong>?
-                </p>
-                <div style="background-color: var(--primary-light); padding: 10px; border-radius: 5px; margin-bottom: 15px;">
-                    <label style="display: flex; align-items: center; margin-bottom: 10px;">
-                        <input type="radio" name="deleteType" value="soft" checked>
-                        <span style="margin-left: 8px;">Soft Delete (Deactivate) - User can be reactivated</span>
+                <p style="margin-bottom:14px;font-size:14px;">Are you sure you want to delete user <strong id="deleteUserName"></strong>?</p>
+                <div style="background:var(--bg-subtle);padding:12px;border-radius:var(--radius);border:1px solid var(--border-light);">
+                    <label style="display:flex;align-items:center;margin-bottom:10px;font-size:13px;cursor:pointer;">
+                        <input type="radio" name="deleteType" value="soft" checked style="margin-right:8px;">
+                        Soft Delete (Deactivate) - Can be reactivated
                     </label>
-                    <label style="display: flex; align-items: center;">
-                        <input type="radio" name="deleteType" value="hard">
-                        <span style="margin-left: 8px;">Hard Delete (Permanent) - All data removed</span>
+                    <label style="display:flex;align-items:center;font-size:13px;cursor:pointer;">
+                        <input type="radio" name="deleteType" value="hard" style="margin-right:8px;">
+                        Hard Delete (Permanent) - All data removed
                     </label>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn-modal btn-cancel" id="deleteUserCancelBtn">Cancel</button>
-                <button class="btn-modal btn-danger" id="deleteUserConfirmBtn" style="background-color: var(--danger);">Delete User</button>
+                <button class="btn btn-secondary" id="deleteUserCancelBtn">Cancel</button>
+                <button class="btn btn-danger" id="deleteUserConfirmBtn">Delete User</button>
             </div>
         </div>
     </div>
 
     <script>
+        // ── SVG icon helpers ──
+        const ICON = {
+            phone: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+            mail: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+            calendar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>'
+        };
+
         let currentAccessToken = localStorage.getItem('access_token');
         let currentLead = null;
 
-        // Sidebar toggle
+        // ── Page title map ──
+        const PAGE_TITLES = {
+            dashboard: 'Dashboard',
+            leads: 'Leads',
+            users: 'Users',
+            inspections: 'Inspections',
+            bot: 'Bot Users',
+            settings: 'Settings'
+        };
+
+        // ── Sidebar toggle ──
         document.getElementById('sidebarToggle').addEventListener('click', () => {
-            document.getElementById('sidebar').classList.toggle('expanded');
+            const sb = document.getElementById('sidebar');
+            sb.classList.toggle('collapsed');
+            const label = sb.querySelector('.toggle-label');
+            if (label) label.textContent = sb.classList.contains('collapsed') ? '' : 'Collapse';
         });
 
-        // Navigation
+        // ── Navigation ──
         document.querySelectorAll('.nav-item').forEach(btn => {
             btn.addEventListener('click', () => {
                 document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -1293,6 +1546,7 @@
                 const viewName = btn.dataset.view;
                 document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
                 document.getElementById(`${viewName}-view`).classList.add('active');
+                document.getElementById('pageTitle').textContent = PAGE_TITLES[viewName] || viewName;
                 if (viewName === 'dashboard') loadDashboard();
                 if (viewName === 'leads') { loadLeads(); loadSavedViews(); }
                 if (viewName === 'users') loadUsers();
@@ -1302,17 +1556,37 @@
             });
         });
 
-        // Inspection view filters and controls
+        // ── Logout ──
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            window.location.href = '/login.html';
+        });
+
+        // ── Side panel ──
+        function closePanel() { document.getElementById('sidePanel').classList.remove('open'); }
+        document.getElementById('panelClose').addEventListener('click', closePanel);
+        document.getElementById('panelCloseBtn').addEventListener('click', closePanel);
+        document.getElementById('panelOverlay').addEventListener('click', closePanel);
+
+        // ── Search/Reset ──
+        document.getElementById('searchBtn').addEventListener('click', loadLeads);
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            document.getElementById('filterCity').value = '';
+            document.getElementById('filterAgent').value = '';
+            document.getElementById('filterMinScore').value = '0';
+            loadLeads();
+        });
+
+        // ── Inspections controls ──
         const inspectionDaysFilter = document.getElementById('inspectionDaysFilter');
-        if (inspectionDaysFilter) {
-            inspectionDaysFilter.addEventListener('change', loadInspections);
-        }
+        if (inspectionDaysFilter) inspectionDaysFilter.addEventListener('change', loadInspections);
 
         const refreshInspectionsBtn = document.getElementById('refreshInspectionsBtn');
         if (refreshInspectionsBtn) {
             refreshInspectionsBtn.addEventListener('click', async () => {
                 refreshInspectionsBtn.disabled = true;
-                refreshInspectionsBtn.textContent = '⏳ Fetching...';
+                refreshInspectionsBtn.querySelector('svg').style.animation = 'spin 1s linear infinite';
                 try {
                     const response = await fetch('/api/admin/scheduler/fetch-now', {
                         method: 'POST',
@@ -1320,79 +1594,42 @@
                     });
                     if (response.ok) {
                         await loadInspections();
-                        // Update last fetched time
-                        const now = new Date();
-                        const timeStr = now.toLocaleTimeString();
-                        document.getElementById('lastFetchedTime').textContent = `Last fetched: ${timeStr}`;
-                        refreshInspectionsBtn.textContent = '🔄 Refresh';
-                    } else {
-                        alert('Failed to refresh inspections');
-                        refreshInspectionsBtn.textContent = '🔄 Refresh';
+                        document.getElementById('lastFetchedTime').textContent = `Last fetched: ${new Date().toLocaleTimeString()}`;
                     }
-                } catch (e) {
-                    console.error('Error refreshing inspections:', e);
-                    alert('Error refreshing inspections');
-                    refreshInspectionsBtn.textContent = '🔄 Refresh';
-                } finally {
+                } catch (e) { console.error(e); }
+                finally {
                     refreshInspectionsBtn.disabled = false;
+                    refreshInspectionsBtn.querySelector('svg').style.animation = '';
                 }
             });
         }
 
-        // Logout
-        document.getElementById('logoutBtn').addEventListener('click', () => {
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            window.location.href = '/login.html';
-        });
-
-        // Side panel
-        document.getElementById('panelClose').addEventListener('click', () => {
-            document.getElementById('sidePanel').classList.remove('open');
-        });
-        document.getElementById('panelCloseBtn').addEventListener('click', () => {
-            document.getElementById('sidePanel').classList.remove('open');
-        });
-
-        // Modal: Add User
+        // ── Modals ──
         document.getElementById('addUserBtn').addEventListener('click', () => {
             document.getElementById('userForm').reset();
             document.getElementById('userModal').classList.add('open');
         });
-        document.getElementById('modalClose').addEventListener('click', () => {
-            document.getElementById('userModal').classList.remove('open');
-        });
-        document.getElementById('modalCancelBtn').addEventListener('click', () => {
-            document.getElementById('userModal').classList.remove('open');
-        });
-
-        // Modal: Edit User
-        document.getElementById('editUserModalClose').addEventListener('click', () => {
-            document.getElementById('editUserModal').classList.remove('open');
-        });
-        document.getElementById('editUserCancelBtn').addEventListener('click', () => {
-            document.getElementById('editUserModal').classList.remove('open');
-        });
+        document.getElementById('modalClose').addEventListener('click', () => document.getElementById('userModal').classList.remove('open'));
+        document.getElementById('modalCancelBtn').addEventListener('click', () => document.getElementById('userModal').classList.remove('open'));
+        document.getElementById('editUserModalClose').addEventListener('click', () => document.getElementById('editUserModal').classList.remove('open'));
+        document.getElementById('editUserCancelBtn').addEventListener('click', () => document.getElementById('editUserModal').classList.remove('open'));
         document.getElementById('editUserSubmitBtn').addEventListener('click', saveUserChanges);
-
-        // Modal: Delete User
-        document.getElementById('deleteUserModalClose').addEventListener('click', () => {
-            document.getElementById('deleteUserModal').classList.remove('open');
-        });
-        document.getElementById('deleteUserCancelBtn').addEventListener('click', () => {
-            document.getElementById('deleteUserModal').classList.remove('open');
-        });
+        document.getElementById('deleteUserModalClose').addEventListener('click', () => document.getElementById('deleteUserModal').classList.remove('open'));
+        document.getElementById('deleteUserCancelBtn').addEventListener('click', () => document.getElementById('deleteUserModal').classList.remove('open'));
         document.getElementById('deleteUserConfirmBtn').addEventListener('click', confirmDeleteUser);
 
-        // Show/hide trial days input based on access type
         const formAccessType = document.getElementById('formAccessType');
         if (formAccessType) {
             formAccessType.addEventListener('change', () => {
-                const group = document.getElementById('formTrialDaysGroup');
-                group.style.display = formAccessType.value === 'trial' ? '' : 'none';
+                document.getElementById('formTrialDaysGroup').style.display = formAccessType.value === 'trial' ? '' : 'none';
             });
         }
 
+        // ── Refresh bot users ──
+        const refreshBotUsersBtn = document.getElementById('refreshBotUsersBtn');
+        if (refreshBotUsersBtn) refreshBotUsersBtn.addEventListener('click', loadBotUsers);
+
+        // ── Create User submit ──
         document.getElementById('modalSubmitBtn').addEventListener('click', async () => {
             const username = document.getElementById('formUsername').value;
             const email = document.getElementById('formEmail').value;
@@ -1402,25 +1639,15 @@
             const accessType = document.getElementById('formAccessType').value;
             const trialDays = parseInt(document.getElementById('formTrialDays').value || '7', 10);
 
-            const body = {
-                username, email, password,
-                full_name: fullName,
-                roles: [role],
-            };
-            if (accessType === 'trial' && trialDays > 0) {
-                body.expires_in_hours = trialDays * 24;
-            }
+            const body = { username, email, password, full_name: fullName, roles: [role] };
+            if (accessType === 'trial' && trialDays > 0) body.expires_in_hours = trialDays * 24;
 
             try {
                 const response = await fetch('/api/admin/users', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${currentAccessToken}`,
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 });
-
                 if (response.ok) {
                     document.getElementById('userModal').classList.remove('open');
                     document.getElementById('userForm').reset();
@@ -1430,33 +1657,38 @@
                     const err = await response.json().catch(() => ({}));
                     alert(err.error || 'Failed to create user');
                 }
-            } catch (e) {
-                console.error(e);
-                alert('Error creating user: ' + e.message);
-            }
+            } catch (e) { alert('Error creating user: ' + e.message); }
         });
 
-        // Refresh bot users
-        const refreshBotUsersBtn = document.getElementById('refreshBotUsersBtn');
-        if (refreshBotUsersBtn) {
-            refreshBotUsersBtn.addEventListener('click', loadBotUsers);
+        // ── Utility functions ──
+        function getScoreBadge(score) {
+            if (score >= 80) return 'badge-hot';
+            if (score >= 60) return 'badge-warm';
+            if (score >= 40) return 'badge-medium';
+            if (score >= 20) return 'badge-cool';
+            return 'badge-cold';
         }
 
-        // Search/Reset
-        document.getElementById('searchBtn').addEventListener('click', loadLeads);
-        document.getElementById('resetBtn').addEventListener('click', () => {
-            document.getElementById('filterCity').value = '';
-            document.getElementById('filterAgent').value = '';
-            document.getElementById('filterMinScore').value = '0';
-            loadLeads();
-        });
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch]);
+        }
 
-        // Data loading
+        function formatTrialStatus(user) {
+            if (!user.expires_at) return '<span class="badge badge-success">Permanent</span>';
+            const now = new Date();
+            const ends = new Date(user.expires_at.replace(' ', 'T') + 'Z');
+            const diffMs = ends - now;
+            const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+            if (diffMs <= 0) return `<span class="badge badge-danger">Expired</span> <small style="color:var(--fg-muted);">${user.expires_at}</small>`;
+            const color = days <= 2 ? 'badge-danger' : days <= 7 ? 'badge-warning' : 'badge-info';
+            return `<span class="badge ${color}">${days}d left</span> <small style="color:var(--fg-muted);">${user.expires_at}</small>`;
+        }
+
+        // ── Dashboard ──
         async function loadDashboard() {
             try {
-                const response = await fetch('/api/leads', {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
+                const response = await fetch('/api/leads', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const data = await response.json();
                 document.getElementById('totalLeads').textContent = data.total || 0;
                 document.getElementById('newLeads').textContent = data.total || 0;
@@ -1466,23 +1698,22 @@
                 const tbody = document.getElementById('dashboardLeadsBody');
                 tbody.innerHTML = leads.slice(0, 5).map(lead => `
                     <tr class="lead-row" onclick="showLeadPanel('${lead.address_key}')">
-                        <td>${lead.address}</td>
+                        <td>${escapeHtml(lead.address)}</td>
                         <td>
                             <div class="contact-info">
-                                ${lead.phone ? `<div class="contact-item"><span class="icon-small">📞</span>${lead.phone}</div>` : ''}
-                                ${lead.email ? `<div class="contact-item"><span class="icon-small">📧</span>${lead.email}</div>` : ''}
+                                ${lead.phone ? `<div class="contact-item">${ICON.phone}${escapeHtml(lead.phone)}</div>` : ''}
+                                ${lead.email ? `<div class="contact-item">${ICON.mail}${escapeHtml(lead.email)}</div>` : ''}
                             </div>
                         </td>
                         <td><span class="badge ${getScoreBadge(lead.score)}">${lead.score}</span></td>
-                        <td>${lead.contractor || '-'}</td>
-                        <td>${lead.next_inspection_date ? `<span class="inspection-badge">📅 ${lead.next_inspection_date}</span>` : '-'}</td>
+                        <td>${escapeHtml(lead.contractor) || '<span style="color:var(--fg-muted)">-</span>'}</td>
+                        <td>${lead.next_inspection_date ? `<span class="inspection-tag">${ICON.calendar} ${lead.next_inspection_date}</span>` : '<span style="color:var(--fg-muted)">-</span>'}</td>
                     </tr>
-                `).join('') || '<tr><td colspan="5" style="text-align: center;">No leads</td></tr>';
-            } catch (e) {
-                console.error(e);
-            }
+                `).join('') || '<tr><td colspan="5" class="empty-state"><p>No leads</p></td></tr>';
+            } catch (e) { console.error(e); }
         }
 
+        // ── Leads ──
         async function loadLeads() {
             try {
                 const city = document.getElementById('filterCity').value;
@@ -1493,85 +1724,164 @@
                 if (agent) params.append('agent', agent);
                 if (minScore) params.append('min_score', minScore);
 
-                const response = await fetch(`/api/leads?${params}`, {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
+                const response = await fetch(`/api/leads?${params}`, { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const data = await response.json();
                 const leads = data.leads || [];
                 const tbody = document.getElementById('leadsTableBody');
 
                 if (leads.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No leads found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><p>No leads found</p></td></tr>';
                     return;
                 }
 
                 tbody.innerHTML = leads.map(lead => `
                     <tr class="lead-row" onclick="showLeadPanel('${lead.id}')">
-                        <td>${lead.address}</td>
-                        <td>${lead.city}</td>
-                        <td>
-                            ${lead.service_emoji ? `<span title="${lead.service_label}">${lead.service_emoji} ${lead.service_label}</span>` : '-'}
-                        </td>
+                        <td>${escapeHtml(lead.address)}</td>
+                        <td>${escapeHtml(lead.city)}</td>
+                        <td>${lead.service_emoji && lead.service_label ? `<span title="${escapeHtml(lead.service_label)}">${lead.service_emoji} ${escapeHtml(lead.service_label)}</span>` : '<span style="color:var(--fg-muted)">-</span>'}</td>
                         <td>
                             <div class="contact-info">
-                                ${lead.contact_phone ? `<div class="contact-item"><span class="icon-small">📞</span>${lead.contact_phone}</div>` : ''}
-                                ${lead.contact_email ? `<div class="contact-item"><span class="icon-small">📧</span>${lead.contact_email}</div>` : ''}
+                                ${lead.contact_phone ? `<div class="contact-item">${ICON.phone}${escapeHtml(lead.contact_phone)}</div>` : ''}
+                                ${lead.contact_email ? `<div class="contact-item">${ICON.mail}${escapeHtml(lead.contact_email)}</div>` : ''}
                             </div>
                         </td>
                         <td><span class="badge ${getScoreBadge(lead.score)}">${lead.score}</span></td>
-                        <td>${lead.source || '-'}</td>
-                        <td>${lead.next_inspection_date ? `<span class="inspection-badge">📅 ${lead.next_inspection_date}</span>` : '-'}</td>
+                        <td>${escapeHtml(lead.source) || '<span style="color:var(--fg-muted)">-</span>'}</td>
+                        <td>${lead.next_inspection_date ? `<span class="inspection-tag">${ICON.calendar} ${lead.next_inspection_date}</span>` : '<span style="color:var(--fg-muted)">-</span>'}</td>
                     </tr>
                 `).join('');
-            } catch (e) {
-                console.error(e);
-            }
+            } catch (e) { console.error(e); }
         }
 
-        function formatTrialStatus(user) {
-            if (!user.expires_at) {
-                return '<span class="badge badge-success">Permanent</span>';
-            }
-            const now = new Date();
-            const ends = new Date(user.expires_at.replace(' ', 'T') + 'Z');
-            const diffMs = ends - now;
-            const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-            if (diffMs <= 0) {
-                return `<span class="badge badge-danger">Expired</span> <small style="color: var(--text-light);">${user.expires_at}</small>`;
-            }
-            const color = days <= 2 ? 'badge-danger' : days <= 7 ? 'badge-warning' : 'badge-info';
-            return `<span class="badge ${color}">${days}d left</span> <small style="color: var(--text-light);">${user.expires_at}</small>`;
-        }
-
-        async function loadUsers() {
+        // ── Lead Panel ──
+        async function showLeadPanel(addressKey) {
             try {
-                const response = await fetch('/api/admin/users', {
+                const leadResponse = await fetch(`/api/leads/${addressKey}`, { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
+                const lead = await leadResponse.json();
+                document.getElementById('panelAddress').textContent = lead.address || '-';
+                document.getElementById('panelCity').textContent = lead.city || '-';
+                document.getElementById('panelScore').innerHTML = `<span class="badge ${getScoreBadge(lead.score)}">${lead.score}</span>`;
+                document.getElementById('panelValue').textContent = lead.value ? `$${lead.value.toLocaleString()}` : '-';
+                document.getElementById('panelContractor').textContent = lead.contractor || '-';
+                document.getElementById('panelPhone').textContent = lead.contact_phone || '-';
+                document.getElementById('panelEmail').textContent = lead.contact_email || '-';
+                const serviceDisplay = lead.service_emoji && lead.service_label ? `${lead.service_emoji} ${lead.service_label}` : (lead.service_type || '-');
+                document.getElementById('panelServiceType').textContent = serviceDisplay;
+                document.getElementById('panelSource').textContent = lead.source || '-';
+                document.getElementById('panelInspection').textContent = lead.next_inspection_date || '-';
+                document.getElementById('panelInspectionSource').textContent = lead.inspection_source || '-';
+                currentLead = { id: addressKey, address: lead.address };
+                document.getElementById('markContactedBtn').onclick = () => markLeadAsContacted(addressKey);
+                loadLeadNotes(addressKey);
+                document.getElementById('addNoteBtn').onclick = () => addNote(addressKey);
+                document.getElementById('sidePanel').classList.add('open');
+            } catch (e) { console.error('Error loading lead details:', e); }
+        }
+
+        async function markLeadAsContacted(leadId) {
+            try {
+                const response = await fetch(`/api/leads/${leadId}/contact`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contact_type: 'CALL', notes: 'Contacted from dashboard' })
+                });
+                if (response.ok) { alert('Lead marked as contacted'); loadLeads(); }
+                else alert('Failed to mark lead as contacted');
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadLeadNotes(leadId) {
+            try {
+                const response = await fetch(`/api/leads/${leadId}/notes`, { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
+                const notes = await response.json();
+                const container = document.getElementById('panelNotesList');
+                if (notes.length === 0) {
+                    container.innerHTML = '<p style="color:var(--fg-muted);font-size:12px;text-align:center;">No notes yet</p>';
+                    return;
+                }
+                container.innerHTML = notes.map(note => `
+                    <div style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius);margin-bottom:8px;border:1px solid var(--border-light);">
+                        <div style="font-size:13px;color:var(--fg);margin-bottom:6px;">${escapeHtml(note.note)}</div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--fg-muted);">
+                            <span>${escapeHtml(note.user)} &middot; ${new Date(note.created_at).toLocaleDateString()}</span>
+                            <div>
+                                <button onclick="editNote('${currentLead.id}', ${note.id}, '${note.note.replace(/'/g, "\\'")}')" class="btn btn-ghost btn-sm" style="font-size:11px;">Edit</button>
+                                <button onclick="deleteNote('${currentLead.id}', ${note.id})" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red);">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) { console.error(e); }
+        }
+
+        async function addNote(leadId) {
+            const noteText = prompt('Enter note:');
+            if (!noteText || !noteText.trim()) return;
+            try {
+                const response = await fetch(`/api/leads/${leadId}/notes`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ note: noteText })
+                });
+                if (response.ok) loadLeadNotes(leadId);
+                else alert('Failed to add note');
+            } catch (e) { console.error(e); }
+        }
+
+        async function editNote(leadId, noteId, currentText) {
+            const newText = prompt('Edit note:', currentText);
+            if (!newText || !newText.trim()) return;
+            try {
+                const response = await fetch(`/api/leads/${leadId}/notes/${noteId}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ note: newText })
+                });
+                if (response.ok) loadLeadNotes(leadId);
+                else alert('Failed to update note');
+            } catch (e) { console.error(e); }
+        }
+
+        async function deleteNote(leadId, noteId) {
+            if (!confirm('Delete this note?')) return;
+            try {
+                const response = await fetch(`/api/leads/${leadId}/notes/${noteId}`, {
+                    method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${currentAccessToken}` }
                 });
+                if (response.ok) loadLeadNotes(leadId);
+                else alert('Failed to delete note');
+            } catch (e) { console.error(e); }
+        }
+
+        // ── Users ──
+        async function loadUsers() {
+            try {
+                const response = await fetch('/api/admin/users', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const users = await response.json();
                 const tbody = document.getElementById('usersTableBody');
                 if (!Array.isArray(users) || users.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No users</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><p>No users</p></td></tr>';
                     return;
                 }
                 tbody.innerHTML = users.map(user => `
                     <tr>
-                        <td><strong>${user.username}</strong></td>
-                        <td>${user.email}</td>
-                        <td>${user.full_name || '-'}</td>
-                        <td>${(user.roles || []).join(', ') || '-'}</td>
-                        <td>${user.is_active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-danger">Inactive</span>'}</td>
+                        <td><strong>${escapeHtml(user.username)}</strong></td>
+                        <td>${escapeHtml(user.email)}</td>
+                        <td>${escapeHtml(user.full_name) || '<span style="color:var(--fg-muted)">-</span>'}</td>
+                        <td>${(user.roles || []).map(r => `<span class="badge badge-info">${r}</span>`).join(' ') || '-'}</td>
+                        <td>${user.is_active ? '<span style="display:inline-flex;align-items:center;"><span class="status-dot dot-green"></span>Active</span>' : '<span style="display:inline-flex;align-items:center;"><span class="status-dot dot-red"></span>Inactive</span>'}</td>
                         <td>${formatTrialStatus(user)}</td>
                         <td>
-                            <button onclick="extendTrial(${user.id})" style="background: var(--warning); color: white; padding: 5px 8px; border: none; border-radius: 3px; cursor: pointer; margin-right: 4px; font-size: 12px;" title="Extend trial by 7 days">+7d</button>
-                            <button onclick="editUser(${user.id})" style="background: var(--primary); color: white; padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer; margin-right: 4px; font-size: 12px;">Edit</button>
-                            <button onclick="deleteUser(${user.id})" style="background: var(--danger); color: white; padding: 5px 10px; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">Delete</button>
+                            <div style="display:flex;gap:4px;">
+                                <button onclick="extendTrial(${user.id})" class="btn btn-sm btn-secondary" title="Extend trial +7d">+7d</button>
+                                <button onclick="editUser(${user.id})" class="btn btn-sm btn-secondary">Edit</button>
+                                <button onclick="deleteUser(${user.id})" class="btn btn-sm btn-danger">Delete</button>
+                            </div>
                         </td>
                     </tr>
                 `).join('');
-            } catch (e) {
-                console.error('Error loading users:', e);
-            }
+            } catch (e) { console.error('Error loading users:', e); }
         }
 
         async function extendTrial(userId) {
@@ -1579,30 +1889,76 @@
             try {
                 const resp = await fetch(`/api/admin/users/${userId}/expiration`, {
                     method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${currentAccessToken}`,
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ expires_in_hours: 7 * 24 }),
                 });
                 if (resp.ok) loadUsers();
                 else alert('Failed to extend trial');
-            } catch (e) {
-                alert('Error: ' + e.message);
-            }
+            } catch (e) { alert('Error: ' + e.message); }
         }
 
-        // ══════════════════════════════════════════════
-        //  Bot Users view (Telegram bot subscribers)
-        // ══════════════════════════════════════════════
-        async function loadBotUsers() {
+        async function editUser(userId) {
             try {
-                const resp = await fetch('/api/admin/bot-users', {
+                const response = await fetch(`/api/admin/users/${userId}`, { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
+                const user = await response.json();
+                document.getElementById('editUserId').value = user.id;
+                document.getElementById('editUsername').value = user.username;
+                document.getElementById('editUserEmail').value = user.email;
+                document.getElementById('editUserFullName').value = user.full_name || '';
+                document.getElementById('editUserStatus').value = user.is_active ? '1' : '0';
+                document.getElementById('editUserModal').classList.add('open');
+            } catch (e) { console.error('Error loading user:', e); }
+        }
+
+        async function saveUserChanges() {
+            const userId = document.getElementById('editUserId').value;
+            const email = document.getElementById('editUserEmail').value;
+            const fullName = document.getElementById('editUserFullName').value;
+            const isActive = document.getElementById('editUserStatus').value === '1';
+            try {
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, full_name: fullName, is_active: isActive })
+                });
+                if (response.ok) {
+                    document.getElementById('editUserModal').classList.remove('open');
+                    loadUsers();
+                } else alert('Failed to update user');
+            } catch (e) { alert('Error updating user'); }
+        }
+
+        function deleteUser(userId) {
+            fetch(`/api/admin/users/${userId}`, { headers: { 'Authorization': `Bearer ${currentAccessToken}` } })
+                .then(r => r.json()).then(user => {
+                    document.getElementById('deleteUserId').value = user.id;
+                    document.getElementById('deleteUserName').textContent = user.username;
+                    document.getElementById('deleteUserModal').classList.add('open');
+                });
+        }
+
+        async function confirmDeleteUser() {
+            const userId = document.getElementById('deleteUserId').value;
+            const deleteType = document.querySelector('input[name="deleteType"]:checked').value;
+            const permanent = deleteType === 'hard';
+            try {
+                const response = await fetch(`/api/admin/users/${userId}?permanent=${permanent}`, {
+                    method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${currentAccessToken}` }
                 });
+                if (response.ok) {
+                    document.getElementById('deleteUserModal').classList.remove('open');
+                    loadUsers();
+                } else alert('Failed to delete user');
+            } catch (e) { alert('Error deleting user'); }
+        }
+
+        // ── Bot Users ──
+        async function loadBotUsers() {
+            try {
+                const resp = await fetch('/api/admin/bot-users', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 if (!resp.ok) {
-                    document.getElementById('botUsersTableBody').innerHTML =
-                        '<tr><td colspan="8" style="text-align: center; color: var(--danger);">Access denied or server error</td></tr>';
+                    document.getElementById('botUsersTableBody').innerHTML = '<tr><td colspan="8" class="empty-state"><p style="color:var(--red)">Access denied or server error</p></td></tr>';
                     return;
                 }
                 const data = await resp.json();
@@ -1615,7 +1971,7 @@
                 const users = data.users || [];
                 const tbody = document.getElementById('botUsersTableBody');
                 if (users.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-light);">No bot users yet. Share the bot link with customers!</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><p>No bot users yet</p></td></tr>';
                     return;
                 }
                 tbody.innerHTML = users.map(u => {
@@ -1625,24 +1981,24 @@
                     const expiry = u.subscription_status === 'paid' ? u.paid_until : u.trial_ends_at;
                     return `
                         <tr>
-                            <td><strong>${escapeHtml(name)}</strong>${u.username ? '<br><small style="color: var(--text-light);">@' + escapeHtml(u.username) + '</small>' : ''}</td>
-                            <td><code style="font-size: 11px;">${u.chat_id}</code></td>
+                            <td><strong>${escapeHtml(name)}</strong>${u.username ? '<br><small style="color:var(--fg-muted);">@' + escapeHtml(u.username) + '</small>' : ''}</td>
+                            <td><code style="font-size:11px;padding:2px 6px;background:var(--bg-subtle);border-radius:4px;">${u.chat_id}</code></td>
                             <td>${escapeHtml(u.city || '-')}</td>
-                            <td style="font-size: 12px;">${escapeHtml(services || '-')}</td>
+                            <td style="font-size:12px;">${escapeHtml(services)}</td>
                             <td>${statusBadge}</td>
-                            <td style="font-size: 12px;">${expiry || '-'}</td>
-                            <td style="text-align: center;">${u.leads_sent_count || 0}</td>
+                            <td style="font-size:12px;">${expiry || '-'}</td>
+                            <td style="text-align:center;">${u.leads_sent_count || 0}</td>
                             <td>
-                                <button onclick="extendBotTrial(${u.id})" style="background: var(--warning); color: white; padding: 4px 8px; border: none; border-radius: 3px; cursor: pointer; margin-right: 4px; font-size: 11px;">+7d</button>
-                                <button onclick="activateBotUser(${u.id})" style="background: var(--success); color: white; padding: 4px 8px; border: none; border-radius: 3px; cursor: pointer; margin-right: 4px; font-size: 11px;">Pro 30d</button>
-                                <button onclick="suspendBotUser(${u.id})" style="background: var(--danger); color: white; padding: 4px 8px; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">Suspend</button>
+                                <div style="display:flex;gap:4px;">
+                                    <button onclick="extendBotTrial(${u.id})" class="btn btn-sm btn-secondary">+7d</button>
+                                    <button onclick="activateBotUser(${u.id})" class="btn btn-sm btn-success">Pro 30d</button>
+                                    <button onclick="suspendBotUser(${u.id})" class="btn btn-sm btn-danger">Suspend</button>
+                                </div>
                             </td>
                         </tr>
                     `;
                 }).join('');
-            } catch (e) {
-                console.error('Error loading bot users:', e);
-            }
+            } catch (e) { console.error('Error loading bot users:', e); }
         }
 
         function botStatusBadge(u) {
@@ -1653,39 +2009,24 @@
             return '<span class="badge badge-warning">New</span>';
         }
 
-        function escapeHtml(str) {
-            if (!str) return '';
-            return String(str).replace(/[&<>"']/g, ch => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-            })[ch]);
-        }
-
         async function extendBotTrial(botUserId) {
             if (!confirm('Extend bot user trial by 7 days?')) return;
             const resp = await fetch(`/api/admin/bot-users/${botUserId}/trial`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${currentAccessToken}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Authorization': `Bearer ${currentAccessToken}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ days: 7 }),
             });
-            if (resp.ok) loadBotUsers();
-            else alert('Failed');
+            if (resp.ok) loadBotUsers(); else alert('Failed');
         }
 
         async function activateBotUser(botUserId) {
             if (!confirm('Grant this user 30 days of Pro access?')) return;
             const resp = await fetch(`/api/admin/bot-users/${botUserId}/activate`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${currentAccessToken}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Authorization': `Bearer ${currentAccessToken}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ days: 30 }),
             });
-            if (resp.ok) loadBotUsers();
-            else alert('Failed');
+            if (resp.ok) loadBotUsers(); else alert('Failed');
         }
 
         async function suspendBotUser(botUserId) {
@@ -1694,419 +2035,89 @@
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${currentAccessToken}` },
             });
-            if (resp.ok) loadBotUsers();
-            else alert('Failed');
+            if (resp.ok) loadBotUsers(); else alert('Failed');
         }
 
+        // ── Inspections ──
         async function loadInspections() {
             try {
-                // Get filter values
                 const daysFilter = document.getElementById('inspectionDaysFilter').value;
-
-                // Get jurisdiction from user's first city or default to berkeley
-                const userResponse = await fetch('/api/user', {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
+                const userResponse = await fetch('/api/user', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const user = await userResponse.json();
                 const jurisdiction = user.cities && user.cities[0] ? user.cities[0].name.toLowerCase() : 'berkeley';
-
                 let url = `/api/scheduled_inspections?jurisdiction=${jurisdiction}`;
-                if (daysFilter) {
-                    url += `&days=${daysFilter}`;
-                }
+                if (daysFilter) url += `&days=${daysFilter}`;
 
-                const response = await fetch(url, {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
+                const response = await fetch(url, { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const data = await response.json();
                 const inspections = data.inspections || [];
                 const tbody = document.getElementById('inspectionsTableBody');
 
                 if (inspections.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No inspections found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><p>No inspections found</p></td></tr>';
                     return;
                 }
 
-                // Helper function to calculate days until inspection
-                function daysUntil(inspectionDate) {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const insp = new Date(inspectionDate);
-                    insp.setHours(0, 0, 0, 0);
-                    const diff = insp - today;
-                    return Math.ceil(diff / (1000 * 60 * 60 * 24));
-                }
-
-                // Helper function for GC probability color
-                function getGCProbColor(prob) {
-                    if (prob >= 0.8) return '#04844b';  // green
-                    if (prob >= 0.6) return '#ffb81c';  // warm
-                    return '#6b7280';  // gray
+                function daysUntil(inspDate) {
+                    const today = new Date(); today.setHours(0,0,0,0);
+                    const insp = new Date(inspDate); insp.setHours(0,0,0,0);
+                    return Math.ceil((insp - today) / (1000*60*60*24));
                 }
 
                 tbody.innerHTML = inspections.map(insp => {
                     const daysDiff = daysUntil(insp.inspection_date);
                     const probPercent = (insp.gc_presence_probability * 100).toFixed(0);
-                    const probColor = getGCProbColor(insp.gc_presence_probability);
                     const daysDisplay = daysDiff < 0 ? 'Overdue' : daysDiff === 0 ? 'Today' : daysDiff === 1 ? 'Tomorrow' : `${daysDiff}d`;
-
+                    const daysColor = daysDiff <= 0 ? 'badge-danger' : daysDiff <= 3 ? 'badge-warning' : 'badge-info';
+                    const probColor = insp.gc_presence_probability >= 0.8 ? 'var(--green)' : insp.gc_presence_probability >= 0.6 ? 'var(--orange)' : 'var(--fg-muted)';
                     return `
-                        <tr onclick="showLeadPanel('${insp.address}');" style="cursor: pointer;">
-                            <td>${insp.address}</td>
-                            <td>${insp.jurisdiction}</td>
-                            <td>${insp.inspection_type || '-'}</td>
+                        <tr class="lead-row" onclick="showLeadPanel('${insp.address}')">
+                            <td>${escapeHtml(insp.address)}</td>
+                            <td>${escapeHtml(insp.jurisdiction)}</td>
+                            <td>${escapeHtml(insp.inspection_type || '-')}</td>
                             <td>${insp.inspection_date}</td>
-                            <td><span style="background: ${probColor}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px;">${daysDisplay}</span></td>
-                            <td><span style="color: ${probColor}; font-weight: 500;">${probPercent}%</span></td>
+                            <td><span class="badge ${daysColor}">${daysDisplay}</span></td>
+                            <td><span style="color:${probColor};font-weight:600;">${probPercent}%</span></td>
                         </tr>
                     `;
                 }).join('');
-            } catch (e) {
-                console.error('Error loading inspections:', e);
-            }
+            } catch (e) { console.error('Error loading inspections:', e); }
         }
 
-        async function showLeadPanel(addressKey) {
-            try {
-                // Fetch lead details
-                const leadResponse = await fetch(`/api/leads/${addressKey}`, {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
-                const lead = await leadResponse.json();
-
-                // Populate lead info section
-                document.getElementById('panelAddress').textContent = lead.address || '-';
-                document.getElementById('panelCity').textContent = lead.city || '-';
-                document.getElementById('panelScore').innerHTML = `<span class="badge ${getScoreBadge(lead.score)}">${lead.score}</span>`;
-                document.getElementById('panelValue').textContent = lead.value ? `$${lead.value.toLocaleString()}` : '-';
-
-                // Populate contact info section
-                document.getElementById('panelContractor').textContent = lead.contractor || '-';
-                document.getElementById('panelPhone').textContent = lead.contact_phone || '-';
-                document.getElementById('panelEmail').textContent = lead.contact_email || '-';
-
-                // Populate project details section
-                const serviceDisplay = lead.service_emoji && lead.service_label
-                    ? `${lead.service_emoji} ${lead.service_label}`
-                    : (lead.service_type || '-');
-                document.getElementById('panelServiceType').textContent = serviceDisplay;
-                document.getElementById('panelSource').textContent = lead.source || '-';
-                document.getElementById('panelInspection').textContent = lead.next_inspection_date || '-';
-                document.getElementById('panelInspectionSource').textContent = lead.inspection_source || '-';
-
-                // Store current lead for contact tracking
-                currentLead = { id: addressKey, address: lead.address };
-
-                // Update mark contacted button
-                const markContactedBtn = document.getElementById('markContactedBtn');
-                markContactedBtn.onclick = () => markLeadAsContacted(addressKey);
-
-                // Load and display notes
-                loadLeadNotes(addressKey);
-
-                // Update add note button
-                document.getElementById('addNoteBtn').onclick = () => addNote(addressKey);
-
-                // Open panel
-                document.getElementById('sidePanel').classList.add('open');
-
-            } catch (e) {
-                console.error('Error loading lead details:', e);
-                alert('Failed to load lead details');
-            }
-        }
-
-        async function markLeadAsContacted(leadId) {
-            try {
-                const response = await fetch(`/api/leads/${leadId}/contact`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${currentAccessToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ contact_type: 'CALL', notes: 'Contacted from dashboard' })
-                });
-
-                if (response.ok) {
-                    alert('Lead marked as contacted');
-                    loadLeads();
-                } else {
-                    alert('Failed to mark lead as contacted');
-                }
-            } catch (e) {
-                console.error('Error:', e);
-            }
-        }
-
-        async function loadLeadNotes(leadId) {
-            try {
-                const response = await fetch(`/api/leads/${leadId}/notes`, {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
-                const notes = await response.json();
-                const container = document.getElementById('panelNotesList');
-
-                if (notes.length === 0) {
-                    container.innerHTML = '<p style="color: var(--text-light); font-size: 12px; text-align: center;">No notes yet</p>';
-                    return;
-                }
-
-                container.innerHTML = notes.map(note => `
-                    <div style="padding: 8px; background-color: var(--primary-light); border-radius: 4px; margin-bottom: 8px;">
-                        <div style="font-size: 12px; color: var(--text-dark); margin-bottom: 4px;">${note.note}</div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--text-light);">
-                            <span>${note.user} • ${new Date(note.created_at).toLocaleDateString()}</span>
-                            <div>
-                                <button onclick="editNote('${currentLead.id}', ${note.id}, '${note.note.replace(/'/g, "\\'")}'" style="background: none; border: none; color: var(--primary); cursor: pointer; font-size: 11px; margin-right: 5px;">Edit</button>
-                                <button onclick="deleteNote('${currentLead.id}', ${note.id})" style="background: none; border: none; color: var(--danger); cursor: pointer; font-size: 11px;">Delete</button>
-                            </div>
-                        </div>
-                    </div>
-                `).join('');
-            } catch (e) {
-                console.error('Error loading notes:', e);
-            }
-        }
-
-        async function addNote(leadId) {
-            const noteText = prompt('Enter note:');
-            if (!noteText || !noteText.trim()) return;
-
-            try {
-                const response = await fetch(`/api/leads/${leadId}/notes`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${currentAccessToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ note: noteText })
-                });
-
-                if (response.ok) {
-                    loadLeadNotes(leadId);
-                } else {
-                    alert('Failed to add note');
-                }
-            } catch (e) {
-                console.error('Error:', e);
-            }
-        }
-
-        async function editNote(leadId, noteId, currentText) {
-            const newText = prompt('Edit note:', currentText);
-            if (!newText || !newText.trim()) return;
-
-            try {
-                const response = await fetch(`/api/leads/${leadId}/notes/${noteId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${currentAccessToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ note: newText })
-                });
-
-                if (response.ok) {
-                    loadLeadNotes(leadId);
-                } else {
-                    alert('Failed to update note');
-                }
-            } catch (e) {
-                console.error('Error:', e);
-            }
-        }
-
-        async function deleteNote(leadId, noteId) {
-            if (!confirm('Delete this note?')) return;
-
-            try {
-                const response = await fetch(`/api/leads/${leadId}/notes/${noteId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
-
-                if (response.ok) {
-                    loadLeadNotes(leadId);
-                } else {
-                    alert('Failed to delete note');
-                }
-            } catch (e) {
-                console.error('Error:', e);
-            }
-        }
-
-        async function editUser(userId) {
-            try {
-                // Fetch user details
-                const response = await fetch(`/api/admin/users/${userId}`, {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
-                const user = await response.json();
-
-                // Populate form
-                document.getElementById('editUserId').value = user.id;
-                document.getElementById('editUsername').value = user.username;
-                document.getElementById('editUserEmail').value = user.email;
-                document.getElementById('editUserFullName').value = user.full_name || '';
-                document.getElementById('editUserStatus').value = user.is_active ? '1' : '0';
-
-                // Open modal
-                document.getElementById('editUserModal').classList.add('open');
-            } catch (e) {
-                console.error('Error loading user:', e);
-                alert('Failed to load user details');
-            }
-        }
-
-        async function saveUserChanges() {
-            const userId = document.getElementById('editUserId').value;
-            const email = document.getElementById('editUserEmail').value;
-            const fullName = document.getElementById('editUserFullName').value;
-            const isActive = document.getElementById('editUserStatus').value === '1';
-
-            try {
-                const response = await fetch(`/api/admin/users/${userId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${currentAccessToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        email,
-                        full_name: fullName,
-                        is_active: isActive
-                    })
-                });
-
-                if (response.ok) {
-                    document.getElementById('editUserModal').classList.remove('open');
-                    loadUsers();
-                    alert('User updated successfully');
-                } else {
-                    alert('Failed to update user');
-                }
-            } catch (e) {
-                console.error('Error:', e);
-                alert('Error updating user');
-            }
-        }
-
-        function deleteUser(userId) {
-            try {
-                // Fetch user details for confirmation
-                fetch(`/api/admin/users/${userId}`, {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                }).then(r => r.json()).then(user => {
-                    document.getElementById('deleteUserId').value = user.id;
-                    document.getElementById('deleteUserName').textContent = user.username;
-                    document.getElementById('deleteUserModal').classList.add('open');
-                });
-            } catch (e) {
-                console.error('Error:', e);
-            }
-        }
-
-        async function confirmDeleteUser() {
-            const userId = document.getElementById('deleteUserId').value;
-            const deleteType = document.querySelector('input[name="deleteType"]:checked').value;
-            const permanent = deleteType === 'hard';
-
-            try {
-                const response = await fetch(`/api/admin/users/${userId}?permanent=${permanent}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
-
-                if (response.ok) {
-                    document.getElementById('deleteUserModal').classList.remove('open');
-                    loadUsers();
-                    alert(`User ${permanent ? 'permanently deleted' : 'deactivated'} successfully`);
-                } else {
-                    alert('Failed to delete user');
-                }
-            } catch (e) {
-                console.error('Error:', e);
-                alert('Error deleting user');
-            }
-        }
-
-        function getScoreBadge(score) {
-            if (score >= 80) return 'badge-hot';
-            if (score >= 60) return 'badge-warm';
-            if (score >= 40) return 'badge-medium';
-            if (score >= 20) return 'badge-cool';
-            return 'badge-cold';
-        }
-
-        // ─────────────────────────────────────────────────────
-        // SAVED VIEWS FUNCTIONS
-        // ─────────────────────────────────────────────────────
-
+        // ── Saved Views ──
         async function loadSavedViews() {
             try {
-                const response = await fetch('/api/leads/views', {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
+                const response = await fetch('/api/leads/views', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const views = await response.json();
                 const container = document.getElementById('savedViewsList');
-                const count = document.getElementById('viewsCount');
-
-                count.textContent = views.length;
-
-                if (views.length === 0) {
-                    container.innerHTML = '<p style="font-size: 12px; color: var(--text-light); text-align: center;">No saved views yet</p>';
-                    return;
-                }
-
+                if (views.length === 0) { container.innerHTML = ''; return; }
                 container.innerHTML = views.map(view => `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background-color: white; border-radius: 4px; font-size: 12px;">
-                        <button onclick="applySavedView('${view.name}', ${JSON.stringify(view.filters).replace(/"/g, '&quot;')})" style="background: none; border: none; color: var(--primary); cursor: pointer; text-align: left; flex: 1;">
-                            <span style="font-weight: 500;">${view.name}</span>
-                            ${view.is_default ? '<span style="margin-left: 5px; background-color: var(--warning); color: white; padding: 2px 4px; border-radius: 2px; font-size: 10px;">Default</span>' : ''}
-                        </button>
-                        <div>
-                            <button onclick="deleteView(${view.id})" style="background: none; border: none; color: var(--danger); cursor: pointer; font-size: 12px; padding: 2px 4px;">✕</button>
-                        </div>
-                    </div>
+                    <span class="view-chip" onclick="applySavedView('${escapeHtml(view.name)}', ${JSON.stringify(view.filters).replace(/"/g, '&quot;')})">
+                        ${escapeHtml(view.name)}
+                        ${view.is_default ? '<span class="badge badge-warning" style="font-size:10px;padding:1px 6px;">Default</span>' : ''}
+                        <span class="chip-delete" onclick="event.stopPropagation();deleteView(${view.id})">&times;</span>
+                    </span>
                 `).join('');
-            } catch (e) {
-                console.error('Error loading saved views:', e);
-            }
+            } catch (e) { console.error('Error loading saved views:', e); }
         }
 
         async function saveCurrentView() {
             const viewName = prompt('Enter view name (e.g., "High Value Leads"):');
             if (!viewName || !viewName.trim()) return;
-
             const filters = {
                 city_id: document.getElementById('filterCity').value,
                 agent: document.getElementById('filterAgent').value,
                 min_score: document.getElementById('filterMinScore').value
             };
-
             try {
                 const response = await fetch('/api/leads/views', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${currentAccessToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        name: viewName,
-                        filters: filters,
-                        is_default: false
-                    })
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: viewName, filters, is_default: false })
                 });
-
-                if (response.ok) {
-                    alert('View saved successfully!');
-                    loadSavedViews();
-                } else {
-                    alert('Failed to save view');
-                }
-            } catch (e) {
-                console.error('Error:', e);
-            }
+                if (response.ok) loadSavedViews();
+                else alert('Failed to save view');
+            } catch (e) { console.error(e); }
         }
 
         function applySavedView(viewName, filters) {
@@ -2118,47 +2129,27 @@
 
         async function deleteView(viewId) {
             if (!confirm('Delete this saved view?')) return;
-
             try {
                 const response = await fetch(`/api/leads/views/${viewId}`, {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${currentAccessToken}` }
                 });
-
-                if (response.ok) {
-                    loadSavedViews();
-                } else {
-                    alert('Failed to delete view');
-                }
-            } catch (e) {
-                console.error('Error:', e);
-            }
+                if (response.ok) loadSavedViews();
+            } catch (e) { console.error(e); }
         }
 
-        // ─────────────────────────────────────────────────────
-        // SETTINGS PAGE FUNCTIONS
-        // ─────────────────────────────────────────────────────
-
+        // ── Settings ──
         async function loadSettings() {
             try {
-                const response = await fetch('/api/settings', {
-                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
-                });
+                const response = await fetch('/api/settings', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const data = await response.json();
                 const user = data.user;
                 const prefs = data.preferences;
                 const exports = data.exports;
 
-                // Load theme
-                const savedTheme = localStorage.getItem('theme') || 'light';
-                applyTheme(savedTheme);
-
-                // Populate account info
                 document.getElementById('accountUsername').textContent = user.username;
                 document.getElementById('accountEmail').textContent = user.email;
                 document.getElementById('accountCreated').textContent = new Date(user.created_at).toLocaleDateString();
-
-                // Load preferences
                 document.getElementById('settingsItemsPerPage').value = prefs.items_per_page || 100;
                 document.getElementById('settingsDefaultSort').value = prefs.default_sort || 'last_updated';
                 document.getElementById('settingsNotificationsEnabled').checked = prefs.notifications_enabled;
@@ -2166,45 +2157,31 @@
                 document.getElementById('settingsNotifyInspections').checked = prefs.notify_inspections;
                 document.getElementById('settingsNotifyFrequency').value = prefs.notify_frequency || 'daily';
 
-                // Load export history
                 const exportContainer = document.getElementById('exportHistoryContainer');
                 if (exports.length === 0) {
-                    exportContainer.innerHTML = '<p style="color: var(--text-light); text-align: center; padding: 20px;">No exports yet</p>';
+                    exportContainer.innerHTML = '<p style="color:var(--fg-muted);text-align:center;padding:16px;font-size:13px;">No exports yet</p>';
                 } else {
                     exportContainer.innerHTML = exports.map(exp => `
-                        <div style="padding: 10px; border-bottom: 1px solid var(--border);">
-                            <p style="margin: 0; font-weight: 500;">${exp.export_name || 'Export'}</p>
-                            <p style="margin: 5px 0; font-size: 0.9em; color: var(--text-light);">
-                                ${exp.record_count} records • ${new Date(exp.created_at).toLocaleString()}
-                            </p>
+                        <div style="padding:10px 0;border-bottom:1px solid var(--border-light);font-size:13px;">
+                            <strong>${escapeHtml(exp.export_name || 'Export')}</strong>
+                            <div style="color:var(--fg-muted);font-size:12px;margin-top:2px;">${exp.record_count} records &middot; ${new Date(exp.created_at).toLocaleString()}</div>
                         </div>
                     `).join('');
                 }
-            } catch (e) {
-                console.error('Error loading settings:', e);
-            }
+            } catch (e) { console.error('Error loading settings:', e); }
         }
 
         function applyTheme(theme) {
-            const isDark = theme === 'dark';
-            if (isDark) {
-                document.body.classList.add('dark-theme');
-                document.getElementById('themeDarkBtn').style.borderColor = 'var(--primary)';
-                document.getElementById('themeLightBtn').style.borderColor = 'var(--border)';
-            } else {
-                document.body.classList.remove('dark-theme');
-                document.getElementById('themeLightBtn').style.borderColor = 'var(--primary)';
-                document.getElementById('themeDarkBtn').style.borderColor = 'var(--border)';
-            }
+            // Placeholder for future dark theme implementation
+            document.getElementById('themeLightBtn').classList.toggle('active', theme === 'light');
+            document.getElementById('themeDarkBtn').classList.toggle('active', theme === 'dark');
             localStorage.setItem('theme', theme);
         }
 
         async function saveSettings() {
             try {
-                const theme = document.body.classList.contains('dark-theme') ? 'dark' : 'light';
-
                 const prefs = {
-                    theme: theme,
+                    theme: localStorage.getItem('theme') || 'light',
                     items_per_page: parseInt(document.getElementById('settingsItemsPerPage').value),
                     default_sort: document.getElementById('settingsDefaultSort').value,
                     notifications_enabled: document.getElementById('settingsNotificationsEnabled').checked,
@@ -2212,53 +2189,30 @@
                     notify_inspections: document.getElementById('settingsNotifyInspections').checked,
                     notify_frequency: document.getElementById('settingsNotifyFrequency').value
                 };
-
                 const response = await fetch('/api/settings/preferences', {
                     method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${currentAccessToken}`,
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify(prefs)
                 });
-
-                if (response.ok) {
-                    alert('Settings saved successfully!');
-                } else {
-                    alert('Failed to save settings');
-                }
-            } catch (e) {
-                console.error('Error saving settings:', e);
-                alert('Error saving settings');
-            }
+                if (response.ok) alert('Settings saved successfully!');
+                else alert('Failed to save settings');
+            } catch (e) { alert('Error saving settings'); }
         }
 
-        // Theme buttons
+        // ── Settings event listeners ──
         document.addEventListener('DOMContentLoaded', () => {
-            if (document.getElementById('themeLightBtn')) {
-                document.getElementById('themeLightBtn').addEventListener('click', () => applyTheme('light'));
-                document.getElementById('themeDarkBtn').addEventListener('click', () => applyTheme('dark'));
-                document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
-                document.getElementById('testNotificationBtn').addEventListener('click', () => {
-                    alert('Notification test sent! (feature coming soon)');
-                });
-                document.getElementById('changePasswordBtn').addEventListener('click', () => {
-                    alert('Password change feature coming soon');
-                });
-                document.getElementById('logoutAllBtn').addEventListener('click', () => {
-                    if (confirm('Are you sure? All your sessions will be logged out.')) {
-                        alert('Logout all sessions feature coming soon');
-                    }
-                });
-            }
-
-            // Saved views button
-            if (document.getElementById('saveViewBtn')) {
-                document.getElementById('saveViewBtn').addEventListener('click', saveCurrentView);
-            }
+            document.getElementById('themeLightBtn').addEventListener('click', () => applyTheme('light'));
+            document.getElementById('themeDarkBtn').addEventListener('click', () => applyTheme('dark'));
+            document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+            document.getElementById('testNotificationBtn').addEventListener('click', () => alert('Notification test sent! (coming soon)'));
+            document.getElementById('changePasswordBtn').addEventListener('click', () => alert('Password change feature coming soon'));
+            document.getElementById('logoutAllBtn').addEventListener('click', () => {
+                if (confirm('Logout from all sessions?')) alert('Logout all sessions (coming soon)');
+            });
+            document.getElementById('saveViewBtn').addEventListener('click', saveCurrentView);
         });
 
-        // Initial load
+        // ── Init ──
         if (!currentAccessToken) {
             window.location.href = '/login.html';
         } else {
