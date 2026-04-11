@@ -669,6 +669,82 @@
             height: 13px;
         }
 
+        /* ── Leads table: enriched cells ── */
+        .table-leads { overflow-x: auto; }
+        .table-leads table { min-width: 1280px; }
+        .table-leads th.col-right,
+        .table-leads td.col-right { text-align: right; }
+
+        .cell-main {
+            font-weight: 500;
+            color: var(--fg);
+            line-height: 1.25;
+        }
+        .lead-row td:first-child .cell-main { color: var(--accent); }
+        .cell-sub {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 2px;
+            font-size: 11px;
+            color: var(--fg-muted);
+            line-height: 1.3;
+        }
+        .cell-sub svg {
+            width: 11px;
+            height: 11px;
+            flex-shrink: 0;
+        }
+        .muted { color: var(--fg-muted); }
+
+        .phase-chip {
+            display: inline-flex;
+            padding: 1px 6px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            color: var(--fg-secondary);
+            width: fit-content;
+        }
+
+        .money {
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+            color: var(--fg);
+        }
+
+        .score-cell {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+        }
+
+        .inspection-cell {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+        }
+        .cell-sub.source-public_calendar { color: #065f46; }
+        .cell-sub.source-accela_api      { color: var(--accent); }
+        .cell-sub.source-prediction      { color: var(--purple); }
+
+        .cell-relative {
+            color: var(--fg-secondary);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .contact-item a {
+            color: inherit;
+            text-decoration: none;
+        }
+        .contact-item a:hover { text-decoration: underline; }
+
         /* ── SIDE PANEL ── */
         .side-panel {
             position: fixed;
@@ -1134,21 +1210,25 @@
                     <div class="saved-views-bar" id="savedViewsList">
                     </div>
 
-                    <div class="table-wrap">
+                    <div class="table-wrap table-leads">
                         <table>
                             <thead>
                                 <tr>
                                     <th>Address</th>
                                     <th>City</th>
                                     <th>Service</th>
+                                    <th>Contractor / Owner</th>
                                     <th>Contact</th>
-                                    <th>Score</th>
+                                    <th class="col-right">Value</th>
+                                    <th class="col-right">Score</th>
                                     <th>Agent</th>
+                                    <th>First Seen</th>
                                     <th>Next Inspection</th>
+                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody id="leadsTableBody">
-                                <tr><td colspan="7" class="empty-state"><p>No leads found</p></td></tr>
+                                <tr><td colspan="11" class="empty-state"><p>No leads found</p></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1514,7 +1594,8 @@
         const ICON = {
             phone: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
             mail: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
-            calendar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>'
+            calendar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+            user: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
         };
 
         let currentAccessToken = localStorage.getItem('access_token');
@@ -1730,27 +1811,116 @@
                 const tbody = document.getElementById('leadsTableBody');
 
                 if (leads.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><p>No leads found</p></td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="11" class="empty-state"><p>No leads found</p></td></tr>';
                     return;
                 }
 
-                tbody.innerHTML = leads.map(lead => `
+                tbody.innerHTML = leads.map(lead => {
+                    const phase = lead.phase ? `<div class="cell-sub phase-chip">${escapeHtml(String(lead.phase).toUpperCase())}</div>` : '';
+                    const permit = lead.permit_id ? `<div class="cell-sub">#${escapeHtml(lead.permit_id)}</div>` : '';
+                    const owner = lead.owner ? `<div class="cell-sub">${ICON.user}${escapeHtml(lead.owner)}</div>` : '';
+                    const contractor = lead.contractor
+                        ? `<div class="cell-main">${escapeHtml(lead.contractor)}</div>`
+                        : '<div class="cell-main muted">—</div>';
+                    const contactHtml = (lead.contact_phone || lead.contact_email)
+                        ? `<div class="contact-info">
+                            ${lead.contact_phone ? `<div class="contact-item">${ICON.phone}<a href="tel:${escapeHtml(lead.contact_phone)}" onclick="event.stopPropagation()">${escapeHtml(lead.contact_phone)}</a></div>` : ''}
+                            ${lead.contact_email ? `<div class="contact-item">${ICON.mail}<a href="mailto:${escapeHtml(lead.contact_email)}" onclick="event.stopPropagation()">${escapeHtml(lead.contact_email)}</a></div>` : ''}
+                           </div>`
+                        : '<span class="muted">—</span>';
+                    const gradeEmoji = lead.grade_emoji || scoreEmoji(lead.score);
+                    const gradeLabel = lead.grade || scoreLabel(lead.score);
+                    const scoreHtml = `
+                        <div class="score-cell">
+                            <span class="badge ${getScoreBadge(lead.score)}">${lead.score}</span>
+                            <div class="cell-sub">${gradeEmoji} ${escapeHtml(gradeLabel)}</div>
+                        </div>`;
+                    const inspectionHtml = lead.next_inspection_date
+                        ? `<div class="inspection-cell">
+                             <span class="inspection-tag">${ICON.calendar} ${escapeHtml(lead.next_inspection_date)}</span>
+                             ${lead.next_inspection_type ? `<div class="cell-sub">${escapeHtml(String(lead.next_inspection_type).toUpperCase())}</div>` : ''}
+                             ${lead.inspection_source ? `<div class="cell-sub source-${escapeHtml(lead.inspection_source)}">${inspectionSourceLabel(lead.inspection_source)}</div>` : ''}
+                           </div>`
+                        : '<span class="muted">—</span>';
+                    const statusHtml = lead.contacted
+                        ? '<span class="badge badge-success">Contacted</span>'
+                        : '<span class="badge badge-info">New</span>';
+                    return `
                     <tr class="lead-row" onclick="showLeadPanel('${lead.id}')">
-                        <td>${escapeHtml(lead.address)}</td>
-                        <td>${escapeHtml(lead.city)}</td>
-                        <td>${lead.service_emoji && lead.service_label ? `<span title="${escapeHtml(lead.service_label)}">${lead.service_emoji} ${escapeHtml(lead.service_label)}</span>` : '<span style="color:var(--fg-muted)">-</span>'}</td>
                         <td>
-                            <div class="contact-info">
-                                ${lead.contact_phone ? `<div class="contact-item">${ICON.phone}${escapeHtml(lead.contact_phone)}</div>` : ''}
-                                ${lead.contact_email ? `<div class="contact-item">${ICON.mail}${escapeHtml(lead.contact_email)}</div>` : ''}
-                            </div>
+                            <div class="cell-main">${escapeHtml(lead.address)}</div>
+                            ${permit}
                         </td>
-                        <td><span class="badge ${getScoreBadge(lead.score)}">${lead.score}</span></td>
-                        <td>${escapeHtml(lead.source) || '<span style="color:var(--fg-muted)">-</span>'}</td>
-                        <td>${lead.next_inspection_date ? `<span class="inspection-tag">${ICON.calendar} ${lead.next_inspection_date}</span>` : '<span style="color:var(--fg-muted)">-</span>'}</td>
-                    </tr>
-                `).join('');
+                        <td>${escapeHtml(lead.city)}</td>
+                        <td>
+                            ${lead.service_emoji && lead.service_label
+                                ? `<div class="cell-main"><span title="${escapeHtml(lead.service_label)}">${lead.service_emoji} ${escapeHtml(lead.service_label)}</span></div>`
+                                : '<div class="cell-main muted">—</div>'}
+                            ${phase}
+                        </td>
+                        <td>
+                            ${contractor}
+                            ${owner}
+                        </td>
+                        <td>${contactHtml}</td>
+                        <td class="col-right">${fmtMoney(lead.value)}</td>
+                        <td class="col-right">${scoreHtml}</td>
+                        <td>${escapeHtml(lead.source) || '<span class="muted">—</span>'}</td>
+                        <td class="cell-relative">${fmtRelative(lead.created_at)}</td>
+                        <td>${inspectionHtml}</td>
+                        <td>${statusHtml}</td>
+                    </tr>`;
+                }).join('');
             } catch (e) { console.error(e); }
+        }
+
+        // ── Formatting helpers for the Leads table ──
+        function fmtMoney(v) {
+            v = Number(v || 0);
+            if (!v) return '<span class="muted">—</span>';
+            if (v >= 1e6) return '<span class="money">$' + (v / 1e6).toFixed(1) + 'M</span>';
+            if (v >= 1e3) return '<span class="money">$' + (v / 1e3).toFixed(0) + 'k</span>';
+            return '<span class="money">$' + v.toFixed(0) + '</span>';
+        }
+
+        function fmtRelative(iso) {
+            if (!iso) return '<span class="muted">—</span>';
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return '<span class="muted">—</span>';
+            const diffMs = Date.now() - d.getTime();
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            let label;
+            if (diffDays >= 30) label = Math.floor(diffDays / 30) + 'mo ago';
+            else if (diffDays >= 1) label = diffDays + 'd ago';
+            else if (diffHours >= 1) label = diffHours + 'h ago';
+            else label = 'just now';
+            return `<span title="${d.toLocaleString()}">${label}</span>`;
+        }
+
+        function scoreEmoji(s) {
+            s = Number(s || 0);
+            if (s >= 80) return '🔥';
+            if (s >= 65) return '⭐';
+            if (s >= 50) return '⚡';
+            return '❄️';
+        }
+
+        function scoreLabel(s) {
+            s = Number(s || 0);
+            if (s >= 80) return 'HOT';
+            if (s >= 65) return 'WARM';
+            if (s >= 50) return 'COOL';
+            return 'COLD';
+        }
+
+        function inspectionSourceLabel(src) {
+            const map = {
+                'public_calendar': '📅 Public',
+                'accela_api':      '🔗 Accela',
+                'prediction':      '🔮 Predicted',
+            };
+            return map[src] || escapeHtml(src);
         }
 
         // ── Lead Panel ──
