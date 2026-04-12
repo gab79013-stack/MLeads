@@ -275,6 +275,61 @@ Clustering geográfico en tiempo real. Cuando 3+ leads caen dentro de 500m, gene
 
 ---
 
+## Módulos de IA Avanzados
+
+El sistema incluye módulos especializados de inteligencia artificial para optimizar operaciones:
+
+### 🔍 Fraud Detection (`utils/fraud_detector.py`)
+Detección de fraude en tiempo real con múltiples capas de validación y machine learning.
+- Scoring de riesgo en milisegundos
+- Detección de anomalías comportamentales
+- Validación de identidad y dispositivo
+- [Ver documentación →](FRAUD_DETECTION.md)
+
+### 💬 Multimodal Agent (`utils/multimodal_agent.py`)
+Agente conversacional multi-modal (texto, voz, imagen, video) para atención al cliente.
+- Soporte 50+ idiomas
+- Análisis de sentimiento e intenciones
+- Gestión de contexto conversacional
+- [Ver documentación →](MULTIMODAL_AGENT.md)
+
+### 🤝 Matching Engine (`utils/matching_engine.py`)
+Sistema inteligente de emparejamiento entre GCs y subcontratistas.
+- Algoritmo multi-criterio ponderado
+- Optimización de asignaciones
+- Análisis de gap de habilidades
+- [Ver documentación →](MATCHING_ENGINE.md)
+
+### 💰 Price Optimizer (`utils/price_optimizer.py`)
+Optimización dinámica de precios basada en demanda, competencia y valor.
+- Múltiples estrategias de pricing
+- Cálculo de elasticidad
+- A/B testing integrado
+- [Ver documentación →](PRICE_OPTIMIZATION.md)
+
+### 🔮 Lead Predictor (`utils/lead_predictor.py`)
+Predicción proactiva de leads antes de la conversión explícita.
+- Scoring predictivo con señales tempranas
+- Modelos de propensión y timing
+- Enriquecimiento automático
+- [Ver documentación →](LEAD_PREDICTION.md)
+
+### 📊 Competitive Analyzer (`utils/competitive_analyzer.py`)
+Inteligencia competitiva con monitoreo en tiempo real.
+- Tracking de pricing y features
+- Alertas de movimientos competitivos
+- War gaming simulations
+- [Ver documentación →](COMPETITIVE_ANALYSIS.md)
+
+### 🔄 Lead Enrichment (`utils/lead_enrichment.py`)
+Enriquecimiento de datos conectándose a 300+ APIs especializadas.
+- Firmografía, technografía, contactos
+- Intent signals y trigger events
+- Calidad y validación de datos
+- [Ver documentación →](LEAD_ENRICHMENT.md)
+
+---
+
 ## Seguridad
 
 - JWT con `JWT_SECRET_KEY` validado en startup (falla si es el valor por defecto)
