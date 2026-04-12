@@ -1,46 +1,32 @@
+```
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
+*.pyc
+*.pyo
+*.pyd
 .Python
 env/
 venv/
-*.egg-info/
-dist/
-build/
-
-# Environment
+.venv/
+.ENV
 .env
+.env.*
 .env.local
-.env.*.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Database & Data
-data/
-*.db
-*.sqlite
-*.sqlite3
-leads.db
-
-# Logs
-logs/
+.env.dev
+.env.test
+.env.prod
+.venv.bak
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
 *.log
-
-# OS
+.git/modules/
 .DS_Store
 Thumbs.db
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Contacts (if CSVs are stored locally)
-contacts/*.csv
+```
