@@ -204,7 +204,7 @@
         .beta-fb-btn:hover{background:#fff7ed}
 
         /* Lang toggle */
-        .lang-btn{font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;border:1.5px solid var(--accent);background:var(--surface);color:var(--accent);cursor:pointer;font-family:inherit;transition:all .15s;letter-spacing:.3px}
+        .lang-btn{font-size:18px;font-weight:800;padding:2px 6px;border-radius:999px;border:1.5px solid var(--accent);background:var(--surface);color:var(--accent);cursor:pointer;font-family:inherit;transition:all .15s;letter-spacing:.3px;line-height:1}
         .lang-btn:hover{background:#fff1f2}
 
         /* Contacts drawer list */
@@ -307,7 +307,7 @@
         <span>MLeads</span>
     </div>
     <div class="hdr-right">
-        <button class="lang-btn" id="langToggle" aria-label="Cambiar idioma">ES</button>
+        <button class="lang-btn" id="langToggle" aria-label="Cambiar idioma">🇲🇽</button>
         <button class="icon-btn" id="contactsBtn" aria-label="Mis contactos" style="display:none">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
@@ -589,7 +589,7 @@ const authHdrs = () => { const h = {'Content-Type':'application/json'}; const t 
 
 // ── Filter state ──────────────────────────────────────────────────────────────
 const F = {
-    hotOnly:  true,
+    hotOnly:  false,
     subCats:  new Set(),   // roofing, drywall, paint, landscaping, electrical
     leadTypes: new Set(),  // permits, construction, solar, realestate, flood, energy, rodents, deconstruction
     city:     '',
@@ -642,7 +642,7 @@ function loadFilters() {
         const raw = localStorage.getItem('mleads_filters');
         if (!raw) return;
         const snap = JSON.parse(raw);
-        F.hotOnly   = snap.hotOnly  ?? true;
+        F.hotOnly   = snap.hotOnly  ?? false;
         F.subCats   = new Set(snap.subCats  || []);
         F.leadTypes = new Set(snap.leadTypes || []);
         F.city      = snap.city   || '';
@@ -1408,7 +1408,7 @@ document.getElementById('btnApply').addEventListener('click', () => {
 });
 
 document.getElementById('btnReset').addEventListener('click', () => {
-    F.hotOnly = true; F.subCats.clear(); F.leadTypes.clear();
+    F.hotOnly = false; F.subCats.clear(); F.leadTypes.clear();
     F.city = ''; F.radius = 25; F.minVal = 0; F.maxVal = 0;
     syncDrawer();
 });
@@ -1581,7 +1581,7 @@ async function handleAuth(data) {
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const I18N = {
     es: {
-        langBtn:       'ES',
+        langBtn:       '🇲🇽',
         loading:       'Cargando leads...',
         filterTitle:   'Filtros de búsqueda',
         filterReset:   'Restablecer',
@@ -1619,7 +1619,7 @@ const I18N = {
         contactsBtn:   'Mis Contactos',
     },
     en: {
-        langBtn:       'EN',
+        langBtn:       '🇺🇸',
         loading:       'Loading leads...',
         filterTitle:   'Search filters',
         filterReset:   'Reset',
@@ -1665,8 +1665,8 @@ function t(key) {
 }
 
 function applyLang() {
-    // Show current language on button so user knows what's active
-    document.getElementById('langToggle').textContent = CURRENT_LANG.toUpperCase();
+    // Show current language flag on button so user knows what's active
+    document.getElementById('langToggle').textContent = t('langBtn');
     document.getElementById('betaText').textContent    = t('betaText');
     document.getElementById('openFeedback').textContent= t('betaBtn');
     document.getElementById('fbTitle').textContent     = t('fbTitle');
