@@ -3,8 +3,11 @@ utils/lead_scoring.py
 ━━━━━━━━━━━━━━━━━━━━━
 Motor de Lead Scoring — prioriza leads por probabilidad de conversión.
 
-Enfoque en 5 servicios clave:
-  Roofing, Drywall, Paint, Landscaping, Electrical
+Enfoque en 13 trades con licencia CSLB:
+  Demolition (C-21), Painting (C-33), Roofing (C-39), Drywall (C-9),
+  Electrical (C-10), HVAC (C-20), Plumbing (C-36), Concrete (C-8),
+  Framing (C-5), Flooring (C-15), Windows (C-17), Insulation (C-2),
+  Landscaping (C-27)
 
 Score = f(valor_proyecto, tipo_proyecto, datos_contacto, recencia,
           demografía, fuente, señales_servicio, inspección_próxima,
@@ -44,7 +47,8 @@ _WEIGHTS = {
 
 
 # ── Keywords de alta intención (servicios target) ────────────────────
-# Roofing, Drywall, Paint, Landscaping, Electrical
+# All 13 CSLB trades: Demolition, Roofing, Painting, Drywall, Electrical,
+# HVAC, Plumbing, Concrete, Framing, Flooring, Windows, Insulation, Landscaping
 
 _HIGH_INTENT_KEYWORDS = [
     # Roofing (C-39)
