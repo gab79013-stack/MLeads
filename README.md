@@ -1,10 +1,11 @@
 
+# MLeads — Plataforma de Generación de Leads para Subcontratistas
 
-Sistema automatizado de generacion de leads para contratistas de Roofing, Drywall, Paint, Landscaping y Electrical en el Bay Area.
+Sistema automatizado de generación de leads con IA para contratistas de Roofing, Drywall, Paint, Landscaping y Electrical en el Bay Area y principales ciudades de EE.UU.
 
-Monitorea **54 ciudades** en **9 condados** del Bay Area usando APIs publicas y de pago, detecta oportunidades de roofing, drywall, paint, landscaping y electrical, y envia alertas en tiempo real a Telegram con datos de contacto del GC.
+Monitorea **54+ ciudades** en **9 condados** del Bay Area usando APIs públicas y de pago, detecta oportunidades de negocio por tipo de subcontratista, y entrega alertas en tiempo real con datos de contacto del GC directamente en Telegram.
 
-Incluye **dashboard multi-usuario** con control de acceso por ciudad/agente, acceso temporal por tiempo, y soporte para 50+ usuarios simultaneos.
+Incluye **dashboard multi-usuario**, **swipe feed público tipo Tinder**, y **bot de Telegram con monetización** integrada.
 
 ---
 
@@ -15,35 +16,61 @@ Incluye **dashboard multi-usuario** con control de acceso por ciudad/agente, acc
 curl -s https://raw.githubusercontent.com/gab79013-stack/MLeads/main/quick-install.sh | sudo bash
 ```
 
-**Eso es todo.** El script:
-- Instala todas las dependencias
-- Configura la base de datos
-- Inicia el servidor automáticamente
-- Accede a http://localhost
+**Eso es todo.** El script instala dependencias, configura la base de datos, inicia ambos servicios y queda listo en `http://localhost`.
 
 [Ver documentación de instalación completa →](INSTALL_UBUNTU.md)
 
 ---
 
-## Agentes
+## Arquitectura General
 
-| Agente | Fuentes | Ciudades | Intervalo | Oportunidad |
-|--------|---------|----------|-----------|-------------|
-| Permisos de Construccion | Socrata, CKAN | 54 (26 fuentes) | 60 min | ADU/remodel/roofing/electrical = servicio target |
-| Instalaciones Solares | Socrata, CKAN, NREL, Google Solar, Aurora, EnergySage | 54 (15 fuentes) | 60 min | Solar nuevo = roofing/electrical/paint |
-| Reportes 311 Plagas | SeeClickFix, Socrata, CKAN, Thumbtack | 54 (55 fuentes) | 2 hrs | Roedores/plagas = drywall/paint reparacion |
-| Alertas NOAA Inundacion | NOAA Weather API | 13 zonas | 30 min | Agua = drywall/paint/roofing |
-| Construcciones Activas | Socrata, CKAN, BuildZoom | 54 (14 fuentes) | 60 min | Fase framing = roofing/electrical siguientes |
-| **Calendario de Inspecciones** | **PDF (CC, Berkeley) + CKAN (San Jose) + Predicción** | **54 (3 públicos)** | **Daily 9 AM** | **GC estará en sitio próximamente — timing perfecto** |
-| Deconstruccion | Socrata, CKAN, ATTOM | 54 (14 fuentes) | 2 hrs | Demolicion = roofing/drywall nuevo |
-| Propiedades Vendidas | Socrata (assessor data) | 10 condados | 2 hrs | Nuevo dueno = renovacion probable |
-| Eficiencia Energetica | Socrata (benchmarking) | SF, Oakland, SJ + condados | 6 hrs | Baja eficiencia = panel upgrade (electrical) |
-| Google Places | Google Places API | Bay Area | 24 hrs | Negocios de construccion activos |
-| Yelp Contractors | Yelp Fusion API | Bay Area | 24 hrs | Contratistas activos en la zona |
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        MLeads Platform                          │
+│                                                                 │
+│  ┌──────────────┐   ┌──────────────┐   ┌─────────────────────┐ │
+│  │   Agentes    │   │  Lead Engine │   │   Notificaciones    │ │
+│  │  (11 tipos)  │──▶│  Scoring AI  │──▶│  Telegram / WA /    │ │
+│  │  54 ciudades │   │  Dedup/Merge │   │  Email / Slack      │ │
+│  └──────────────┘   └──────┬───────┘   └─────────────────────┘ │
+│                            │                                    │
+│                    ┌───────▼────────┐                           │
+│                    │  SQLite DB     │                           │
+│                    │  consolidated_ │                           │
+│                    │  leads         │                           │
+│                    └───────┬────────┘                           │
+│                            │                                    │
+│         ┌──────────────────┼───────────────────┐               │
+│         ▼                  ▼                   ▼               │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐         │
+│  │  Dashboard  │  │  Swipe Feed  │  │  Telegram Bot  │         │
+│  │  (admin)    │  │  (público)   │  │  (suscriptores)│         │
+│  │  RBAC/JWT   │  │  Tinder UX   │  │  Trials/Pagos  │         │
+│  └─────────────┘  └──────────────┘  └────────────────┘         │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Cobertura Geografica (54 Ciudades)
+## Agentes de Detección
+
+| Agente | Fuentes | Ciudades | Intervalo | Tipo de oportunidad |
+|--------|---------|----------|-----------|---------------------|
+| Permisos de Construcción | Socrata, CKAN (26 fuentes) | 54 | 60 min | ADU/remodel/roofing/electrical |
+| Instalaciones Solares | Socrata, Google Solar, Aurora, EnergySage | 54 | 60 min | Solar → roofing/electrical/paint |
+| Reportes 311 Plagas | SeeClickFix, Socrata, Thumbtack | 54 | 2 hrs | Plagas → drywall/paint reparación |
+| Alertas NOAA Inundación | NOAA Weather API | 13 zonas | 30 min | Agua → drywall/paint/roofing |
+| Construcciones Activas | Socrata, BuildZoom | 54 | 60 min | Framing → roofing/electrical |
+| **Calendario Inspecciones** | **PDF (CC/Berkeley) + CKAN (SJ) + Predicción** | **54** | **Daily 9 AM** | **GC en sitio — timing perfecto** |
+| Deconstrucción | Socrata, ATTOM | 54 | 2 hrs | Demolición → roofing/drywall |
+| Propiedades Vendidas | Socrata (assessor data) | 10 condados | 2 hrs | Nuevo dueño → renovación |
+| Eficiencia Energética | Socrata (benchmarking) | SF/Oak/SJ | 6 hrs | Baja eficiencia → panel upgrade |
+| Google Places | Google Places API | Bay Area | 24 hrs | Constructores activos |
+| Yelp Contractors | Yelp Fusion API | Bay Area | 24 hrs | Contratistas activos |
+
+---
+
+## Cobertura Geográfica (54 Ciudades)
 
 **Contra Costa County (19):** Pleasant Hill, Walnut Creek, Martinez, Clayton, Pittsburg, Lafayette, Orinda, Antioch, Moraga, Alamo, Danville, Hercules, Pinole, Oakley, San Ramon, Richmond, Brentwood, El Cerrito, Concord
 
@@ -55,773 +82,252 @@ curl -s https://raw.githubusercontent.com/gab79013-stack/MLeads/main/quick-insta
 
 **Santa Clara County (5):** San Jose, Sunnyvale, Santa Clara, Palo Alto, Mountain View
 
-**Marin County (2):** Novato, San Rafael
-
-**Sonoma County (2):** Sonoma, Petaluma
-
-**Napa County (1):** Napa
-
-**San Joaquin County (2):** Tracy, Stockton
-
+**Marin County (2):** Novato, San Rafael  
+**Sonoma County (2):** Sonoma, Petaluma  
+**Napa County (1):** Napa  
+**San Joaquin County (2):** Tracy, Stockton  
 **San Francisco County (1):** San Francisco
+
+---
+
+## Motor de IA
+
+### Lead Scoring (0–100)
+Score automático por lead basado en múltiples señales:
+
+| Score | Grado | Acción |
+|-------|-------|--------|
+| 90–100 | 🔥 HOT | Contactar de inmediato |
+| 70–89 | 🌡️ WARM | Alta prioridad |
+| 50–69 | 🌤️ MEDIUM | Seguimiento estándar |
+| 25–49 | ❄️ COOL | Baja prioridad |
+| 0–24 | ❄️ COLD | Archivo |
+
+Factores de scoring: valor del proyecto · tipo de proyecto · calidad de contacto · recencia · geografía · fuente · señales de servicio · proximidad de inspección.
+
+### Termómetro de Relevancia por Subcontratista
+Cuando el usuario activa filtros de categoría (roofing, drywall, electrical…), el termómetro de cada lead cambia de mostrar el score genérico a mostrar el **índice de afinidad de tipo** (0–100):
+
+- `70%` basado en match de palabras clave en descripción y tipo de servicio
+- `30%` blended con el score bruto del lead
+- Icono `🎯` reemplaza `°C` cuando el filtro está activo
+
+### Clasificación AI por Descripción
+El módulo `ai_classifier.py` usa Claude (claude-haiku) para enriquecer leads ambiguos con la categoría de subcontratista más probable cuando los keywords no son suficientes.
+
+### Outreach AI
+`ai_outreach.py` genera mensajes de presentación personalizados para cada lead usando el contexto del proyecto (tipo, valor, GC, inspección próxima).
+
+---
+
+## Swipe Feed Público (UX tipo Tinder)
+
+Feed público sin login para descubrir leads. Disponible en `/swipe`.
+
+### Características
+- **Solo leads con contacto** — teléfono o email visibles; el resto se archiva
+- **Termómetro inteligente** — refleja afinidad con el tipo de subcontratista seleccionado
+- **Progresión automática de score:**
+  - Primeros 10 likes: leads HOT (≥90)
+  - Siguientes 10: WARM (71–89)
+  - Siguientes 10: MEDIUM (51–70)
+  - Resto: todos los leads
+- **Solo los swipes a la derecha (likes) consumen cuota** — los rechazos son gratuitos
+- **Oportunidad de visita en persona** — cuando hay inspección programada, se muestra prominentemente como ventana de contacto
+- **Link a Google Maps** en cada lead (dirección + ciudad)
+- **Historial anónimo** — se guarda en localStorage; al registrarse migra al perfil
+- **Alerta automática al admin** cuando un usuario acumula 50 rechazos consecutivos
+
+### Cuotas
+| Perfil | Leads disponibles |
+|--------|-------------------|
+| Anónimo | 10 likes |
+| Usuario gratuito | 40 likes |
+| Pro ($29/mes) | 200 leads |
+| Premium ($99/mes) | Ilimitado |
+
+### Filtros disponibles
+- Categoría de subcontratista (roofing, drywall, paint, landscaping, electrical)
+- Tipo de lead (permisos, solar, construcción, real estate, flood, energy)
+- Ciudad + radio en millas
+- Valor mínimo/máximo del proyecto
+- Solo HOT
+
+---
+
+## Dashboard Multi-Usuario
+
+Panel web con autenticación JWT y RBAC para gestionar leads con múltiples usuarios.
+
+### Roles
+| Rol | Permisos |
+|-----|----------|
+| admin | Acceso total + gestión de usuarios |
+| manager | Ver todos los leads, gestionar equipo |
+| user | Ver leads asignados, registrar contactos |
+| viewer | Solo lectura |
+
+### Características
+- Control por ciudad — cada usuario ve solo las ciudades asignadas
+- Control por agente — cada usuario ve solo los tipos de lead asignados
+- Acceso temporal — expiración automática por horas o fecha exacta
+- Audit logging — registro de toda la actividad
+- Gestor de Bot Users con badges de trial y extensión desde el panel
+
+### Quick Start
+```bash
+pip install -r requirements.txt
+python web_server.py
+# Dashboard: http://localhost:5001/
+# Login: http://localhost:5001/login.html
+# Credenciales por defecto: admin / admin123
+```
+
+### API Endpoints principales
+```
+POST /api/auth/login
+POST /api/auth/refresh
+POST /api/auth/logout
+
+GET  /api/leads
+GET  /api/leads/{id}
+POST /api/leads/{id}/contact
+GET  /api/leads/{id}/contact-history
+POST /api/leads/{id}/notes
+
+GET  /api/stats
+GET  /api/audit-log
+
+GET  /api/admin/users
+POST /api/admin/users
+PUT  /api/admin/users/{id}
+PUT  /api/admin/users/{id}/roles
+PUT  /api/admin/users/{id}/access
+PUT  /api/admin/users/{id}/expiration
+DELETE /api/admin/users/{id}
+
+GET  /api/swipe/feed
+POST /api/swipe/action
+GET  /api/swipe/my-contacts
+POST /api/swipe/claim-anon
+POST /api/swipe/feedback
+
+GET  /api/scheduled_inspections?jurisdiction=berkeley
+GET  /api/leads/{id}/scheduled_inspections
+POST /api/admin/scheduler/fetch-now
+```
+
+---
+
+## Calendario de Inspecciones
+
+Integración automática de calendarios públicos para saber cuándo el GC estará en el sitio.
+
+- **Contra Costa County:** PDF diario (actualizado a las 8:45 AM)
+- **Berkeley:** PDF diario
+- **San Jose:** Open Data Portal (CKAN API)
+- **Otras ciudades:** Predicción automática por fase de construcción
+
+Beneficios:
+- **Timing perfecto:** el lead muestra cuántos días faltan para la inspección
+- **Score boost:** leads con inspección en < 7 días reciben +8 puntos
+- **CTA de visita:** mensaje prominente invitando a presentarse en persona antes de la inspección
+
+Ver [CALENDAR_INTEGRATION.md](CALENDAR_INTEGRATION.md) para documentación completa.
+
+---
+
+## Bot de Telegram con Monetización
+
+Bot integrado con sistema de trials y pagos vía Stripe.
+
+- Usuarios nuevos reciben trial automático (configurable, por defecto 7 días)
+- Al vencer el trial, se bloquea el acceso y se ofrece suscripción
+- Stripe webhook actualiza el estado de pago automáticamente
+- Panel de admin con lista de bot_users, extensión de trial y activación manual
+
+---
+
+## Notificaciones Multi-Canal
+
+| Canal | Trigger |
+|-------|---------|
+| Telegram | Todos los leads nuevos en tiempo real |
+| WhatsApp (Twilio) | Leads HOT al celular |
+| Email (SendGrid) | Leads WARM + digest diario |
+| Slack | Webhook para equipo |
 
 ---
 
 ## Funcionalidades Avanzadas
 
 ### Cross-Agent Deduplication
-Cuando la misma propiedad aparece en multiples agentes (ej: permiso de construccion + reporte de roedores + panel solar), se consolida en un "super lead" con datos fusionados y score boosteado.
+Cuando la misma propiedad aparece en múltiples agentes, se consolida en un "super lead" con datos fusionados y score boosteado.
 
 ### Hot Zone Detection
-Clustering geografico en tiempo real. Cuando 3+ leads caen dentro de un radio de 500m, genera una alerta de "zona caliente" con link a Google Maps y recomendacion de campana puerta-a-puerta.
-
-### Lead Scoring (0-100)
-Score automatico basado en: valor del proyecto, tipo de proyecto, calidad de contacto, recencia, geografia, fuente, senales de servicio (roofing/drywall/paint/landscaping/electrical), **y proximidad de inspecciones**.
-
-| Score | Grado | Accion |
-|-------|-------|--------|
-| 90-100 | HOT | Contactar de inmediato (WhatsApp + Email) |
-| 70-89 | WARM | Alta prioridad (Email) |
-| 50-69 | MEDIUM | Seguimiento estandar |
-| 25-49 | COOL | Baja prioridad |
-| 0-24 | COLD | Archivo |
-
-### Calendario de Inspecciones (Nuevo 🆕)
-
-**Integración automática de calendarios públicos para saber cuándo el GC estará en el sitio.**
-
-El sistema ahora enriquece cada lead con información de inspecciones programadas usando:
-
-- **Contra Costa County:** PDF diario (actualizado a las 8:45 AM)
-- **Berkeley:** PDF diario  
-- **San Jose:** Open Data Portal (CKAN API)
-- **Otras ciudades:** Predicción automática basada en fase de construcción
-
-Beneficios:
-- **Timing perfecto:** Contacta al GC cuando esté en el sitio (inspeccion programada)
-- **Score boost:** Leads con inspección < 7 días reciben +8 puntos (🔥 HOT)
-- **Predicción inteligente:** Estima próxima inspección por fase (FOUNDATION → FRAMING → ROUGH_MEP → ...)
-- **Scheduler automático:** Actualiza calendarios diarios a las 9 AM
-
-Endpoints:
-```
-GET  /api/scheduled_inspections?jurisdiction=berkeley
-GET  /api/leads/{id}/scheduled_inspections
-POST /api/admin/scheduler/fetch-now
-```
-
-Ver [CALENDAR_INTEGRATION.md](CALENDAR_INTEGRATION.md) para documentación completa.
-
-### Multi-Channel Notifications
-- **Telegram** — todos los leads en tiempo real
-- **WhatsApp** (Twilio) — leads HOT al celular
-- **Email** (SendGrid) — leads WARM + digest diario
-- **Slack** — webhook para equipo
+Clustering geográfico en tiempo real. Cuando 3+ leads caen dentro de 500m, genera una alerta de "zona caliente" con link a Google Maps.
 
 ### Contact Enrichment
-1. **CSVs locales** en `contacts/` — fuzzy matching por nombre
-2. **CSLB** — California Contractors State License Board (web scrape)
-3. **Hunter.io** — email finder por dominio
-4. **Apollo.io** — enrichment de contactos
+1. CSVs locales en `contacts/` — fuzzy matching por nombre
+2. CSLB — California Contractors State License Board
+3. Hunter.io — email finder por dominio
+4. Apollo.io — enrichment de contactos
 
 ---
 
-## Dashboard Multi-Usuario
+## Seguridad
 
-Dashboard web con RBAC (Role-Based Access Control) para gestionar leads con multiples usuarios.
-
-### Caracteristicas
-
-- **50+ usuarios** simultaneos con roles diferenciados
-- **4 roles predefinidos:** admin, manager, user, viewer
-- **Control por ciudad** — cada usuario ve solo las ciudades asignadas
-- **Control por agente** — cada usuario ve solo los tipos de lead asignados
-- **Acceso temporal** — dar acceso por horas/dias con expiracion automatica
-- **JWT authentication** con tokens de acceso y refresh
-- **Audit logging** — seguimiento de toda la actividad
-- **Dashboard responsive** — funciona en desktop y movil
-- **Gestor de Bot Users** — vista dedicada para suscriptores del bot Telegram
-- **Trial visual** — badges con dias restantes y boton "+7d" para extender
-- **Creacion de usuarios con trial** desde el modal (no mas CLI para nuevos trials)
-
-### Quick Start
-
-```bash
-# Instalar dependencias web
-pip install -r requirements.txt
-
-# Iniciar servidor web
-python web_server.py
-
-# Abrir en navegador
-# http://localhost:5000/login.html
-# Credenciales: admin / admin123
-
-# (Opcional) Crear usuarios demo
-python web/init_demo_users.py
-```
-
-### Roles y Permisos
-
-| Rol | Permisos |
-|-----|----------|
-| **admin** | Acceso total + gestion de usuarios y roles |
-| **manager** | Ver todos los leads, gestionar equipo |
-| **user** | Ver leads asignados, registrar contactos |
-| **viewer** | Solo lectura de leads asignados |
-
-### Acceso Temporal (por tiempo)
-
-Dar acceso a un usuario por tiempo limitado (ej: 24 horas, 1 semana):
-
-```bash
-# Crear usuario con acceso de 24 horas
-curl -X POST http://localhost:5000/api/admin/users \
-  -H "Authorization: Bearer <admin-token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "temp_user",
-    "email": "temp@example.com",
-    "password": "pass123",
-    "roles": ["user"],
-    "expires_in_hours": 24,
-    "city_ids": [44],
-    "agent_ids": [10]
-  }'
-
-# Extender acceso 48 horas mas
-curl -X PUT http://localhost:5000/api/admin/users/5/expiration \
-  -H "Authorization: Bearer <admin-token>" \
-  -H "Content-Type: application/json" \
-  -d '{"expires_in_hours": 48}'
-
-# Poner fecha exacta de expiracion
-curl -X PUT http://localhost:5000/api/admin/users/5/expiration \
-  -d '{"expires_at": "2026-04-10 00:00:00"}'
-
-# Hacer acceso permanente (quitar expiracion)
-curl -X PUT http://localhost:5000/api/admin/users/5/expiration \
-  -d '{"permanent": true}'
-```
-
-Cuando el acceso expira, el usuario recibe un error 403 con mensaje claro y debe contactar al administrador.
-
-### Control de Acceso por Ciudad/Agente
-
-Ejemplo: Usuario X solo ve leads de **San Francisco** + **Demolicion**:
-
-```bash
-curl -X POST http://localhost:5000/api/admin/users \
-  -H "Authorization: Bearer <admin-token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "user_x",
-    "email": "x@example.com",
-    "password": "pass123",
-    "roles": ["user"],
-    "city_ids": [44],
-    "agent_ids": [10]
-  }'
-```
-
-Ejemplo: Usuario Y solo ve leads de **Concord** + **Roedores y Solar**:
-
-```bash
-curl -X POST http://localhost:5000/api/admin/users \
-  -d '{
-    "username": "user_y",
-    "roles": ["user"],
-    "city_ids": [9],
-    "agent_ids": [2, 3]
-  }'
-```
-
-Dejar `city_ids` o `agent_ids` vacios = acceso a todas las ciudades/agentes.
-
-### API Endpoints
-
-**Autenticacion:**
-```
-POST   /api/auth/login              Login (username + password)
-POST   /api/auth/refresh            Renovar token de acceso
-POST   /api/auth/logout             Logout y revocar token
-```
-
-**Leads:**
-```
-GET    /api/leads                   Listar leads (filtros: city, agent, score, value, status)
-GET    /api/leads/<id>              Detalle de un lead
-POST   /api/leads/<id>/contact      Registrar contacto con lead
-```
-
-**Dashboard:**
-```
-GET    /api/user                    Info del usuario actual + permisos
-GET    /api/stats                   Estadisticas del dashboard
-GET    /api/audit-log               Log de actividad
-GET    /api/health                  Health check
-```
-
-**Admin (solo admin):**
-```
-POST   /api/admin/users             Crear usuario (con acceso temporal opcional)
-PUT    /api/admin/users/<id>/access      Actualizar ciudades/agentes
-PUT    /api/admin/users/<id>/expiration  Extender/revocar acceso temporal
-```
-
-### Produccion
-
-```bash
-# Con gunicorn (recomendado para produccion)
-gunicorn -w 4 -b 0.0.0.0:5000 web_server:app
-
-# Como servicio systemd
-sudo nano /etc/systemd/system/insulleads-web.service
-```
-
-```ini
-[Unit]
-Description=Insulleads Web Dashboard
-After=network.target
-
-[Service]
-Type=simple
-User=insulleads
-WorkingDirectory=/home/insulleads/Insulleads
-Environment="JWT_SECRET_KEY=tu-clave-secreta-aqui"
-ExecStart=/home/insulleads/Insulleads/venv/bin/gunicorn -w 4 -b 0.0.0.0:5000 web_server:app
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl enable insulleads-web
-sudo systemctl start insulleads-web
-```
-
-> Para documentacion completa del dashboard, ver [DASHBOARD.md](DASHBOARD.md), [INTEGRATION.md](INTEGRATION.md), y [QUICKSTART.md](QUICKSTART.md).
+- JWT con `JWT_SECRET_KEY` validado en startup (falla si es el valor por defecto)
+- Rate limiting: login (10/min), endpoints admin (20/min), delete (10/min)
+- Validación de whitelist en parámetros: `status`, `contact_type`, `expires_at`
+- Mensajes de error genéricos al cliente — detalles solo en logs
+- Advertencia en startup si `ALLOWED_ORIGINS=*` (CORS abierto)
+- Singleton de agentes con double-checked locking thread-safe
 
 ---
 
-## Bot Interactivo de Telegram (SaaS $99/mo)
+## Variables de Entorno
 
-Ademas del bot "uno-a-muchos" que publica al canal de operaciones, MLeads incluye
-un **bot bidireccional** que cada cliente final usa en privado. Cuando alguien
-inicia chat con el bot:
+```env
+# Base de datos
+DB_PATH=data/leads.db
 
-1. **Onboarding guiado** — el bot le pregunta que servicios le interesan
-   (framing, paint, solar, roofing, permits, etc.) con botones inline
-   y luego le pide su ciudad.
-2. **Radio de busqueda de 35 millas** — todos los leads que matcheen sus
-   servicios dentro de ese radio le llegan automaticamente.
-3. **Trial gratis de 7 dias** — se activa al completar el onboarding, o
-   automaticamente cuando el usuario se une al canal configurado en
-   `TELEGRAM_CHANNEL_ID`.
-4. **Suscripcion $99/mo via Stripe** — cuando expira el trial, el bot envia
-   el comando `/upgrade` con el link de Stripe Checkout.
-
-### Arquitectura
-
-```
-Telegram Bot API
-      │
-      │ (long polling)
-      ▼
-workers/telegram_bot.py  ◄──────── workers/inspection_scheduler.py
-      │                                        │
-      ▼                                        ▼
-utils/bot_users.py                  utils/web_db.py (SQLite)
-      │
-      ▼
-agents/base.py → send_batch() → _fanout_to_bot_users()
-                                    │
-                                    ▼
-             envia lead a los bot_users con services/city match
-```
-
-### Tablas nuevas
-
-- `bot_users` — un registro por chat privado (state, services JSON, city,
-  lat/lon, trial/paid timestamps, Stripe IDs, leads_sent_count)
-- `bot_state` — ultimo `update_id` procesado (dedup entre reinicios)
-- `bot_messages` — log bidireccional de mensajes (util para soporte)
-
-### Comandos del bot
-
-| Comando     | Efecto |
-|-------------|--------|
-| `/start`    | Inicia o reinicia el onboarding |
-| `/services` | Vuelve a elegir servicios |
-| `/city`     | Cambia la ciudad base |
-| `/status`   | Plan actual + expiracion + leads recibidos |
-| `/upgrade`  | Link de Stripe Checkout (si esta configurado) |
-| `/help`     | Lista de comandos |
-
-### Endpoints admin (requieren rol admin)
-
-```
-GET    /api/admin/bot-users                       Lista todos los bot_users
-GET    /api/admin/bot-users/stats                 Conteos + MRR estimado
-POST   /api/admin/bot-users/:id/trial             Extiende trial N dias
-POST   /api/admin/bot-users/:id/activate          Marca como paid por N dias
-POST   /api/admin/bot-users/:id/suspend           Desactiva (deja de recibir leads)
-POST   /api/stripe/webhook                        Webhook de Stripe (publico, firmado)
-```
-
-El dashboard tiene una pestana **"Bot Users"** con 4 KPIs (total, trial, paid,
-MRR), tabla con badges de estado y botones rapidos para extender/activar/suspender.
-
-### Configuracion minima
-
-1. Crea el bot con @BotFather (ya deberias tenerlo para `TELEGRAM_BOT_TOKEN`).
-2. En BotFather habilita **"Allow Groups?"** y **"Group Privacy → Disabled"**.
-3. Agrega el bot como admin del canal donde publicas leads y copia el chat_id
-   a `TELEGRAM_CHANNEL_ID` en `.env`.
-4. (Opcional, pero recomendado para monetizar) configura Stripe — ver seccion
-   18 de `.env.example`.
-5. Reinicia la app. El worker arranca solo si `TELEGRAM_BOT_TOKEN` esta seteado
-   y `BOT_WORKER_ENABLED=true`.
-
-> **Modo desarrollo**: si `STRIPE_API_KEY` queda vacio, el modulo `utils/billing.py`
-> entra en modo no-op; `/upgrade` responde con un mensaje de "contacta a soporte"
-> en vez de fallar. Util para probar el flujo completo antes de conectar Stripe.
-
----
-
-## Instalacion desde Cero en DigitalOcean Droplet
-
-### Paso 1: Crear el Droplet
-
-En DigitalOcean, crea un droplet con:
-- **Image:** Ubuntu 24.04 LTS
-- **Plan:** Basic $6/mes (1 vCPU, 1GB RAM) — suficiente para el sistema
-- **Region:** San Francisco (SFO3) — mas cerca de las APIs
-- **Authentication:** SSH Key (recomendado) o password
-
-### Paso 2: Conectar al Droplet
-
-```bash
-ssh root@TU_IP_DEL_DROPLET
-```
-
-### Paso 3: Setup del Sistema
-
-```bash
-# Actualizar el sistema
-apt update && apt upgrade -y
-
-# Instalar Python 3.11+ y git
-apt install -y python3 python3-pip python3-venv git
-
-# Crear usuario para la app (no correr como root)
-adduser --disabled-password --gecos "" insulleads
-usermod -aG sudo insulleads
-su - insulleads
-```
-
-### Paso 4: Clonar el Repositorio
-
-```bash
-cd ~
-git clone https://github.com/GB0x21/Insulleads.git
-cd Insulleads
-```
-
-### Paso 5: Crear Entorno Virtual
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-### Paso 6: Configurar Variables de Entorno
-
-```bash
-cp .env.example .env
-nano .env
-```
-
-> El archivo `.env.example` está **completo** y documentado: incluye todas las
-> variables que el sistema reconoce, agrupadas en 17 secciones (Telegram,
-> dashboard, agentes, intervalos, APIs, notificaciones, etc.). Léelo de
-> arriba a abajo — los comentarios explican qué hace cada variable.
-
-A continuación se resumen las variables agrupadas por importancia.
-
-#### 6.1 Mínimo requerido
-
-El sistema arranca con **solo Telegram** configurado:
-
-```bash
-TELEGRAM_BOT_TOKEN=123456789:ABCdef...
-TELEGRAM_CHAT_ID=-1001234567890
-```
-
-Para obtener estos valores:
-1. En Telegram, busca **@BotFather** → `/newbot` → copia el token
-2. Crea un grupo, agrega tu bot, envia un mensaje
-3. Visita `https://api.telegram.org/bot<TOKEN>/getUpdates`
-4. Busca `"chat":{"id":` — ese numero negativo es tu Chat ID
-
-#### 6.2 Dashboard web (opcional, recomendado)
-
-```bash
-JWT_SECRET_KEY=tu-clave-secreta-larga-y-aleatoria   # python -c "import secrets; print(secrets.token_urlsafe(64))"
-JWT_ACCESS_EXPIRY=3600         # 1 hora
-JWT_REFRESH_EXPIRY=604800      # 7 días
-PORT=5001
-FLASK_DEBUG=false
+# Servidor
 FLASK_ENV=production
-```
-
-#### 6.3 Activación de agentes y frecuencias
-
-```bash
-# Activar/desactivar agentes
-AGENT_PERMITS=true
-AGENT_SOLAR=true
-AGENT_RODENTS=true
-AGENT_FLOOD=true
-AGENT_CONSTRUCTION=true
-AGENT_DECONSTRUCTION=true
-AGENT_REALESTATE=true
-AGENT_ENERGY=true
-AGENT_PLACES=false             # Requiere GOOGLE_PLACES_API_KEY
-AGENT_YELP=false               # Requiere YELP_API_KEY
-
-# Intervalo de fetch de cada agente (minutos)
-INTERVAL_PERMITS=60
-INTERVAL_SOLAR=60
-INTERVAL_RODENTS=120
-INTERVAL_FLOOD=30
-INTERVAL_CONSTRUCTION=60
-INTERVAL_DECONSTRUCTION=120
-INTERVAL_REALESTATE=120
-INTERVAL_ENERGY=360
-INTERVAL_PLACES=1440
-INTERVAL_YELP=1440
-```
-
-#### 6.4 Tuning de rendimiento y filtros
-
-```bash
-SOURCE_TIMEOUT=45              # Timeout HTTP por fuente
-PARALLEL_CITIES=6              # Paralelismo por agente
-PARALLEL_SOLAR=6
-PARALLEL_311=5
-PARALLEL_INSPECT=6
-PARALLEL_REALESTATE=4
-PARALLEL_ENERGY=4
-PARALLEL_DECON=6
-
-MIN_PERMIT_VALUE=50000         # Filtro mínimo USD por permit
-MIN_DECON_VALUE=50000
-MIN_SALE_PRICE=400000
-PERMIT_MONTHS=3                # Histórico hacia atrás
-RODENT_MONTHS=2
-DECON_MONTHS=3
-CONSTRUCTION_MONTHS=1
-SALE_MONTHS=2
-ENERGY_MONTHS=6
-
-DEDUP_WINDOW_DAYS=30           # Ventana de dedup cross-agent
-HOT_ZONE_THRESHOLD=3           # Mínimo de leads para una hot zone
-HOT_ZONE_RADIUS_M=500
-HOT_ZONE_WINDOW_HRS=168        # 7 días
-
-CONTACTS_DIR=contacts          # Dónde buscar los CSVs
-FUZZY_THRESHOLD=0.72           # Estricto: 1.0 — laxo: 0.5
-```
-
-#### 6.5 Calendario de inspecciones
-
-```bash
-INSPECTION_FETCH_HOUR=9        # Hora del fetch diario (UTC)
-INSPECTION_CLEANUP_DAYS=60
-ENABLE_CONTRA_COSTA_FETCHER=true
-ENABLE_BERKELEY_FETCHER=true
-ENABLE_SAN_JOSE_FETCHER=true
-ENABLE_LEAD_SCORING=true
-ENABLE_INSPECTION_SCHEDULER=true
-```
-
-#### 6.6 APIs públicas (gratuitas, recomendadas)
-
-```bash
-SOCRATA_APP_TOKEN=             # Evita throttling — gratis en cualquier data.*.gov
-NREL_API_KEY=                  # Potencial solar — gratis en developer.nrel.gov/signup
-CENSUS_API_KEY=                # Demografía — gratis en api.census.gov/data/key_signup.html
-```
-
-#### 6.7 APIs Tier 1 (~$300/mes)
-
-```bash
-ATTOM_API_KEY=                 # Datos de propiedad — ~$200/mes
-HUNTER_API_KEY=                # Email finder — $49/mes (100 gratis)
-SENDGRID_API_KEY=              # Email outreach — $15/mes
-SENDGRID_FROM_EMAIL=leads@example.com
-SENDGRID_TO_EMAIL=tu@email.com
-GOOGLE_GEOCODE_API_KEY=        # Geocoding — ~$30/mes
-```
-
-#### 6.8 APIs Tier 2 (~$200/mes adicional)
-
-```bash
-GOOGLE_SOLAR_API_KEY=          # Solar por edificio — ~$0.40/req
-TWILIO_ACCOUNT_SID=            # WhatsApp alerts — ~$50/mes
-TWILIO_AUTH_TOKEN=
-TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
-TWILIO_WHATSAPP_TO=whatsapp:+1TUNUMERO
-APOLLO_API_KEY=                # Contact enrichment — free / $49/mes
-THUMBTACK_API_KEY=             # Pest control leads — partner program
-```
-
-#### 6.9 APIs Tier 3 (~$300-500/mes adicional)
-
-```bash
-BUILDZOOM_API_KEY=             # Tracking construccion — $100-300/mes
-AURORA_API_KEY=                # Proyectos solar — $100+/mes
-ENERGYSAGE_API_KEY=            # Compradores solar — partner
-GOOGLE_PLACES_API_KEY=         # Negocios cercanos — $200 credito gratis/mes
-YELP_API_KEY=                  # Contratistas — 5000 calls/dia gratis
-```
-
-#### 6.10 Slack (opcional)
-
-```bash
-SLACK_WEBHOOK_URL=             # Webhook para canal interno del equipo
-```
-
-#### 6.11 Telegram — rate limiting (opcional)
-
-```bash
-TELEGRAM_MAX_MSG_MIN=20        # Máximo mensajes/minuto
-TELEGRAM_MAX_BURST=10          # Burst inicial permitido
-```
-
-### Paso 7: Agregar Contactos de GC
-
-Copia tus archivos CSV de contratistas a la carpeta `contacts/`:
-```bash
-# Desde tu maquina local:
-scp ~/Downloads/*.csv root@TU_IP:/home/insulleads/Insulleads/contacts/
-```
-
-Formatos soportados: cualquier CSV con columnas de nombre, telefono, email. El sistema detecta automaticamente las columnas.
-
-### Paso 8: Probar Conexion
-
-```bash
-source venv/bin/activate
-python main.py --test
-```
-
-Deberias ver un mensaje en tu grupo de Telegram. Si falla, revisa el token y chat ID en `.env`.
-
-### Paso 9: Ejecutar Manualmente (prueba)
-
-```bash
-# Probar un agente individual
-python main.py --run permits
-python main.py --run solar
-python main.py --run rodents
-
-# Ver estadisticas
-python main.py --stats
-```
-
-### Paso 10: Configurar como Servicio (24/7)
-
-#### Opcion A: systemd (recomendado)
-
-```bash
-# Como root:
-sudo nano /etc/systemd/system/insulleads.service
-```
-
-Pega este contenido:
-```ini
-[Unit]
-After=network.target
-
-[Service]
-Type=simple
-User=insulleads
-Group=insulleads
-WorkingDirectory=/home/insulleads/Insulleads
-ExecStart=/home/insulleads/Insulleads/venv/bin/python main.py
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-
-# Variables de entorno
-EnvironmentFile=/home/insulleads/Insulleads/.env
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Crear tambien el servicio web:
-```bash
-sudo nano /etc/systemd/system/insulleads-web.service
-```
-
-```ini
-[Unit]
-Description=Insulleads Web Dashboard
-After=network.target
-
-[Service]
-Type=simple
-User=insulleads
-Group=insulleads
-WorkingDirectory=/home/insulleads/Insulleads
-Environment="JWT_SECRET_KEY=cambia-esto-en-produccion"
-ExecStart=/home/insulleads/Insulleads/venv/bin/gunicorn -w 4 -b 0.0.0.0:5000 web_server:app
-Restart=always
-RestartSec=10
-
-EnvironmentFile=/home/insulleads/Insulleads/.env
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Activar ambos servicios:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable insulleads insulleads-web
-sudo systemctl start insulleads insulleads-web
-
-# Verificar que estan corriendo
-sudo systemctl status insulleads
-sudo systemctl status insulleads-web
-
-# Ver logs en tiempo real
-sudo journalctl -u insulleads -f
-sudo journalctl -u insulleads-web -f
-```
-
-#### Opcion B: Docker
-
-```bash
-docker build -t insulleads .
-docker run -d \
-  --name insulleads \
-  --restart always \
-  -v /home/insulleads/Insulleads/.env:/app/.env \
-  -v /home/insulleads/Insulleads/data:/app/data \
-  -v /home/insulleads/Insulleads/contacts:/app/contacts \
-  insulleads
-
-# Ver logs
-docker logs -f insulleads
-```
-
-#### Opcion C: PM2
-
-```bash
-sudo apt install -y nodejs npm
-sudo npm install -g pm2
-
-cd /home/insulleads/Insulleads
-pm2 start "venv/bin/python main.py" --name insulleads
-pm2 save
-pm2 startup
-```
-
----
-
-## Comandos
-
-### Agentes de Leads
-```bash
-python main.py                    # Inicia todos los agentes
-python main.py --test             # Prueba conexion Telegram
-python main.py --run permits      # Ejecuta solo permisos
-python main.py --run solar        # Ejecuta solo solar
-python main.py --run rodents      # Ejecuta solo roedores
-python main.py --run flood        # Ejecuta solo inundaciones
-python main.py --run construction # Ejecuta solo construccion activa
-python main.py --run deconstruction # Ejecuta solo deconstruccion
-python main.py --run realestate   # Ejecuta solo propiedades vendidas
-python main.py --run energy       # Ejecuta solo eficiencia energetica
-python main.py --run places       # Ejecuta solo Google Places
-python main.py --run yelp         # Ejecuta solo Yelp
-python main.py --stats            # Estadisticas de leads enviados
-```
-
-### Dashboard Web
-```bash
-python web_server.py              # Inicia dashboard (puerto 5000)
-python web/init_demo_users.py     # Crear usuarios demo (5 usuarios)
-
-# Produccion
-gunicorn -w 4 -b 0.0.0.0:5000 web_server:app
-```
-
-### Calendario de Inspecciones (API)
-```bash
-# Listar inspecciones por jurisdiccion
-curl -H "Authorization: Bearer <token>" \
-  "http://localhost:5000/api/scheduled_inspections?jurisdiction=berkeley"
-
-# Ver inspecciones proximas para un lead
-curl -H "Authorization: Bearer <token>" \
-  "http://localhost:5000/api/leads/{lead_id}/scheduled_inspections"
-
-# Disparar fetch manual (admin)
-curl -X POST -H "Authorization: Bearer <admin_token>" \
-  http://localhost:5000/api/admin/scheduler/fetch-now
-
-# Ver estado del scheduler
-curl -H "Authorization: Bearer <admin_token>" \
-  http://localhost:5000/api/admin/scheduler/status
-```
-
-### Habilitar/Deshabilitar Agentes
-
-En `.env`, cambia a `false` para desactivar:
-```
-AGENT_PERMITS=true
-AGENT_SOLAR=true
-AGENT_RODENTS=true
-AGENT_FLOOD=true
-AGENT_CONSTRUCTION=true
-AGENT_DECONSTRUCTION=true
-AGENT_REALESTATE=true
-AGENT_ENERGY=true
-AGENT_PLACES=false     # Requiere Google Places API key
-AGENT_YELP=false       # Requiere Yelp API key
-
-# Calendario de Inspecciones
-ENABLE_INSPECTION_SCHEDULER=true   # Scheduler automático @ 9 AM
-ENABLE_CONTRA_COSTA_FETCHER=true
-ENABLE_BERKELEY_FETCHER=true
-ENABLE_SAN_JOSE_FETCHER=true
-```
-
-Para una lista **completa** de variables de entorno (intervalos, tuning,
-filtros, todas las APIs), consulta `.env.example` — está organizado en
-17 secciones y cada variable está documentada inline.
-
-### Nuevas Dependencias (Calendario)
-
-Las siguientes dependencias se instalan automáticamente con `pip install -r requirements.txt`:
-
-```
-pdfplumber>=0.11        # Parser para PDFs de calendarios (Contra Costa, Berkeley)
-apscheduler>=3.11       # Scheduler para actualizaciones diarias
-```
-
-Si instalas manualmente:
-```bash
-pip install pdfplumber apscheduler
+PORT=5001
+HOST=0.0.0.0
+ALLOWED_ORIGINS=https://tu-dominio.com
+
+# JWT (requerido — usar valor aleatorio largo)
+JWT_SECRET_KEY=<random-256-bit-string>
+JWT_ACCESS_EXPIRY=3600
+JWT_REFRESH_EXPIRY=604800
+
+# Telegram
+TELEGRAM_BOT_TOKEN=<token>
+TELEGRAM_CHAT_ID=<chat_id>
+
+# IA (Claude)
+ANTHROPIC_API_KEY=<key>
+AI_CLASSIFIER_MODEL=claude-haiku-4-5-20251001
+AI_ENRICHMENT_MODEL=claude-sonnet-4-6
+AI_ENABLED=true
+
+# Swipe quotas (opcionales)
+SWIPE_ANON_LIMIT=10
+SWIPE_FREE_LIMIT=40
+SWIPE_PRO_LIMIT=200
+
+# APIs externas (opcionales)
+NREL_API_KEY=
+GOOGLE_PLACES_KEY=
+GOOGLE_SOLAR_KEY=
+GOOGLE_MAPS_API_KEY=
+YELP_API_KEY=
+GOOGLE_CLIENT_ID=
+FACEBOOK_APP_ID=
+STRIPE_WEBHOOK_SECRET=
+SENDGRID_API_KEY=
 ```
 
 ---
@@ -829,216 +335,89 @@ pip install pdfplumber apscheduler
 ## Estructura del Proyecto
 
 ```
-Insulleads/
-├── main.py                         # Orquestador — 10 agentes, paralelo
-├── web_server.py                   # Servidor web Flask (dashboard)
-├── requirements.txt                # requests, Flask, PyJWT, bcrypt, etc.
-├── .env.example                    # Todas las variables documentadas
-├── Dockerfile                      # Deploy con Docker
-├── DASHBOARD.md                    # Documentacion completa del dashboard
-├── INTEGRATION.md                  # Integracion agents + dashboard
-├── QUICKSTART.md                   # Guia rapida del dashboard
+MLeads/
+├── main.py                    # Entry point — orquesta todos los agentes
+├── web_server.py              # Servidor web Flask
+├── requirements.txt
 │
-├── agents/
-│   ├── base.py                     # BaseAgent v5 — dedup + hot zones
-│   ├── permits_agent.py            # 26 fuentes — Socrata/CKAN
-│   ├── solar_agent.py              # 15 fuentes + NREL/Google/Aurora/EnergySage
-│   ├── rodents_agent.py            # 55 fuentes — SeeClickFix/Socrata/CKAN
-│   ├── flood_agent.py              # 13 zonas NOAA
-│   ├── construction_agent.py       # 14 fuentes — fases de construccion
-│   ├── deconstruction_agent.py     # 14 fuentes — demolicion/asbesto
-│   ├── realestate_agent.py         # 10 fuentes — ventas por condado
-│   ├── energy_agent.py             # 8 fuentes — benchmarking/permits
-│   ├── places_agent.py             # Google Places API
-│   └── yelp_agent.py               # Yelp Fusion API
+├── agents/                    # Agentes de detección
+│   ├── base.py
+│   ├── permits_agent.py
+│   ├── solar_agent.py
+│   ├── rodents_agent.py
+│   ├── flood_agent.py
+│   ├── construction_agent.py
+│   ├── deconstruction_agent.py
+│   ├── realestate_agent.py
+│   ├── energy_agent.py
+│   ├── places_agent.py
+│   └── yelp_agent.py
 │
-├── web/                            # Dashboard multi-usuario
-│   ├── app.py                      # Flask API — 15+ endpoints con RBAC
-│   ├── auth.py                     # JWT + bcrypt + acceso temporal
-│   ├── init_demo_users.py          # Script para crear usuarios demo
+├── web/                       # Dashboard y API
+│   ├── app.py                 # Flask API (150+ endpoints)
+│   ├── auth.py                # JWT auth, RBAC
 │   └── templates/
-│       ├── index.html              # Dashboard principal (responsive)
-│       └── login.html              # Pagina de login
+│       ├── index.html         # Dashboard admin
+│       ├── login.html
+│       └── swipe.html         # Feed público Tinder-style
+│
+├── workers/                   # Workers en background
+│   ├── inspection_scheduler.py
+│   └── telegram_bot.py
 │
 ├── utils/
-│   ├── db.py                       # SQLite — dedup de leads enviados
-│   ├── web_db.py                   # Schema multi-usuario (13 tablas)
-│   ├── telegram.py                 # Rate-limited Telegram sender
-│   ├── contacts_loader.py          # 50K+ contactos CSV, fuzzy matching
-│   ├── lead_scoring.py             # Score 0-100 con 8 factores (+ inspecciones)
-│   ├── dedup.py                    # Cross-agent deduplication engine
-│   ├── hot_zones.py                # Geographic clustering (500m radius)
-│   ├── census.py                   # US Census demographics
-│   ├── contact_enrichment.py       # Hunter.io + Apollo.io
-│   ├── notifications.py            # SendGrid + WhatsApp + Slack
-│   ├── inspection_calendar_fetchers.py  # PDF + API fetchers (CC, Berkeley, San Jose)
-│   └── inspection_predictor.py     # Predicción de inspecciones por fase
+│   ├── web_db.py              # Schema y migraciones SQLite
+│   ├── lead_scoring.py        # Scoring 0-100
+│   ├── dedup.py               # Deduplicación cross-agent
+│   ├── hot_zones.py           # Clustering geográfico
+│   ├── contact_enrichment.py  # Enriquecimiento de contactos
+│   ├── ai_classifier.py       # Clasificación AI (Claude)
+│   ├── ai_outreach.py         # Mensajes AI personalizados
+│   ├── ai_bot.py              # Bot AI conversacional
+│   ├── telegram.py            # Notificaciones Telegram
+│   ├── notifications.py       # Multi-canal (WA/Email/Slack)
+│   ├── bot_users.py           # Gestión de suscriptores bot
+│   └── billing.py             # Stripe webhook
 │
-├── workers/                        # Background tasks & schedulers
-│   └── inspection_scheduler.py     # APScheduler — fetch calendarios diarios @ 9 AM
-│
-├── tests/
-│   ├── test_inspection_calendar.py # Unit tests para fetchers + predictor
-│   └── ...
-│
-├── contacts/                       # CSVs de contratistas (tu data)
-│   ├── B_CONTACTS_GC.csv
-│   ├── C-33 PAINTING - CSLBSearchData.csv
-│   ├── C-39 ROOFING - CSLBSearchData.csv
-│   ├── C-10 ELECTRICAL - CSLBSearchData.csv
-│   ├── C-27 LANDSCAPING - CSLBSearchData.csv
-│   ├── Real_State_The_Bay_Area.csv
-│   └── ... (otros archivos CSV)
-│
-├── CALENDAR_INTEGRATION.md         # Documentacion del calendario de inspecciones
-│
-└── data/
-    └── leads.db                    # Auto-creada — leads + usuarios + permisos + inspecciones
+├── contacts/                  # CSVs de contactos para fuzzy matching
+├── data/                      # Base de datos SQLite
+├── logs/                      # Logs del sistema
+└── scripts/                   # Scripts de utilidad
 ```
 
 ---
 
-## Ejemplo de Mensaje en Telegram
+## Changelog reciente
 
-```
-🏗️ PERMISOS DE CONSTRUCCION — BAY AREA
-━━━━━━━━━━━━━━━━━━━━
-📌 Walnut Creek — 1845 Mt Diablo Blvd
+### v3.0 — Seguridad, UX y lógica de swipe
+- Termómetro 100% correlacionado con tipo de subcontratista seleccionado
+- Solo leads con teléfono o email son mostrados en el feed
+- Solo swipes a la derecha (likes) consumen cuota — rechazos son gratis
+- Progresión de score avanza solo con likes (no con dislikes)
+- Alerta automática al admin al acumular 50 rechazos por usuario
+- Historial anónimo migra a `lead_contacts` al registrarse
+- Fix: tabla `beta_feedback` faltante → feedback de usuarios ahora funciona
+- Fix: mismatch `JWT_SECRET_KEY` / `JWT_SECRET` entre módulos
+- Rate limiting en todos los endpoints admin (20 req/min)
+- Validación de `status`, `contact_type`, `expires_at` con whitelist
+- Mensajes de error genéricos en respuestas 500
+- Double-checked locking thread-safe en singleton de agentes
 
-▸ Ciudad: Walnut Creek
-▸ Tipo de Permiso: REMODEL
-▸ Descripcion: Kitchen and bathroom remodel with new roofing and paint...
-▸ Fecha Emision: 2026-03-28
-▸ Valor Estimado: $85,000
-▸ Contratista (GC): BAY AREA REMODELING INC
-▸ Licencia CSLB: 987654
-▸ Telefono GC: +19253820739  (via CSV B_CONTACTS_GC.csv)
-▸ Email GC: info@bayarearemodeling.com
-▸ Propietario: John Smith
+### v2.0 — Dashboard y Monetización
+- Dashboard multi-usuario con RBAC completo
+- Bot Telegram con trials y Stripe
+- Feed público Tinder-style con OAuth social login
+- Calendario de inspecciones integrado
 
-🔥 PROXIMA INSPECCION (NUEVO):
-▸ Fecha: 2026-04-08 (en 3 días)
-▸ Tipo: FRAMING
-▸ Inspector: Jane Smith
-▸ Ventana: 9:00 AM - 12:00 PM
-▸ Fuente: Calendario público de Walnut Creek
-
-▸ Lead Score: 🔥 100/100 (HOT) — Proyecto alto valor | Inspección en 3 días (GC en sitio)
-
-📲 ¡CONTACTA AHORA! GC estará en el sitio el 8/4 — timing perfecto para roofing/electrical/paint
-```
-
----
-
-## Mantenimiento
-
-### Ver logs
-```bash
-# systemd
-sudo journalctl -u insulleads -f
-
-# Docker
-docker logs -f insulleads
-
-# PM2
-pm2 logs insulleads
-```
-
-### Actualizar el codigo
-
-**Opción A — Script automático (recomendado):**
-```bash
-cd /home/insulleads/Insulleads
-sudo ./update-server.sh                    # actualiza desde main
-sudo ./update-server.sh -b mi-rama         # actualiza desde otra rama
-sudo ./update-server.sh --no-deps          # salta pip install
-sudo ./update-server.sh --no-restart       # solo baja el código
-sudo ./update-server.sh --help             # ver todas las opciones
-```
-
-El script hace `git pull`, reinstala dependencias si cambió `requirements.txt`,
-avisa de variables nuevas en `.env.example` que falten en tu `.env`, reinicia
-los servicios systemd y verifica que arrancaron OK.
-
-**Opción B — Manual:**
-```bash
-cd /home/insulleads/Insulleads
-git pull origin main
-sudo systemctl restart insulleads insulleads-web
-```
-
-### Backup de la base de datos
-```bash
-cp data/leads.db data/leads.db.backup.$(date +%Y%m%d)
-```
-
-### Resetear leads (re-enviar todos)
-```bash
-rm data/leads.db
-sudo systemctl restart insulleads
-```
+### v1.0 — Motor de Agentes
+- 11 agentes de detección para Bay Area
+- Scoring 0-100 con IA
+- Deduplicación cross-agent
+- Hot zones geográficas
+- Notificaciones multi-canal
 
 ---
 
-## Presupuesto
+## Licencia
 
-| Escenario | Costo/mes | Leads estimados |
-|-----------|-----------|-----------------|
-| Solo APIs gratuitas | $0 + $6 droplet = **$6** | 200-500 |
-| Tier 1 (esencial) | $300 + $6 = **$306** | 500-1,500 |
-| Tier 1+2 (crecimiento) | $500 + $6 = **$506** | 1,500-3,000 |
-| Full stack (premium) | $1,100 + $6 = **$1,106** | 3,000-5,000+ |
-
----
-
-## FAQ
-
-**Las APIs de datos abiertos son gratuitas?**
-Si. Socrata, CKAN, SeeClickFix, NOAA, NREL, Census — todas son 100% gratuitas.
-
-**Que pasa si una ciudad no tiene API disponible?**
-El agente omite esa fuente silenciosamente (`_skip_if_no_data: True`) y sigue con las demas.
-
-**El mismo lead se envia dos veces?**
-No. El sistema tiene doble deduplicacion: por agente (SQLite `sent_leads`) y cross-agent (address normalization en `consolidated_leads`).
-
-**Puedo agregar mas ciudades?**
-Si. Agrega un nuevo dict a la lista de fuentes del agente correspondiente con la URL y field_map.
-
-**Puedo agregar mas CSVs de contactos?**
-Solo copia el archivo a `contacts/` y reinicia. Se carga automaticamente.
-
-**Cuanto RAM necesita?**
-~200MB con todos los agentes activos. Un droplet de 1GB es suficiente.
-
-**Funciona sin las APIs de pago?**
-Si. El sistema funciona 100% con APIs gratuitas. Las de pago solo enriquecen los datos.
-
-**Como doy acceso temporal a un usuario?**
-Al crear el usuario, agrega `"expires_in_hours": 24` para acceso de 24 horas. Tambien puedes extender con `PUT /api/admin/users/<id>/expiration`.
-
-**Cuantos usuarios soporta el dashboard?**
-50+ usuarios simultaneos con SQLite. Para 100+, se recomienda migrar a PostgreSQL.
-
-**El dashboard y los agentes pueden correr al mismo tiempo?**
-Si. Ambos comparten la misma base de datos SQLite sin conflictos. Los agentes escriben leads, el dashboard los lee.
-
-**Como restrinjo un usuario a solo ciertas ciudades?**
-Al crear el usuario, pasa `city_ids` con los IDs de las ciudades permitidas. Dejar vacio = acceso a todas.
-
-**Que es el Calendario de Inspecciones?**
-Sistema automático que obtiene calendarios de inspecciones públicos (Contra Costa, Berkeley, San Jose) y predice próximas inspecciones para otras ciudades. Cuando una inspección está próxima (< 7 días), el lead recibe un boost de score porque el GC estará en el sitio.
-
-**De donde saca el Calendario de Inspecciones?**
-- **Contra Costa & Berkeley:** PDFs diarios descargados y parseados con pdfplumber
-- **San Jose:** Open Data Portal (CKAN API)
-- **Otras ciudades:** Predicción automática basada en la fase de construcción (FOUNDATION → FRAMING → ELECTRICAL → ROOFING → DRYWALL → PAINT → LANDSCAPING → FINAL)
-
-**Con que frecuencia se actualiza el Calendario?**
-Diariamente a las 9:00 AM UTC. Puedes disparar un fetch manual con `POST /api/admin/scheduler/fetch-now`.
-
-**Como afecta el Calendario al Score?**
-Los leads con inspección programada < 7 días reciben +8 puntos extra. Si el score era 80, sube a 88 (WARM → HOT).
-
-**Puedo crear inspecciones manualmente?**
-Si. Admin puede usar `POST /api/scheduled_inspections` para agregar inspecciones de forma manual (util para casos especiales).
+Propietario — Todos los derechos reservados.
