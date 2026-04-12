@@ -1,501 +1,283 @@
 """
-Matching Engine Module
+utils/matching_engine.py
+━━━━━━━━━━━━━━━━━━━━━━━━
+Lead ↔ Subcontractor Matching Engine
 
-Provides functionality for matching transactions, orders, or entities
-based on configurable criteria and algorithms.
+Matches construction leads to registered subcontractors based on:
+  1. Trade/license match (C-21, C-33, C-39, etc.)
+  2. Geographic proximity (city match or radius)
+  3. Availability and qualification data
+  4. Lead score and urgency
+
+Used by agents/base.py after AI classification to determine
+the best-matched sub for each lead.
+
+CSLB License Classifications mapped:
+  C-2  Insulation      C-5  Framing        C-8  Concrete
+  C-9  Drywall         C-10 Electrical     C-15 Flooring
+  C-17 Glazing         C-20 HVAC           C-21 Demolition
+  C-27 Landscaping     C-33 Painting       C-36 Plumbing
+  C-39 Roofing
 """
 
+import logging
+import math
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Tuple, Callable
 from datetime import datetime
-from enum import Enum
-import hashlib
+from typing import Dict, List, Optional, Any
+
+logger = logging.getLogger(__name__)
 
 
-class MatchStatus(Enum):
-    """Status of a match operation."""
-    PENDING = "pending"
-    MATCHED = "matched"
-    PARTIAL = "partial"
-    EXPIRED = "expired"
-    CANCELLED = "cancelled"
+# ── Trade → CSLB License mapping ────────────────────────────────────
 
+TRADE_TO_LICENSE = {
+    "DEMOLITION":  "C-21",
+    "PAINTING":    "C-33",
+    "ROOFING":     "C-39",
+    "INSULATION":  "C-2",
+    "FRAMING":     "C-5",
+    "CONCRETE":    "C-8",
+    "DRYWALL":     "C-9",
+    "ELECTRICAL":  "C-10",
+    "FLOORING":    "C-15",
+    "WINDOWS":     "C-17",
+    "HVAC":        "C-20",
+    "LANDSCAPING": "C-27",
+    "PLUMBING":    "C-36",
+}
 
-class MatchType(Enum):
-    """Type of matching algorithm."""
-    EXACT = "exact"
-    FUZZY = "fuzzy"
-    RANGE = "range"
-    CUSTOM = "custom"
+LICENSE_TO_TRADE = {v: k for k, v in TRADE_TO_LICENSE.items()}
+
+# Related trades — when a lead is classified as one trade,
+# these adjacent trades may also be interested
+RELATED_TRADES = {
+    "DEMOLITION": ["ROOFING", "PAINTING", "FRAMING", "CONCRETE", "INSULATION"],
+    "ROOFING":    ["PAINTING", "INSULATION", "FRAMING"],
+    "PAINTING":   ["DRYWALL", "ROOFING"],
+    "DRYWALL":    ["PAINTING", "FRAMING", "INSULATION"],
+    "FRAMING":    ["CONCRETE", "DRYWALL", "ROOFING", "INSULATION"],
+    "CONCRETE":   ["FRAMING", "PLUMBING"],
+    "ELECTRICAL": ["HVAC", "PLUMBING"],
+    "HVAC":       ["ELECTRICAL", "PLUMBING", "INSULATION"],
+    "PLUMBING":   ["HVAC", "ELECTRICAL", "CONCRETE"],
+    "INSULATION": ["DRYWALL", "FRAMING", "HVAC"],
+    "FLOORING":   ["PAINTING", "DRYWALL"],
+    "WINDOWS":    ["FRAMING", "PAINTING"],
+    "LANDSCAPING": [],
+}
 
 
 @dataclass
 class MatchResult:
-    """Represents the result of a match operation."""
-    entity_a_id: str
-    entity_b_id: str
-    score: float
-    status: MatchStatus
-    match_type: MatchType
-    matched_at: datetime = field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    
+    """Result of matching a lead to a subcontractor."""
+    lead_id: str
+    sub_id: str
+    sub_name: str
+    sub_chat_id: str
+    match_score: float          # 0.0 - 1.0
+    match_reasons: list = field(default_factory=list)
+    trade_match: str = ""       # PRIMARY or RELATED
+    license_class: str = ""     # e.g. "C-21"
+    distance_miles: float = 0.0
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary representation."""
         return {
-            "entity_a_id": self.entity_a_id,
-            "entity_b_id": self.entity_b_id,
-            "score": self.score,
-            "status": self.status.value,
-            "match_type": self.match_type.value,
-            "matched_at": self.matched_at.isoformat(),
-            "metadata": self.metadata
+            "lead_id": self.lead_id,
+            "sub_id": self.sub_id,
+            "sub_name": self.sub_name,
+            "match_score": round(self.match_score, 3),
+            "match_reasons": self.match_reasons,
+            "trade_match": self.trade_match,
+            "license_class": self.license_class,
+            "distance_miles": round(self.distance_miles, 1),
         }
 
 
-@dataclass
-class MatchConfig:
-    """Configuration for matching operations."""
-    match_type: MatchType = MatchType.EXACT
-    threshold: float = 0.8
-    max_matches: int = 10
-    time_window_seconds: Optional[int] = None
-    custom_criteria: Optional[Callable] = None
-    case_sensitive: bool = False
-    ignore_whitespace: bool = True
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary representation."""
-        return {
-            "match_type": self.match_type.value,
-            "threshold": self.threshold,
-            "max_matches": self.max_matches,
-            "time_window_seconds": self.time_window_seconds,
-            "case_sensitive": self.case_sensitive,
-            "ignore_whitespace": self.ignore_whitespace
-        }
+def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate distance in miles between two lat/lon points."""
+    R = 3958.8  # Earth radius in miles
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(dlon / 2) ** 2)
+    return R * 2 * math.asin(math.sqrt(a))
 
 
-class MatchingEngine:
-    """
-    Engine for matching entities based on configurable criteria.
-    
-    Supports multiple matching algorithms including exact, fuzzy, 
-    range-based, and custom matching strategies.
-    """
-    
-    def __init__(self, config: Optional[MatchConfig] = None):
-        """
-        Initialize the matching engine.
-        
-        Args:
-            config: Configuration for matching operations
-        """
-        self.config = config or MatchConfig()
-        self._pending_entities: Dict[str, Dict[str, Any]] = {}
-        self._matches: List[MatchResult] = []
-        self._match_history: List[Dict[str, Any]] = []
-    
-    def add_entity(self, entity_id: str, entity_data: Dict[str, Any]) -> None:
-        """
-        Add an entity to the pending pool for matching.
-        
-        Args:
-            entity_id: Unique identifier for the entity
-            entity_data: Dictionary containing entity attributes
-        """
-        self._pending_entities[entity_id] = {
-            "data": entity_data,
-            "added_at": datetime.now(),
-            "status": MatchStatus.PENDING
-        }
-    
-    def remove_entity(self, entity_id: str) -> bool:
-        """
-        Remove an entity from the pending pool.
-        
-        Args:
-            entity_id: ID of the entity to remove
-            
-        Returns:
-            True if entity was removed, False if not found
-        """
-        if entity_id in self._pending_entities:
-            del self._pending_entities[entity_id]
-            return True
-        return False
-    
-    def find_matches(
-        self, 
-        entity_id: str, 
-        config: Optional[MatchConfig] = None
-    ) -> List[MatchResult]:
-        """
-        Find matches for a specific entity.
-        
-        Args:
-            entity_id: ID of the entity to find matches for
-            config: Optional configuration override
-            
-        Returns:
-            List of MatchResult objects
-        """
-        config = config or self.config
-        
-        if entity_id not in self._pending_entities:
-            return []
-        
-        target_entity = self._pending_entities[entity_id]["data"]
-        matches = []
-        
-        for candidate_id, candidate_info in self._pending_entities.items():
-            if candidate_id == entity_id:
-                continue
-            
-            candidate_data = candidate_info["data"]
-            
-            # Check time window if configured
-            if config.time_window_seconds:
-                time_diff = abs(
-                    (datetime.now() - candidate_info["added_at"]).total_seconds()
-                )
-                if time_diff > config.time_window_seconds:
-                    continue
-            
-            # Calculate match score based on match type
-            score = self._calculate_score(
-                target_entity, 
-                candidate_data, 
-                config
-            )
-            
-            if score >= config.threshold:
-                status = MatchStatus.MATCHED if score == 1.0 else MatchStatus.PARTIAL
-                
-                match_result = MatchResult(
-                    entity_a_id=entity_id,
-                    entity_b_id=candidate_id,
-                    score=score,
-                    status=status,
-                    match_type=config.match_type,
-                    metadata={
-                        "matched_fields": self._get_matched_fields(
-                            target_entity, 
-                            candidate_data, 
-                            config
-                        )
-                    }
-                )
-                
-                matches.append(match_result)
-                
-                if len(matches) >= config.max_matches:
-                    break
-        
-        # Sort by score descending
-        matches.sort(key=lambda x: x.score, reverse=True)
-        
-        return matches
-    
-    def match_all(self, config: Optional[MatchConfig] = None) -> List[MatchResult]:
-        """
-        Find matches for all pending entities.
-        
-        Args:
-            config: Optional configuration override
-            
-        Returns:
-            List of all MatchResult objects
-        """
-        config = config or self.config
-        all_matches = []
-        processed_pairs = set()
-        
-        for entity_id in self._pending_entities.keys():
-            matches = self.find_matches(entity_id, config)
-            
-            for match in matches:
-                # Avoid duplicate pairs (A-B and B-A)
-                pair_key = tuple(sorted([match.entity_a_id, match.entity_b_id]))
-                if pair_key not in processed_pairs:
-                    processed_pairs.add(pair_key)
-                    all_matches.append(match)
-                    self._matches.append(match)
-        
-        self._match_history.append({
-            "timestamp": datetime.now(),
-            "match_count": len(all_matches),
-            "config": config.to_dict()
-        })
-        
-        return all_matches
-    
-    def _calculate_score(
-        self, 
-        entity_a: Dict[str, Any], 
-        entity_b: Dict[str, Any], 
-        config: MatchConfig
-    ) -> float:
-        """
-        Calculate match score between two entities.
-        
-        Args:
-            entity_a: First entity data
-            entity_b: Second entity data
-            config: Match configuration
-            
-        Returns:
-            Score between 0.0 and 1.0
-        """
-        if config.match_type == MatchType.EXACT:
-            return self._exact_match_score(entity_a, entity_b, config)
-        elif config.match_type == MatchType.FUZZY:
-            return self._fuzzy_match_score(entity_a, entity_b, config)
-        elif config.match_type == MatchType.RANGE:
-            return self._range_match_score(entity_a, entity_b, config)
-        elif config.match_type == MatchType.CUSTOM:
-            if config.custom_criteria:
-                return config.custom_criteria(entity_a, entity_b)
-            return 0.0
-        
-        return 0.0
-    
-    def _exact_match_score(
-        self, 
-        entity_a: Dict[str, Any], 
-        entity_b: Dict[str, Any], 
-        config: MatchConfig
-    ) -> float:
-        """Calculate exact match score."""
-        common_keys = set(entity_a.keys()) & set(entity_b.keys())
-        
-        if not common_keys:
-            return 0.0
-        
-        matches = 0
-        for key in common_keys:
-            val_a = entity_a[key]
-            val_b = entity_b[key]
-            
-            # Handle string comparison
-            if isinstance(val_a, str) and isinstance(val_b, str):
-                if config.ignore_whitespace:
-                    val_a = val_a.strip()
-                    val_b = val_b.strip()
-                if not config.case_sensitive:
-                    val_a = val_a.lower()
-                    val_b = val_b.lower()
-            
-            if val_a == val_b:
-                matches += 1
-        
-        return matches / len(common_keys)
-    
-    def _fuzzy_match_score(
-        self, 
-        entity_a: Dict[str, Any], 
-        entity_b: Dict[str, Any], 
-        config: MatchConfig
-    ) -> float:
-        """Calculate fuzzy match score using simple similarity."""
-        common_keys = set(entity_a.keys()) & set(entity_b.keys())
-        
-        if not common_keys:
-            return 0.0
-        
-        total_similarity = 0.0
-        
-        for key in common_keys:
-            val_a = str(entity_a[key])
-            val_b = str(entity_b[key])
-            
-            if config.ignore_whitespace:
-                val_a = val_a.strip()
-                val_b = val_b.strip()
-            if not config.case_sensitive:
-                val_a = val_a.lower()
-                val_b = val_b.lower()
-            
-            similarity = self._string_similarity(val_a, val_b)
-            total_similarity += similarity
-        
-        return total_similarity / len(common_keys)
-    
-    def _range_match_score(
-        self, 
-        entity_a: Dict[str, Any], 
-        entity_b: Dict[str, Any], 
-        config: MatchConfig
-    ) -> float:
-        """Calculate range-based match score for numeric values."""
-        common_keys = set(entity_a.keys()) & set(entity_b.keys())
-        
-        if not common_keys:
-            return 0.0
-        
-        matches = 0
-        numeric_keys = 0
-        
-        for key in common_keys:
-            val_a = entity_a[key]
-            val_b = entity_b[key]
-            
-            # Only consider numeric values for range matching
-            if isinstance(val_a, (int, float)) and isinstance(val_b, (int, float)):
-                numeric_keys += 1
-                # Consider within 10% range as a match
-                if val_a != 0:
-                    diff_ratio = abs(val_a - val_b) / abs(val_a)
-                    if diff_ratio <= 0.1:
-                        matches += 1
-                elif val_a == val_b:
-                    matches += 1
-        
-        return matches / numeric_keys if numeric_keys > 0 else 0.0
-    
-    def _string_similarity(self, s1: str, s2: str) -> float:
-        """
-        Calculate string similarity using Levenshtein distance ratio.
-        
-        Args:
-            s1: First string
-            s2: Second string
-            
-        Returns:
-            Similarity score between 0.0 and 1.0
-        """
-        if s1 == s2:
-            return 1.0
-        
-        if not s1 or not s2:
-            return 0.0
-        
-        # Simple character-based similarity
-        len1, len2 = len(s1), len(s2)
-        max_len = max(len1, len2)
-        
-        if max_len == 0:
-            return 1.0
-        
-        # Count common characters
-        common = sum(1 for c1, c2 in zip(s1, s2) if c1 == c2)
-        
-        return common / max_len
-    
-    def _get_matched_fields(
-        self, 
-        entity_a: Dict[str, Any], 
-        entity_b: Dict[str, Any], 
-        config: MatchConfig
-    ) -> List[str]:
-        """Get list of fields that matched between entities."""
-        matched = []
-        
-        for key in set(entity_a.keys()) & set(entity_b.keys()):
-            val_a = entity_a[key]
-            val_b = entity_b[key]
-            
-            if isinstance(val_a, str) and isinstance(val_b, str):
-                if config.ignore_whitespace:
-                    val_a = val_a.strip()
-                    val_b = val_b.strip()
-                if not config.case_sensitive:
-                    val_a = val_a.lower()
-                    val_b = val_b.lower()
-            
-            if val_a == val_b:
-                matched.append(key)
-        
-        return matched
-    
-    def get_matches(self) -> List[MatchResult]:
-        """Get all recorded matches."""
-        return self._matches.copy()
-    
-    def get_match_history(self) -> List[Dict[str, Any]]:
-        """Get match operation history."""
-        return self._match_history.copy()
-    
-    def clear(self) -> None:
-        """Clear all pending entities and matches."""
-        self._pending_entities.clear()
-        self._matches.clear()
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get statistics about the matching engine."""
-        return {
-            "pending_entities": len(self._pending_entities),
-            "total_matches": len(self._matches),
-            "match_operations": len(self._match_history),
-            "config": self.config.to_dict()
-        }
-
-
-def match_entities(
-    entities: List[Dict[str, Any]],
-    config: Optional[MatchConfig] = None
+def match_lead_to_subs(
+    lead: dict,
+    agent_key: str,
+    max_results: int = 10,
 ) -> List[MatchResult]:
     """
-    Convenience function to match a list of entities.
-    
+    Match a lead to registered subcontractors.
+
+    Uses bot_users data to find subs whose:
+      - selected services match the lead's trade (primary or related)
+      - city/location is within range
+      - subscription is active
+
     Args:
-        entities: List of entity dictionaries with 'id' key
-        config: Optional match configuration
-        
+        lead: Lead dict with _trade, city, lat/lon, etc.
+        agent_key: Source agent key (e.g. "deconstruction")
+        max_results: Max matches to return
+
     Returns:
-        List of MatchResult objects
+        List of MatchResult sorted by match_score descending
     """
-    engine = MatchingEngine(config)
-    
-    for entity in entities:
-        entity_id = entity.get("id") or entity.get("entity_id")
-        if entity_id:
-            engine.add_entity(str(entity_id), entity)
-    
-    return engine.match_all()
+    try:
+        from utils import bot_users as bu
+    except Exception:
+        return []
+
+    lead_trade = lead.get("_trade", "GENERAL")
+    lead_city = (lead.get("city") or "").strip().lower()
+    lead_lat = lead.get("latitude") or lead.get("lat")
+    lead_lon = lead.get("longitude") or lead.get("lon") or lead.get("lng")
+    lead_score = lead.get("_scoring", {}).get("score", 50)
+    lead_urgency = lead.get("_urgency", "MEDIUM")
+
+    # Get the service keys this lead maps to
+    lead_service_keys = bu._lead_service_keys(lead, agent_key)
+
+    # Primary trade → service key mapping
+    primary_license = TRADE_TO_LICENSE.get(lead_trade, "")
+    related_trades = RELATED_TRADES.get(lead_trade, [])
+
+    # Get all active subscribers
+    try:
+        from utils.web_db import get_db_connection
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT * FROM bot_users
+             WHERE is_active = 1
+               AND state = ?
+               AND subscription_status IN ('trial', 'paid')
+            """,
+            (bu.STATE_ACTIVE,),
+        )
+        rows = [bu.row_to_dict(r) for r in c.fetchall()]
+        conn.close()
+    except Exception as e:
+        logger.debug(f"[matching] DB error: {e}")
+        return []
+
+    results = []
+    for user in rows:
+        if not bu.is_subscription_active(user):
+            continue
+
+        user_services = set(user.get("services") or [])
+        if not user_services:
+            continue
+
+        score = 0.0
+        reasons = []
+        trade_match_type = ""
+
+        # ── Trade match (0.0 - 0.5) ─────────────────────────────
+        # Check if user's services overlap with lead's trade
+        if user_services & lead_service_keys:
+            # Direct match
+            score += 0.5
+            reasons.append(f"Direct service match: {user_services & lead_service_keys}")
+            trade_match_type = "PRIMARY"
+        else:
+            # Check related trades
+            related_service_keys = set()
+            for rt in related_trades:
+                rt_lower = rt.lower()
+                for svc_key, _label in bu.AVAILABLE_SERVICES:
+                    if rt_lower in svc_key or svc_key in rt_lower:
+                        related_service_keys.add(svc_key)
+
+            if user_services & related_service_keys:
+                score += 0.25
+                reasons.append(f"Related trade match: {user_services & related_service_keys}")
+                trade_match_type = "RELATED"
+            else:
+                continue  # No trade overlap at all — skip
+
+        # ── Geography match (0.0 - 0.3) ─────────────────────────
+        user_city = (user.get("city") or "").strip().lower()
+        user_lat = user.get("latitude")
+        user_lon = user.get("longitude")
+        distance = 0.0
+
+        if lead_lat and lead_lon and user_lat and user_lon:
+            try:
+                distance = _haversine_miles(
+                    float(lead_lat), float(lead_lon),
+                    float(user_lat), float(user_lon)
+                )
+                radius = float(user.get("radius_miles") or bu.DEFAULT_RADIUS_MILES)
+                if distance <= radius:
+                    # Closer = higher score
+                    geo_score = 0.3 * (1.0 - distance / radius)
+                    score += geo_score
+                    reasons.append(f"{distance:.0f} mi away (within {radius:.0f} mi radius)")
+                else:
+                    continue  # Out of range
+            except (TypeError, ValueError):
+                pass
+        elif user_city and lead_city:
+            if user_city == lead_city:
+                score += 0.3
+                reasons.append(f"Same city: {lead_city}")
+            elif user_city in lead_city or lead_city in user_city:
+                score += 0.15
+                reasons.append(f"City overlap: {lead_city}")
+
+        # ── Lead quality boost (0.0 - 0.2) ──────────────────────
+        if lead_score >= 80:
+            score += 0.15
+            reasons.append(f"High-quality lead (score {lead_score})")
+        elif lead_score >= 60:
+            score += 0.10
+
+        if lead_urgency == "HIGH":
+            score += 0.05
+            reasons.append("HIGH urgency")
+
+        results.append(MatchResult(
+            lead_id=lead.get("id", ""),
+            sub_id=str(user.get("id", "")),
+            sub_name=user.get("first_name") or user.get("username") or "Sub",
+            sub_chat_id=str(user.get("chat_id", "")),
+            match_score=min(score, 1.0),
+            match_reasons=reasons[:3],
+            trade_match=trade_match_type,
+            license_class=primary_license,
+            distance_miles=distance,
+        ))
+
+    # Sort by match score descending
+    results.sort(key=lambda r: r.match_score, reverse=True)
+    return results[:max_results]
 
 
-def find_best_match(
-    target: Dict[str, Any],
-    candidates: List[Dict[str, Any]],
-    config: Optional[MatchConfig] = None
-) -> Optional[MatchResult]:
-    """
-    Find the best match for a target entity among candidates.
-    
-    Args:
-        target: Target entity dictionary
-        candidates: List of candidate entity dictionaries
-        config: Optional match configuration
-        
-    Returns:
-        Best MatchResult or None if no matches found
-    """
-    engine = MatchingEngine(config)
-    
-    target_id = target.get("id") or target.get("entity_id") or "target"
-    engine.add_entity(str(target_id), target)
-    
-    for i, candidate in enumerate(candidates):
-        candidate_id = candidate.get("id") or candidate.get("entity_id") or f"candidate_{i}"
-        engine.add_entity(str(candidate_id), candidate)
-    
-    matches = engine.find_matches(str(target_id))
-    
-    return matches[0] if matches else None
+def get_trade_license(trade: str) -> str:
+    """Get CSLB license class for a trade."""
+    return TRADE_TO_LICENSE.get(trade.upper(), "")
 
 
-def generate_match_id(entity_a_id: str, entity_b_id: str) -> str:
-    """
-    Generate a unique ID for a match pair.
-    
-    Args:
-        entity_a_id: First entity ID
-        entity_b_id: Second entity ID
-        
-    Returns:
-        Unique match ID string
-    """
-    sorted_ids = sorted([entity_a_id, entity_b_id])
-    combined = f"{sorted_ids[0]}:{sorted_ids[1]}"
-    return hashlib.sha256(combined.encode()).hexdigest()[:16]
+def get_related_trades(trade: str) -> List[str]:
+    """Get trades related to the given trade."""
+    return RELATED_TRADES.get(trade.upper(), [])
+
+
+def format_match_summary(matches: List[MatchResult]) -> str:
+    """Format match results for Telegram notification."""
+    if not matches:
+        return "No matching subcontractors found."
+    lines = [f"🔗 *{len(matches)} matching sub(s):*"]
+    for m in matches[:5]:
+        lines.append(
+            f"  • {m.sub_name} ({m.trade_match}) — "
+            f"score {m.match_score:.0%}"
+            + (f" — {m.distance_miles:.0f} mi" if m.distance_miles else "")
+        )
+    return "\n".join(lines)

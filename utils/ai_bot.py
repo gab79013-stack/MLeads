@@ -119,7 +119,7 @@ def handle_callback(callback_query: dict):
         _send(chat_id, (
             f"¡Genial {user}! Cuéntame un poco más para conectarte mejor:\n\n"
             f"*¿Cuál es tu especialidad principal?*\n"
-            f"Responde: roofing / electrical / drywall / painting / landscaping / hvac / otra"
+            f"Responde: roofing / demolition / painting / electrical / drywall / hvac / plumbing / concrete / landscaping / otra"
         ))
         _answer_callback(callback_query.get("id", ""))
 

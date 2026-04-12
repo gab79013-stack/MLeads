@@ -40,7 +40,7 @@ Respond ONLY with valid JSON. No markdown, no explanation.
 
 JSON schema:
 {
-  "trade": "ROOFING|ELECTRICAL|DRYWALL|PAINTING|LANDSCAPING|HVAC|PLUMBING|INSULATION|FRAMING|CONCRETE|FLOORING|WINDOWS|GENERAL|UNKNOWN",
+  "trade": "ROOFING|ELECTRICAL|DRYWALL|PAINTING|LANDSCAPING|HVAC|PLUMBING|INSULATION|FRAMING|CONCRETE|FLOORING|WINDOWS|DEMOLITION|GENERAL|UNKNOWN",
   "urgency": "HIGH|MEDIUM|LOW",
   "budget_min": <integer USD or null>,
   "budget_max": <integer USD or null>,
@@ -63,6 +63,7 @@ Rules:
 # ── Fallback rule-based (sin red) ────────────────────────────────────
 
 _RULES = [
+    ("DEMOLITION",  ["demolition", "demolish", "raze", "tear down", "wrecking", "abatement", "full demo", "partial demo", "hazmat", "asbestos", "selective demo"]),
     ("ROOFING",     ["roof", "roofing", "reroof", "re-roof", "shingle", "tile roof", "flat roof", "torch down"]),
     ("ELECTRICAL",  ["electrical", "electric", "panel upgrade", "service upgrade", "200 amp", "ev charger", "rewire", "wiring", "sub panel"]),
     ("DRYWALL",     ["drywall", "sheetrock", "gypsum", "wallboard", "taping", "texturing"]),

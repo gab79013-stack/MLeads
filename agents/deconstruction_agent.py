@@ -6,11 +6,11 @@ agents/deconstruction_agent.py
 Detecta permisos de demolición, abatimiento de asbesto, remoción de
 materiales peligrosos y proyectos de deconstrucción.
 
-¿Por qué es valioso para insulación?
-  1. Demolición → nueva construcción → necesita insulación nueva
-  2. Abatimiento asbesto → la insulación vieja se retira → reemplazo
-  3. Deconstrucción selectiva → renovación profunda → upgrade insulación
-  4. Remoción de materiales peligrosos → requiere re-insulación
+¿Por qué es valioso para subcontratistas?
+  1. Demolición → C-21 (Demolition) subs necesarios
+  2. Post-demo → C-39 (Roofing) + C-33 (Painting) para acabados
+  3. Abatimiento asbesto → C-21 con certificación hazmat
+  4. Deconstrucción selectiva → múltiples trades involucrados
 
 Fuentes gratuitas:
   1. SF Demolition Permits (Socrata)
@@ -68,7 +68,7 @@ DECON_TYPES = {
                       "STRUCTURE REMOVAL"],
         "priority": 5,
         "emoji":    "🏚️",
-        "opportunity": "Demolición total → nueva construcción necesita insulación completa",
+        "opportunity": "Permiso de demolición activo — subcontratista C-21 necesario para demo estructural",
     },
     "asbestos": {
         "keywords": ["ASBESTOS", "ASBESTO", "AMIANTO", "ACM REMOVAL",
@@ -76,7 +76,7 @@ DECON_TYPES = {
                       "LEAD ABATEMENT", "ABATEMENT"],
         "priority": 5,
         "emoji":    "⚠️",
-        "opportunity": "Remoción de asbesto → insulación vieja se retira → reemplazo obligatorio",
+        "opportunity": "Remoción de hazmat/asbesto — requiere C-21 con certificación hazmat",
     },
     "selective_demo": {
         "keywords": ["SELECTIVE DEMO", "PARTIAL DEMO", "INTERIOR DEMO",
@@ -84,7 +84,7 @@ DECON_TYPES = {
                       "INTERIOR REMOVAL", "SOFT DEMO", "SOFT STRIP"],
         "priority": 4,
         "emoji":    "🔧",
-        "opportunity": "Demo selectiva → renovación profunda → upgrade de insulación",
+        "opportunity": "Demo selectiva/interior — oportunidad para C-21 + pintura (C-33) posterior",
     },
     "deconstruction": {
         "keywords": ["DECONSTRUCTION", "DECONSTRUCCION", "SALVAGE",
@@ -92,7 +92,7 @@ DECON_TYPES = {
                       "SUSTAINABLE DEMO"],
         "priority": 4,
         "emoji":    "♻️",
-        "opportunity": "Deconstrucción verde → material recuperado → insulación nueva eco-friendly",
+        "opportunity": "Deconstrucción verde — C-21 para demo + C-33/C-39 para acabados posteriores",
     },
     "fire_damage": {
         "keywords": ["FIRE DAMAGE", "FIRE REPAIR", "FIRE RESTORATION",
@@ -100,7 +100,7 @@ DECON_TYPES = {
                       "SMOKE DAMAGE"],
         "priority": 5,
         "emoji":    "🔥",
-        "opportunity": "Daño por fuego → toda la insulación debe reemplazarse",
+        "opportunity": "Daño por fuego — demolición (C-21) + re-roofing (C-39) + pintura (C-33) necesarios",
     },
     "structural_repair": {
         "keywords": ["STRUCTURAL REPAIR", "FOUNDATION REPAIR",
@@ -109,7 +109,7 @@ DECON_TYPES = {
                       "STRUCTURAL UPGRADE"],
         "priority": 3,
         "emoji":    "🏗️",
-        "opportunity": "Reparación estructural → acceso a cavidades → oportunidad de re-insular",
+        "opportunity": "Reparación estructural — puede requerir demo parcial (C-21) + acabados (C-33/C-39)",
     },
 }
 
