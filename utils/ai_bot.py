@@ -119,7 +119,7 @@ def handle_callback(callback_query: dict):
         _send(chat_id, (
             f"¡Genial {user}! Cuéntame un poco más para conectarte mejor:\n\n"
             f"*¿Cuál es tu especialidad principal?*\n"
-            f"Responde: roofing / electrical / drywall / painting / landscaping / hvac / otra"
+            f"Responde: roofing / demolition / painting / electrical / drywall / hvac / plumbing / concrete / landscaping / otra"
         ))
         _answer_callback(callback_query.get("id", ""))
 
@@ -200,6 +200,34 @@ def handle_message(message: dict):
             f"Aquí tu outreach personalizado:"
         ))
         _send(chat_id, outreach_msg)
+        return
+
+    # ── Comando /competition ────────────────────────────────────
+    if text.lower().startswith("/competition"):
+        parts = text.split(maxsplit=2)
+        trade = parts[1].upper() if len(parts) > 1 else "ROOFING"
+        city = parts[2] if len(parts) > 2 else ""
+        try:
+            from utils.competitive_analyzer import analyze_competition, format_competition_for_telegram
+            report = analyze_competition(trade=trade, city=city)
+            _send(chat_id, format_competition_for_telegram(report))
+        except Exception as e:
+            _send(chat_id, f"Error analyzing competition: {e}\nUsage: /competition TRADE CITY\nEx: /competition DEMOLITION San Francisco")
+        return
+
+    # ── Comando /validate ────────────────────────────────────────
+    if text.lower().startswith("/validate"):
+        parts = text.split(maxsplit=1)
+        license_num = parts[1].strip() if len(parts) > 1 else ""
+        if not license_num:
+            _send(chat_id, "Usage: /validate LICENSE_NUMBER\nEx: /validate 123456")
+            return
+        try:
+            from utils.fraud_detector import validate_contractor_license, format_validation_for_telegram
+            result = validate_contractor_license(license_num=license_num)
+            _send(chat_id, format_validation_for_telegram(result.to_dict()))
+        except Exception as e:
+            _send(chat_id, f"Error validating license: {e}")
         return
 
     # ── Responder preguntas en lenguaje natural con Claude ────────

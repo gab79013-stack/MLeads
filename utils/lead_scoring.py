@@ -3,8 +3,11 @@ utils/lead_scoring.py
 ━━━━━━━━━━━━━━━━━━━━━
 Motor de Lead Scoring — prioriza leads por probabilidad de conversión.
 
-Enfoque en 5 servicios clave:
-  Roofing, Drywall, Paint, Landscaping, Electrical
+Enfoque en 13 trades con licencia CSLB:
+  Demolition (C-21), Painting (C-33), Roofing (C-39), Drywall (C-9),
+  Electrical (C-10), HVAC (C-20), Plumbing (C-36), Concrete (C-8),
+  Framing (C-5), Flooring (C-15), Windows (C-17), Insulation (C-2),
+  Landscaping (C-27)
 
 Score = f(valor_proyecto, tipo_proyecto, datos_contacto, recencia,
           demografía, fuente, señales_servicio, inspección_próxima,
@@ -44,16 +47,17 @@ _WEIGHTS = {
 
 
 # ── Keywords de alta intención (servicios target) ────────────────────
-# Roofing, Drywall, Paint, Landscaping, Electrical
+# All 13 CSLB trades: Demolition, Roofing, Painting, Drywall, Electrical,
+# HVAC, Plumbing, Concrete, Framing, Flooring, Windows, Insulation, Landscaping
 
 _HIGH_INTENT_KEYWORDS = [
-    # Roofing
+    # Roofing (C-39)
     "roof", "roofing", "re-roof", "reroof", "roof replacement",
     "shingle", "shingles", "tile roof", "flat roof", "torch down",
     # Drywall
     "drywall", "sheetrock", "gypsum board", "wall board",
     "taping", "texturing", "patch drywall",
-    # Paint
+    # Paint (C-33)
     "paint", "painting", "repaint", "exterior paint", "interior paint",
     "painter", "primer", "stucco paint",
     # Landscaping
@@ -64,6 +68,29 @@ _HIGH_INTENT_KEYWORDS = [
     "electrical", "electric", "panel upgrade", "service upgrade",
     "200 amp", "rewire", "wiring", "ev charger", "sub panel",
     "main panel", "electrical panel",
+    # Demolition (C-21)
+    "demolition", "demolish", "raze", "tear down", "wrecking",
+    "abatement", "full demo", "partial demo", "selective demo",
+    "interior demo", "hazmat", "asbestos",
+    # HVAC (C-20)
+    "hvac", "heating", "cooling", "air conditioning", "furnace",
+    "duct", "ductwork", "mechanical",
+    # Plumbing (C-36)
+    "plumbing", "water heater", "sewer", "drain", "pipe",
+    "fixture", "sewer line", "water line",
+    # Concrete (C-8)
+    "concrete", "slab", "driveway", "sidewalk", "flatwork",
+    "foundation", "footing",
+    # Framing (C-5)
+    "framing", "frame", "structural", "shear wall",
+    # Flooring (C-15)
+    "flooring", "hardwood", "tile floor", "vinyl plank",
+    "carpet", "laminate",
+    # Windows (C-17)
+    "window", "windows", "door", "glazing", "fenestration",
+    # Insulation (C-2)
+    "insulation", "insulate", "weatherization", "energy audit",
+    "title 24", "energy retrofit",
 ]
 
 _MEDIUM_INTENT_KEYWORDS = [
@@ -73,8 +100,8 @@ _MEDIUM_INTENT_KEYWORDS = [
 ]
 
 _LOW_INTENT_KEYWORDS = [
-    "demolition", "swimming pool", "fence", "sign",
-    "plumbing", "fire sprinkler", "solar", "photovoltaic", "hvac",
+    "swimming pool", "fence", "sign",
+    "fire sprinkler", "solar", "photovoltaic",
 ]
 
 
@@ -222,6 +249,14 @@ def score_lead(lead: dict) -> dict:
         "paint": 9, "painting": 9, "painter": 9,
         "landscape": 9, "landscaping": 9, "irrigation": 8,
         "electrical": 10, "electric": 9,
+        "demolition": 10, "demo": 9, "demolish": 9,
+        "hvac": 9, "heating": 8, "cooling": 8,
+        "plumbing": 9, "plumber": 9,
+        "concrete": 9, "slab": 8, "flatwork": 8,
+        "framing": 9, "frame": 8,
+        "flooring": 9, "hardwood": 8, "tile": 8,
+        "window": 9, "windows": 9, "glazing": 8,
+        "insulation": 9, "insulate": 8,
     }
     for key, pts in target_services.items():
         if key in service_type:
@@ -243,7 +278,9 @@ def score_lead(lead: dict) -> dict:
     ai_urgency = lead.get("_urgency", "")
     ai_trade   = lead.get("_trade", "")
     _target_trades = {"ROOFING", "ELECTRICAL", "DRYWALL", "PAINTING",
-                      "LANDSCAPING", "INSULATION", "HVAC"}
+                      "LANDSCAPING", "INSULATION", "HVAC", "DEMOLITION",
+                      "PLUMBING", "CONCRETE", "FRAMING", "FLOORING",
+                      "WINDOWS"}
 
     if ai_urgency == "HIGH":
         total += 10

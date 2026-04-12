@@ -30,6 +30,18 @@ try:
 except Exception:
     _AI_BOT_AVAILABLE = False
 
+try:
+    from utils.matching_engine import match_lead_to_subs as _match_lead
+    _MATCHING_AVAILABLE = True
+except Exception:
+    _MATCHING_AVAILABLE = False
+
+try:
+    from utils.fraud_detector import validate_lead_contractor as _validate_license
+    _LICENSE_VALIDATOR_AVAILABLE = True
+except Exception:
+    _LICENSE_VALIDATOR_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -154,6 +166,26 @@ class BaseAgent(ABC):
                     _ai_classify(lead)
                 except Exception as e:
                     logger.debug(f"[{self.agent_key}] AI classify error: {e}")
+
+        # Paso 3c: Validate contractor licenses on leads that have them
+        if _LICENSE_VALIDATOR_AVAILABLE:
+            for lead in new_leads:
+                if lead.get("lic") or lead.get("contractor"):
+                    try:
+                        _validate_license(lead)
+                    except Exception as e:
+                        logger.debug(f"[{self.agent_key}] License validation error: {e}")
+
+        # Paso 3d: Match leads to subcontractors (for targeted fanout)
+        if _MATCHING_AVAILABLE:
+            for lead in new_leads:
+                try:
+                    matches = _match_lead(lead, self.agent_key, max_results=5)
+                    if matches:
+                        lead["_matched_subs"] = len(matches)
+                        lead["_top_match_score"] = matches[0].match_score
+                except Exception as e:
+                    logger.debug(f"[{self.agent_key}] Matching error: {e}")
 
         # Paso 4: Enviar leads — siempre mensajes individuales
         sent_count = 0

@@ -852,18 +852,29 @@ def seed_cities_and_agents():
             (city_name, state, county),
         )
 
-    # All 10 agents
+    # All agents (core + trade-specific)
     agents = [
         ("permits", "Building and demolition permits"),
         ("solar", "Solar installation leads"),
-        ("rodents", "Pest control and rodent complaints"),
-        ("flood", "Flood and water damage reports"),
         ("construction", "Active construction projects"),
         ("realestate", "Real estate sales and transfers"),
         ("energy", "Energy efficiency programs"),
         ("places", "Business licenses and permits"),
         ("yelp", "Business directory and reviews"),
         ("deconstruction", "Deconstruction and demolition projects"),
+        # Trade-specific services
+        ("roofing", "Roofing leads (C-39)"),
+        ("paint", "Painting leads (C-33)"),
+        ("drywall", "Drywall leads (C-9)"),
+        ("electrical", "Electrical leads (C-10)"),
+        ("landscaping", "Landscaping leads (C-27)"),
+        ("hvac", "HVAC leads (C-20)"),
+        ("plumbing", "Plumbing leads (C-36)"),
+        ("concrete", "Concrete leads (C-8)"),
+        ("flooring", "Flooring leads (C-15)"),
+        ("framing", "Framing leads (C-5)"),
+        ("windows", "Windows and doors leads (C-17)"),
+        ("insulation", "Insulation leads (C-2)"),
     ]
 
     for agent_name, description in agents:
@@ -876,16 +887,28 @@ def seed_cities_and_agents():
     # Phase 2e: Insert Service Types with emoji and categories
     # ─────────────────────────────────────────────────────
     service_types = [
-        ("permits", "Building Permits", "🏗️", "Building and demolition permits", "building"),
+        # Core sources
+        ("permits", "Building Permits", "📋", "Building and demolition permits", "building"),
         ("solar", "Solar Installation", "☀️", "Solar installation leads", "green"),
-        ("energy", "Energy Efficiency", "⚡", "Energy efficiency programs", "green"),
-        ("rodents", "Pest Control", "🐭", "Pest control and rodent complaints", "maintenance"),
+        ("energy", "Energy Efficiency", "🔋", "Energy efficiency programs", "green"),
         ("construction", "Construction", "👷", "Active construction projects", "building"),
         ("realestate", "Real Estate", "🏠", "Real estate sales and transfers", "real_estate"),
-        ("flood", "Water Damage", "💧", "Flood and water damage reports", "maintenance"),
-        ("deconstruction", "Demolition", "💥", "Deconstruction and demolition projects", "demolition"),
         ("yelp", "Business Directory", "⭐", "Business directory and reviews", "information"),
         ("places", "Business Licenses", "📍", "Business licenses and permits", "information"),
+        # Trade-specific services
+        ("roofing", "Roofing", "🏚️", "Roofing leads (C-39)", "trade"),
+        ("deconstruction", "Demolition", "💥", "Demolition and deconstruction (C-21)", "trade"),
+        ("paint", "Paint", "🎨", "Painting leads (C-33)", "trade"),
+        ("drywall", "Drywall", "🧱", "Drywall leads (C-9)", "trade"),
+        ("electrical", "Electrical", "⚡", "Electrical leads (C-10)", "trade"),
+        ("landscaping", "Landscaping", "🌿", "Landscaping leads (C-27)", "trade"),
+        ("hvac", "HVAC", "❄️", "HVAC leads (C-20)", "trade"),
+        ("plumbing", "Plumbing", "🔧", "Plumbing leads (C-36)", "trade"),
+        ("concrete", "Concrete", "🪨", "Concrete leads (C-8)", "trade"),
+        ("flooring", "Flooring", "🪵", "Flooring leads (C-15)", "trade"),
+        ("framing", "Framing", "🏗️", "Framing leads (C-5)", "trade"),
+        ("windows", "Windows & Doors", "🪟", "Windows and doors (C-17)", "trade"),
+        ("insulation", "Insulation", "🧊", "Insulation leads (C-2)", "trade"),
     ]
 
     for name, label, emoji, description, category in service_types:

@@ -38,47 +38,65 @@ SUBSCRIPTION_PRICE_USD = float(os.getenv("BOT_PRICE_USD", "99"))
 # so we can filter leads purely by matching against this list.
 # The 5 target services appear first; auxiliary sources follow.
 AVAILABLE_SERVICES = [
-    ("roofing", "🏠 Roofing"),
-    ("drywall", "🧱 Drywall"),
-    ("paint", "🎨 Paint"),
-    ("landscaping", "🌳 Landscaping"),
-    ("electrical", "⚡ Electrical"),
-    ("permits", "🏗️ Building Permits"),
-    ("construction", "👷 Construction"),
+    # --- Target trades (specific licenses) ---
+    ("roofing", "🏚️ Roofing (C-39)"),
+    ("deconstruction", "💥 Demolition (C-21)"),
+    ("paint", "🎨 Paint (C-33)"),
+    ("drywall", "🧱 Drywall (C-9)"),
+    ("electrical", "⚡ Electrical (C-10)"),
+    ("landscaping", "🌿 Landscaping (C-27)"),
+    ("hvac", "❄️ HVAC (C-20)"),
+    ("plumbing", "🔧 Plumbing (C-36)"),
+    ("concrete", "🪨 Concrete (C-8)"),
+    ("flooring", "🪵 Flooring (C-15)"),
+    ("framing", "🏗️ Framing (C-5)"),
+    ("windows", "🪟 Windows & Doors (C-17)"),
+    ("insulation", "🧊 Insulation (C-2)"),
+    # --- Auxiliary sources ---
+    ("permits", "📋 Building Permits"),
+    ("construction", "👷 General Construction"),
     ("realestate", "🏠 Real Estate"),
-    ("deconstruction", "💥 Demolition"),
-    ("flood", "💧 Water Damage"),
-    ("rodents", "🐭 Pest Control"),
     ("solar", "☀️ Solar"),
+    ("energy", "🔋 Energy"),
 ]
 
 # Keyword → service_key mapping used by the lead filter so we also catch
 # leads tagged as "framing", "paint", "roofing", etc.
 KEYWORD_SERVICE_MAP = {
-    # Roofing
+    # Roofing (C-39)
     "roof": "roofing",
     "roofing": "roofing",
     "reroof": "roofing",
     "re-roof": "roofing",
     "shingle": "roofing",
     "shingles": "roofing",
-    # Drywall
-    "drywall": "drywall",
-    "sheetrock": "drywall",
-    "gypsum": "drywall",
-    # Paint
+    "tile roof": "roofing",
+    "flat roof": "roofing",
+    "torch down": "roofing",
+    # Demolition (C-21)
+    "demolition": "deconstruction",
+    "demolish": "deconstruction",
+    "demo": "deconstruction",
+    "deconstruction": "deconstruction",
+    "raze": "deconstruction",
+    "wrecking": "deconstruction",
+    "abatement": "deconstruction",
+    "hazmat": "deconstruction",
+    "asbestos": "deconstruction",
+    # Paint (C-33)
     "paint": "paint",
     "painter": "paint",
     "painting": "paint",
     "repaint": "paint",
-    # Landscaping
-    "landscape": "landscaping",
-    "landscaping": "landscaping",
-    "irrigation": "landscaping",
-    "sprinkler": "landscaping",
-    "hardscape": "landscaping",
-    "sod": "landscaping",
-    # Electrical
+    "stucco paint": "paint",
+    "primer": "paint",
+    # Drywall (C-9)
+    "drywall": "drywall",
+    "sheetrock": "drywall",
+    "gypsum": "drywall",
+    "taping": "drywall",
+    "texturing": "drywall",
+    # Electrical (C-10)
     "electrical": "electrical",
     "electric": "electrical",
     "panel upgrade": "electrical",
@@ -86,25 +104,78 @@ KEYWORD_SERVICE_MAP = {
     "rewire": "electrical",
     "wiring": "electrical",
     "ev charger": "electrical",
-    # Construction (generic fall-through)
-    "framing": "construction",
-    "framer": "construction",
+    "sub panel": "electrical",
+    # Landscaping (C-27)
+    "landscape": "landscaping",
+    "landscaping": "landscaping",
+    "irrigation": "landscaping",
+    "sprinkler": "landscaping",
+    "hardscape": "landscaping",
+    "sod": "landscaping",
+    "paver": "landscaping",
+    "retaining wall": "landscaping",
+    # HVAC (C-20)
+    "hvac": "hvac",
+    "heating": "hvac",
+    "cooling": "hvac",
+    "air conditioning": "hvac",
+    "furnace": "hvac",
+    "duct": "hvac",
+    "ductwork": "hvac",
+    # Plumbing (C-36)
+    "plumbing": "plumbing",
+    "plumber": "plumbing",
+    "water heater": "plumbing",
+    "sewer": "plumbing",
+    "drain": "plumbing",
+    "pipe": "plumbing",
+    "fixture": "plumbing",
+    # Concrete (C-8)
+    "concrete": "concrete",
+    "slab": "concrete",
+    "driveway": "concrete",
+    "sidewalk": "concrete",
+    "flatwork": "concrete",
+    "foundation": "concrete",
+    # Flooring (C-15)
+    "flooring": "flooring",
+    "floor": "flooring",
+    "hardwood": "flooring",
+    "tile floor": "flooring",
+    "vinyl": "flooring",
+    "carpet": "flooring",
+    "laminate": "flooring",
+    # Framing (C-5)
+    "framing": "framing",
+    "framer": "framing",
+    "shear wall": "framing",
+    "structural": "framing",
+    # Windows & Doors (C-17)
+    "window": "windows",
+    "windows": "windows",
+    "door": "windows",
+    "glazing": "windows",
+    "fenestration": "windows",
+    # Insulation (C-2)
+    "insulation": "insulation",
+    "insulate": "insulation",
+    "weatherization": "insulation",
+    "energy retrofit": "insulation",
+    "spray foam": "insulation",
+    # Construction (generic)
     "carpenter": "construction",
     "carpentry": "construction",
     "permit": "permits",
-    "demolition": "deconstruction",
-    "demo": "deconstruction",
-    "deconstruction": "deconstruction",
+    # Real Estate
     "sale": "realestate",
     "sold": "realestate",
     "listing": "realestate",
-    "flood": "flood",
-    "water damage": "flood",
-    "rodent": "rodents",
-    "pest": "rodents",
+    # Solar / Energy
     "solar": "solar",
     "pv": "solar",
     "photovoltaic": "solar",
+    "energy audit": "energy",
+    "energy benchmark": "energy",
 }
 
 
