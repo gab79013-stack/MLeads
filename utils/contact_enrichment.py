@@ -167,6 +167,79 @@ def _apollo_lookup(company_name: str = "", person_name: str = "",
     return {}
 
 
+def ai_enrich_contact(lead: dict) -> dict:
+    """
+    IA #7 — Enriquecimiento de contacto con Claude Sonnet.
+
+    Cuando Hunter y Apollo no tienen el contacto, Claude analiza
+    los datos del lead (nombre dueño, empresa, ciudad, tipo de proyecto)
+    y extrae/infiere información de contacto adicional.
+
+    Retorna dict con: profile_summary, suggested_search_queries,
+                      likely_title, estimated_company_size
+    """
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    AI_ENABLED        = os.getenv("AI_ENABLED", "true").lower() not in ("false","0","no")
+    MODEL             = os.getenv("AI_ENRICHMENT_MODEL", "claude-sonnet-4-6")
+
+    if not ANTHROPIC_API_KEY or not AI_ENABLED:
+        return {}
+
+    owner      = lead.get("owner", "")
+    contractor = lead.get("contractor", "")
+    city       = lead.get("city", "")
+    trade      = lead.get("_trade", "GENERAL")
+    address    = lead.get("address", "")
+
+    name = owner or contractor
+    if not name:
+        return {}
+
+    cache_key = f"ai_enrich_{name}_{city}"
+    if cache_key in _enrichment_cache:
+        return _enrichment_cache[cache_key]
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=400,
+            system=(
+                "You are a B2B contact research assistant for construction leads. "
+                "Given a contractor/owner name and context, provide research insights. "
+                "Respond ONLY with valid JSON."
+            ),
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Research this construction contact:\n"
+                    f"Name/Company: {name}\n"
+                    f"City: {city}\n"
+                    f"Trade: {trade}\n"
+                    f"Project address: {address}\n\n"
+                    f"Return JSON with:\n"
+                    f'{{"profile_summary": "<2 sentences about likely business type>",\n'
+                    f'"likely_title": "<owner|GC|developer|investor>",\n'
+                    f'"estimated_company_size": "<1-5|6-20|21-50|50+>",\n'
+                    f'"search_queries": ["<google query to find their contact>", "<query2>"],\n'
+                    f'"linkedin_search": "<name site:linkedin.com/in city>"}}'
+                ),
+            }],
+        )
+
+        import json
+        result = json.loads(response.content[0].text.strip())
+        result["source"] = "Claude AI"
+        _enrichment_cache[cache_key] = result
+        return result
+
+    except Exception as e:
+        logger.debug(f"[AI Enrich] Error: {e}")
+        return {}
+
+
 def get_enrichment_stats() -> dict:
     """Retorna estadísticas del cache de enriquecimiento."""
     total = len(_enrichment_cache)

@@ -618,6 +618,861 @@ def _build_sources() -> list:
                 "url_tpl":"https://www.sjgov.org/department/cd/building/",
             },
         },
+
+        # ══════════════════════════════════════════════════════════
+        #  NATIONAL EXPANSION — Cities with confirmed Socrata APIs
+        # ══════════════════════════════════════════════════════════
+
+        # ── NYC — DOB Permit Issuance ─────────────────────────────
+        # Permisos activos del Dept of Buildings: roofing, electrical,
+        # plumbing, new construction, additions — señales directas
+        # de que un GC necesita sub-contratistas.
+        {
+            "city": "New York City", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.cityofnewyork.us/resource/ipu4-2q9a.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issuance_date DESC",
+                "$where": (
+                    f"issuance_date >= '{cutoff_iso}' "
+                    f"AND permit_status = 'ISSUED' "
+                    f"AND permit_type IN('NB','A1','A2','EW','PL')"
+                ),
+            },
+            "field_map": {
+                "id":"job__","address":"house__","address2":"street_name",
+                "permit_type":"permit_type","description":"job_description",
+                "status":"permit_status","filed_date":"filing_date","issued_date":"issuance_date",
+                "contractor":"permittee_s_business_name","lic_number":"permittee_s_license__",
+                "owner":"owner_s_business_name","value":"estimated_job_costs",
+                "url_tpl":"https://a810-bisweb.nyc.gov/bisweb/JobsQueryByNumberServlet?passjobnumber={job__}",
+            },
+        },
+
+        # ── NYC — DOB NOW Approved Permits ────────────────────────
+        # Permisos aprobados via el sistema moderno DOB NOW
+        {
+            "city": "New York City (DOB NOW)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.cityofnewyork.us/resource/rbx6-tga4.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": f"issued_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"job_filing_number","address":"house_no","address2":"street_name",
+                "permit_type":"work_type","description":"job_description",
+                "status":"filing_status","filed_date":"filing_date","issued_date":"issued_date",
+                "contractor":"applicant_business_name","lic_number":"applicant_license_number",
+                "owner":"owner_business_name","value":"job_value",
+                "url_tpl":"https://a810-bisweb.nyc.gov/bisweb/",
+            },
+        },
+
+        # ── Chicago — Building Permits ────────────────────────────
+        # Permisos de construcción activos: new construction, renovation,
+        # repairs — todos requieren sub-contratistas especializados
+        {
+            "city": "Chicago", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.cityofchicago.org/resource/ydr8-5enu.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": (
+                    f"issue_date >= '{cutoff_iso}' "
+                    f"AND permit_status = 'ISSUED'"
+                ),
+            },
+            "field_map": {
+                "id":"id","address":"street_number","address2":"street_name",
+                "permit_type":"permit_type","description":"work_description",
+                "status":"permit_status","filed_date":"application_start_date","issued_date":"issue_date",
+                "contractor":"contractor_1_name","lic_number":"contractor_1_license",
+                "owner":"contact_1_name","value":"reported_cost",
+                "url_tpl":"https://webapps1.chicago.gov/permitview/",
+            },
+        },
+
+        # ── Los Ángeles — Building Permits ────────────────────────
+        # Dataset consolidado LADBS — nuevas construcciones y remodelaciones
+        {
+            "city": "Los Angeles", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.lacity.org/resource/nwpn-78w6.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_nbr","address":"address",
+                "permit_type":"permit_type","description":"work_description",
+                "status":"status","filed_date":"date_application_filed","issued_date":"issue_date",
+                "contractor":"contractors_business_name","lic_number":"license_number",
+                "owner":"applicant_name","value":"valuation",
+                "url_tpl":"https://www.ladbsservices2.lacity.org/OnlineServices/",
+            },
+        },
+
+        # ── Los Ángeles — Building Permits 2020-Present ───────────
+        {
+            "city": "Los Angeles (2020+)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.lacity.org/resource/pi9x-tg5x.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_nbr","address":"address",
+                "permit_type":"permit_type","description":"work_description",
+                "status":"status","filed_date":"date_application_filed","issued_date":"issue_date",
+                "contractor":"contractors_business_name","lic_number":"license_number",
+                "owner":"applicant_name","value":"valuation",
+                "url_tpl":"https://www.ladbsservices2.lacity.org/OnlineServices/",
+            },
+        },
+
+        # ── Dallas — Building Permits ─────────────────────────────
+        {
+            "city": "Dallas", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://www.dallasopendata.com/resource/7v99-6h2e.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_num","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"applied_date","issued_date":"issue_date",
+                "contractor":"contractor_name","lic_number":"contractor_license",
+                "owner":"owner_name","value":"declared_valuation",
+                "url_tpl":"https://permits.dallascityhall.com/",
+            },
+        },
+
+        # ── Seattle — Land Use Permits ────────────────────────────
+        # Permisos de uso de suelo: nuevos desarrollos residenciales y comerciales
+        {
+            "city": "Seattle", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.seattle.gov/resource/m6is-v55d.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "application_date DESC",
+                "$where": f"application_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"application_permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issue_date",
+                "contractor":"applicant_name","lic_number":None,
+                "owner":"owner","value":"value",
+                "url_tpl":"https://cosaccela.seattle.gov/portal/",
+            },
+        },
+
+        # ── Seattle — Residential Building Permits ────────────────
+        {
+            "city": "Seattle (Residential)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.seattle.gov/resource/rs98-eyib.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"application_permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issue_date",
+                "contractor":"applicant","lic_number":None,
+                "owner":"owner","value":"value",
+                "url_tpl":"https://cosaccela.seattle.gov/portal/",
+            },
+        },
+
+        # ── Montgomery County MD — Residential Permits ────────────
+        {
+            "city": "Montgomery County MD (Residential)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.montgomerycountymd.gov/resource/76wv-m3v8.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "addeddate DESC",
+                "$where": f"addeddate >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permitno","address":"stno","address2":"stname",
+                "permit_type":"worktype","description":"description",
+                "status":"status","filed_date":"addeddate","issued_date":"issueddate",
+                "contractor":"contractorname","lic_number":"contractorlicenseno",
+                "owner":"ownername","value":"jobcost",
+                "url_tpl":"https://permitsmc.montgomerycountymd.gov/",
+            },
+        },
+
+        # ── Montgomery County MD — Commercial Permits ─────────────
+        {
+            "city": "Montgomery County MD (Commercial)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.montgomerycountymd.gov/resource/c639-6y9s.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "addeddate DESC",
+                "$where": f"addeddate >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permitno","address":"stno","address2":"stname",
+                "permit_type":"worktype","description":"description",
+                "status":"status","filed_date":"addeddate","issued_date":"issueddate",
+                "contractor":"contractorname","lic_number":"contractorlicenseno",
+                "owner":"ownername","value":"jobcost",
+                "url_tpl":"https://permitsmc.montgomerycountymd.gov/",
+            },
+        },
+
+        # ── New Orleans — Construcción y Renovación ───────────────
+        {
+            "city": "New Orleans", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.nola.gov/resource/797y-f09m.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issue_date",
+                "contractor":"contractor_name","lic_number":"contractor_license",
+                "owner":"owner_name","value":"job_value",
+                "url_tpl":"https://lama.city/new-orleans/",
+            },
+        },
+
+        # ── Baton Rouge — Building Permits ────────────────────────
+        {
+            "city": "Baton Rouge", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.brla.gov/resource/9is9-6q79.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issue_date",
+                "contractor":"contractor_name","lic_number":"license_number",
+                "owner":"owner_name","value":"job_value",
+                "url_tpl":"https://brgov.com/dept/dpdPermitting/",
+            },
+        },
+
+        # ── Kansas City MO — Building Permits ─────────────────────
+        {
+            "city": "Kansas City MO", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.kcmo.org/resource/7atp-9642.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issue_date",
+                "contractor":"contractor_name","lic_number":"contractor_license",
+                "owner":"owner_name","value":"declared_valuation",
+                "url_tpl":"https://kcmo.gov/building-codes/",
+            },
+        },
+
+        # ── Fort Worth TX — Building Permits ──────────────────────
+        {
+            "city": "Fort Worth TX", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.fortworthtexas.gov/resource/9q7f-h7t2.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issue_date",
+                "contractor":"contractor_name","lic_number":"license_number",
+                "owner":"owner_name","value":"declared_valuation",
+                "url_tpl":"https://www.fortworthtexas.gov/departments/development-services",
+            },
+        },
+
+        # ── Orlando FL — Building Permits ─────────────────────────
+        {
+            "city": "Orlando FL", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.cityoforlando.net/resource/5p3e-v738.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issue_date",
+                "contractor":"contractor_name","lic_number":"license_number",
+                "owner":"owner_name","value":"job_value",
+                "url_tpl":"https://www.orlando.gov/Our-Government/Departments-Offices/Building-and-Code-Services",
+            },
+        },
+
+        # ── Hartford CT — Building Permits ────────────────────────
+        {
+            "city": "Hartford CT", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.hartford.gov/resource/7vdp-q832.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issue_date",
+                "contractor":"contractor_name","lic_number":"license_number",
+                "owner":"owner_name","value":"job_value",
+                "url_tpl":"https://www.hartford.gov/",
+            },
+        },
+
+        # ── Louisville KY — Permits Emitidos ─────────────────────
+        {
+            "city": "Louisville KY", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.louisvilleky.gov/resource/sc77-q82v.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issue_date",
+                "contractor":"contractor_name","lic_number":"license_number",
+                "owner":"owner_name","value":"declared_valuation",
+                "url_tpl":"https://louisvilleky.gov/government/codes-regulations",
+            },
+        },
+
+        # ── Nashville TN — Building Permits ───────────────────────
+        {
+            "city": "Nashville TN", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.nashville.gov/resource/3wb6-xy3j.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "date_issued DESC",
+                "$where": f"date_issued >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"date_applied","issued_date":"date_issued",
+                "contractor":"contractor_name","lic_number":"license_number",
+                "owner":"owner_name","value":"const_value",
+                "url_tpl":"https://www.nashville.gov/departments/codes",
+            },
+        },
+
+        # ── Mesa AZ — Building Permits ────────────────────────────
+        {
+            "city": "Mesa AZ", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.mesaaz.gov/resource/is3x-7q4v.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": f"issued_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_num","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"applied_date","issued_date":"issued_date",
+                "contractor":"contractor_name","lic_number":"license_number",
+                "owner":"owner_name","value":"job_value",
+                "url_tpl":"https://www.mesaaz.gov/business/development-services/development-services-building",
+            },
+        },
+
+        # ── Austin TX — Building Permits (últimos 30 días) ────────
+        {
+            "city": "Austin TX", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.austintexas.gov/resource/enku-zhee.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+            },
+            "field_map": {
+                "id":"permit_num","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"calendar_year_issued","issued_date":"issued_date",
+                "contractor":"contractor_company_name","lic_number":"contractor_license_number",
+                "owner":"legal_entity_name","value":"job_value",
+                "url_tpl":"https://abc.austintexas.gov/",
+            },
+        },
+
+        # ── Austin TX — Permisos Históricos Residenciales ─────────
+        {
+            "city": "Austin TX (Residential)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.austintexas.gov/resource/3syk-w9eu.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": f"issued_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_num","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"calendar_year_issued","issued_date":"issued_date",
+                "contractor":"contractor_company_name","lic_number":"contractor_license_number",
+                "owner":"legal_entity_name","value":"job_value",
+                "url_tpl":"https://abc.austintexas.gov/",
+            },
+        },
+
+        # ── Boston MA — Building Permits Aprobados ────────────────
+        {
+            "city": "Boston MA", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.boston.gov/resource/5263-8n4g.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": f"issued_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permitnumber","address":"address",
+                "permit_type":"permittypedescr","description":"comments",
+                "status":"status","filed_date":"applicationdate","issued_date":"issued_date",
+                "contractor":"applicant","lic_number":"applicantlicno",
+                "owner":"ownername","value":"declared_valuation",
+                "url_tpl":"https://www.boston.gov/departments/inspectional-services",
+            },
+        },
+
+        # ── Somerville MA — Building Permits ──────────────────────
+        {
+            "city": "Somerville MA", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.somervillema.gov/resource/uup8-h768.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": f"issued_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issued_date",
+                "contractor":"contractor_name","lic_number":"license_number",
+                "owner":"owner_name","value":"job_cost",
+                "url_tpl":"https://www.somervillema.gov/departments/inspectional-services",
+            },
+        },
+
+        # ── Cambridge MA — Building Permits ───────────────────────
+        {
+            "city": "Cambridge MA", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.cambridgema.gov/resource/6dei-idid.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": f"issued_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issued_date",
+                "contractor":"contractor_name","lic_number":"license_number",
+                "owner":"owner_name","value":"total_fees",
+                "url_tpl":"https://cambridgema.gov/inspection",
+            },
+        },
+
+        # ── Edmonton Canada — Building Permits ────────────────────
+        {
+            "city": "Edmonton CA", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.edmonton.ca/resource/24u8-4m26.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"location",
+                "permit_type":"permit_type","description":"work_type_group",
+                "status":"permit_status","filed_date":"application_date","issued_date":"issue_date",
+                "contractor":"contractor_trade_name","lic_number":"licence_type",
+                "owner":"property_use","value":"estimated_job_cost_amount",
+                "url_tpl":"https://www.edmonton.ca/permits",
+            },
+        },
+
+        # ── Calgary Canada — Building Permits ─────────────────────
+        {
+            "city": "Calgary CA", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.calgary.ca/resource/kr8b-c44i.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": f"issued_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permitnum","address":"originaladdress",
+                "permit_type":"workclassgroup","description":"estateval",
+                "status":"statuscurrent","filed_date":"applieddate","issued_date":"issued_date",
+                "contractor":"contractorname","lic_number":None,
+                "owner":"communityname","value":"estprojectcost",
+                "url_tpl":"https://developmentmap.calgary.ca/",
+            },
+        },
+
+        # ── NYC — DOB Quejas (violations = repair work needed) ────
+        # Quejas al DOB → edificio en mal estado → propietario DEBE contratar
+        {
+            "city": "New York City (DOB Complaints)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.cityofnewyork.us/resource/p5f6-p997.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "date_entered DESC",
+                "$where": (
+                    f"date_entered >= '{cutoff_iso}' "
+                    f"AND status = 'Open'"
+                ),
+            },
+            "field_map": {
+                "id":"complaint_number","address":"house_number","address2":"street_name",
+                "permit_type":"category","description":"complaint_description",
+                "status":"status","filed_date":"date_entered","issued_date":"date_entered",
+                "contractor":None,"lic_number":None,
+                "owner":"community_board","value":None,
+                "url_tpl":"https://a810-bisweb.nyc.gov/bisweb/",
+            },
+        },
+
+        # ── Chicago — Violaciones al Código ───────────────────────
+        # Violaciones abiertas = propietario obligado a contratar para reparar
+        {
+            "city": "Chicago (Code Violations)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.cityofchicago.org/resource/22u3-id88.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "violation_date DESC",
+                "$where": (
+                    f"violation_date >= '{cutoff_iso}' "
+                    f"AND violation_status = 'OPEN'"
+                ),
+            },
+            "field_map": {
+                "id":"id","address":"address",
+                "permit_type":"violation_code","description":"description",
+                "status":"violation_status","filed_date":"violation_date","issued_date":"violation_date",
+                "contractor":None,"lic_number":None,
+                "owner":"property_group","value":None,
+                "url_tpl":"https://webapps1.chicago.gov/buildingviolations/",
+            },
+        },
+
+        # ── Austin TX — Code Violations ───────────────────────────
+        {
+            "city": "Austin TX (Code Violations)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.austintexas.gov/resource/9sh9-7u77.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "status_date DESC",
+                "$where": (
+                    f"status_date >= '{cutoff_iso}' "
+                    f"AND case_status = 'OPEN'"
+                ),
+            },
+            "field_map": {
+                "id":"case_number","address":"address",
+                "permit_type":"case_type","description":"description",
+                "status":"case_status","filed_date":"open_date","issued_date":"status_date",
+                "contractor":None,"lic_number":None,
+                "owner":"owner_name","value":None,
+                "url_tpl":"https://codelite.austintexas.gov/",
+            },
+        },
+
+        # ── New Orleans — Code Enforcement ────────────────────────
+        {
+            "city": "New Orleans (Code Enforcement)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.nola.gov/resource/997e-4946.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "case_opened DESC",
+                "$where": (
+                    f"case_opened >= '{cutoff_iso}' "
+                    f"AND case_status = 'Open'"
+                ),
+            },
+            "field_map": {
+                "id":"case_number","address":"address",
+                "permit_type":"case_type","description":"description",
+                "status":"case_status","filed_date":"case_opened","issued_date":"case_opened",
+                "contractor":None,"lic_number":None,
+                "owner":"owner_name","value":None,
+                "url_tpl":"https://nola.gov/code-enforcement/",
+            },
+        },
+
+        # ══════════════════════════════════════════════════════════
+        #  BATCH 2 — APIs adicionales con alto valor para subs
+        # ══════════════════════════════════════════════════════════
+
+        # ── Austin TX — Permisos Activos Comercial/Multifamiliar ──
+        # Proyectos grandes en ejecución = mayor presupuesto sub-contractor
+        {
+            "city": "Austin TX (Commercial Active)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.austintexas.gov/resource/hah9-7x5p.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {"$limit": 200, "$order": "issued_date DESC"},
+            "field_map": {
+                "id":"permit_num","address":"address",
+                "permit_type":"permit_class","description":"description",
+                "status":"status","filed_date":"calendar_year_issued","issued_date":"issued_date",
+                "contractor":"contractor_company_name","lic_number":"contractor_license_number",
+                "owner":"legal_entity_name","value":"job_value",
+                "url_tpl":"https://abc.austintexas.gov/",
+            },
+        },
+
+        # ── Austin TX — Issued Permits (puntos georreferenciados) ─
+        {
+            "city": "Austin TX (Geo)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.austintexas.gov/resource/quv8-5ckq.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": f"issued_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_num","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"calendar_year_issued","issued_date":"issued_date",
+                "contractor":"contractor_company_name","lic_number":"contractor_license_number",
+                "owner":"legal_entity_name","value":"job_value",
+                "url_tpl":"https://abc.austintexas.gov/",
+            },
+        },
+
+        # ── Los Ángeles — New Housing Units ───────────────────────
+        # Unidades nuevas = necesitan TODOS los sub-contractors
+        {
+            "city": "Los Angeles (New Units)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.lacity.org/resource/cpkv-aajs.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_nbr","address":"address",
+                "permit_type":"permit_type","description":"work_description",
+                "status":"status","filed_date":"date_application_filed","issued_date":"issue_date",
+                "contractor":"contractors_business_name","lic_number":"license_number",
+                "owner":"applicant_name","value":"valuation",
+                "url_tpl":"https://www.ladbsservices2.lacity.org/OnlineServices/",
+            },
+        },
+
+        # ── Los Ángeles — Major Remodel ───────────────────────────
+        # Remodelaciones mayores = roofing, drywall, electrical, paint
+        {
+            "city": "Los Angeles (Major Remodel)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.lacity.org/resource/3xpx-f9cg.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_nbr","address":"address",
+                "permit_type":"permit_type","description":"work_description",
+                "status":"status","filed_date":"date_application_filed","issued_date":"issue_date",
+                "contractor":"contractors_business_name","lic_number":"license_number",
+                "owner":"applicant_name","value":"valuation",
+                "url_tpl":"https://www.ladbsservices2.lacity.org/OnlineServices/",
+            },
+        },
+
+        # ── Los Ángeles — Certificate of Occupancy ────────────────
+        # CO emitido = edificio terminado = instalaciones finales
+        {
+            "city": "Los Angeles (CO)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.lacity.org/resource/3f9m-afei.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_nbr","address":"address",
+                "permit_type":"co_type","description":"work_description",
+                "status":"status","filed_date":"date_application_filed","issued_date":"issue_date",
+                "contractor":"contractors_business_name","lic_number":"license_number",
+                "owner":"applicant_name","value":"valuation",
+                "url_tpl":"https://www.ladbsservices2.lacity.org/OnlineServices/",
+            },
+        },
+
+        # ── Chicago — New Demo Permits ────────────────────────────
+        # Vista específica de demoliciones nuevas en Chicago
+        {
+            "city": "Chicago (New Demo)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.cityofchicago.org/resource/cgh9-n8rk.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": f"issue_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"id","address":"street_number","address2":"street_name",
+                "permit_type":"permit_type","description":"work_description",
+                "status":"permit_status","filed_date":"application_start_date","issued_date":"issue_date",
+                "contractor":"contractor_1_name","lic_number":"contractor_1_license",
+                "owner":"contact_1_name","value":"reported_cost",
+                "url_tpl":"https://webapps1.chicago.gov/permitview/",
+            },
+        },
+
+        # ── Chicago — ADU Pre-Approval Applications ───────────────
+        # ADUs = nueva unidad habitable = insulación, drywall, electrical completos
+        {
+            "city": "Chicago (ADU)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.cityofchicago.org/resource/xbwc-ntpx.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "application_date DESC",
+                "$where": f"application_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"id","address":"address",
+                "permit_type":"adu_type","description":"adu_type",
+                "status":"status","filed_date":"application_date","issued_date":"application_date",
+                "contractor":None,"lic_number":None,
+                "owner":"applicant_name","value":None,
+                "url_tpl":"https://www.chicago.gov/city/en/depts/bldgs/supp_info/adu.html",
+            },
+        },
+
+        # ── Seattle — SDCI Development Sites ─────────────────────
+        # Sitios con desarrollo activo en pipeline = oportunidad temprana
+        {
+            "city": "Seattle (Development Sites)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.seattle.gov/resource/g337-jqnv.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {"$limit": 200, "$order": "status_date DESC"},
+            "field_map": {
+                "id":"application_permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"status_date",
+                "contractor":"applicant_name","lic_number":None,
+                "owner":"owner","value":"value",
+                "url_tpl":"https://cosaccela.seattle.gov/portal/",
+            },
+        },
+
+        # ── Seattle — Active Demo Non-SFR ─────────────────────────
+        # Demoliciones NO residenciales = proyectos comerciales = presupuestos mayores
+        {
+            "city": "Seattle (Demo Non-SFR)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.seattle.gov/resource/wk2i-qsrr.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "application_date DESC",
+                "$where": f"application_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"application_permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issue_date",
+                "contractor":"applicant_name","lic_number":None,
+                "owner":"owner","value":"value",
+                "url_tpl":"https://cosaccela.seattle.gov/portal/",
+            },
+        },
+
+        # ── Seattle — New Residential Units ───────────────────────
+        # Pipeline de nuevas unidades residenciales en permisos o construcción
+        {
+            "city": "Seattle (New Residential)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.seattle.gov/resource/snip-55e2.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {"$limit": 200, "$order": "issue_date DESC"},
+            "field_map": {
+                "id":"application_permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issue_date",
+                "contractor":"applicant_name","lic_number":None,
+                "owner":"owner","value":"value",
+                "url_tpl":"https://cosaccela.seattle.gov/portal/",
+            },
+        },
+
+        # ── Sonoma County — Construction Permits ──────────────────
+        # Cubre Petaluma, Santa Rosa, Rohnert Park, Cloverdale, etc.
+        {
+            "city": "Sonoma County (Construction)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.sonomacounty.ca.gov/resource/88ms-k5e7.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": f"issued_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issued_date",
+                "contractor":"contractor_name","lic_number":"contractor_license",
+                "owner":"owner","value":"valuation",
+                "url_tpl":"https://sonomacounty.ca.gov/development-services/permit-sonoma",
+            },
+        },
+
+        # ── Norfolk VA — Permits and Inspections ──────────────────
+        {
+            "city": "Norfolk VA", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.norfolk.gov/resource/bnrb-u445.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": f"issued_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issued_date",
+                "contractor":"contractor_name","lic_number":"contractor_license",
+                "owner":"owner_name","value":"job_value",
+                "url_tpl":"https://norfolk.gov/permits",
+            },
+        },
+
+        # ── Kansas City MO — Permits CPD ─────────────────────────
+        # Dataset complementario al 7atp-9642 ya incluido
+        {
+            "city": "Kansas City MO (CPD)", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.kcmo.org/resource/ntw8-aacc.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": f"issued_date >= '{cutoff_iso}'",
+            },
+            "field_map": {
+                "id":"permit_number","address":"address",
+                "permit_type":"permit_type","description":"description",
+                "status":"status","filed_date":"application_date","issued_date":"issued_date",
+                "contractor":"contractor_name","lic_number":"contractor_license",
+                "owner":"owner_name","value":"declared_valuation",
+                "url_tpl":"https://kcmo.gov/building-codes/",
+            },
+        },
     ]
 
 

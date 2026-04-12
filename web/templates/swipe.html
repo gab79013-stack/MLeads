@@ -713,6 +713,58 @@ function fmtPhone(p) {
     return String(p);
 }
 
+// ── Subcontractor type affinity mapping ───────────────────────────────────────
+const _SUBCAT_KEYWORDS = {
+    roofing:     ['roof','roofing','re-roof','reroof','shingle','tile roof','torch down','tpo','flat roof'],
+    drywall:     ['drywall','sheetrock','gypsum','taping','texturing','wallboard','wall board'],
+    paint:       ['paint','painting','repaint','painter','stucco paint','primer','exterior paint'],
+    landscaping: ['landscap','hardscape','irrigation','sprinkler','retaining wall','paver','turf','grading'],
+    electrical:  ['electrical','panel upgrade','ev charger','200 amp','rewire','sub panel','wiring','low voltage'],
+};
+const _SUBCAT_SERVICE_TYPES = {
+    roofing:     ['permits','construction'],
+    drywall:     ['construction','permits'],
+    paint:       ['construction','permits'],
+    landscaping: ['permits','construction'],
+    electrical:  ['permits','construction','energy','solar'],
+};
+
+/**
+ * Compute a 0-100 type-match score based on user's active subCat filters.
+ * If no filters active, returns the raw lead score.
+ */
+function _computeTypeMatchScore(lead) {
+    // No filter → use raw score
+    if (F.subCats.size === 0 && F.leadTypes.size === 0) return Number(lead.score || 0);
+
+    const desc        = ((lead.description || '') + ' ' + (lead.service_label || '') + ' ' + (lead.service_type || '')).toLowerCase();
+    const serviceType = (lead.service_type || '').toLowerCase();
+    let   bestMatch   = 0;
+
+    const activeCats = [...F.subCats];
+    for (const cat of activeCats) {
+        let match = 0;
+        // Service type match → 50 pts
+        const svcTypes = _SUBCAT_SERVICE_TYPES[cat] || [];
+        if (svcTypes.includes(serviceType)) match += 50;
+        // Keyword match in description → up to 50 pts
+        const kws = _SUBCAT_KEYWORDS[cat] || [];
+        const hits = kws.filter(k => desc.includes(k)).length;
+        match += Math.min(50, Math.round(hits / Math.max(kws.length, 1) * 50 * 3));
+        bestMatch = Math.max(bestMatch, match);
+    }
+
+    // Lead type pills also contribute
+    for (const lt of F.leadTypes) {
+        if ((lead.service_type || '').toLowerCase() === lt.toLowerCase()) bestMatch = Math.max(bestMatch, 90);
+    }
+
+    // Scale: 0-100 capped, blended with raw score at 30%
+    const typeScore = Math.min(100, bestMatch);
+    const rawScore  = Number(lead.score || 0);
+    return Math.round(typeScore * 0.7 + rawScore * 0.3);
+}
+
 // ── Thermometer builder ───────────────────────────────────────────────────────
 /**
  * Returns an SVG string for an interactive thermometer.
@@ -869,7 +921,8 @@ function buildCard(lead, idx) {
     card.style.transform = `translateY(${idx * 6}px) scale(${1 - idx * 0.03})`;
     card.style.opacity   = idx < 3 ? 1 : 0;
 
-    const score   = Number(lead.score || 0);
+    const score      = Number(lead.score || 0);
+    const thermScore = _computeTypeMatchScore(lead);  // type-match driven thermometer
     const grade   = (lead.grade || '').toUpperCase();
     const isHot   = grade === 'HOT'  || score >= 90;
     const isWarm  = !isHot && (grade === 'WARM'   || score >= 70);
@@ -1031,8 +1084,8 @@ function buildCard(lead, idx) {
         <div class="${heroClass}">
             <div class="hero-layout">
                 <div class="therm-col">
-                    <span class="therm-label">°C</span>
-                    ${thermometerSVG(score, uid)}
+                    <span class="therm-label">${F.subCats.size > 0 || F.leadTypes.size > 0 ? '🎯' : '°C'}</span>
+                    ${thermometerSVG(thermScore, uid)}
                 </div>
                 <div class="hero-info">
                     <div class="hero-top">
@@ -1229,8 +1282,8 @@ function commit(card, action) {
     if (action === 'like' && !S.authed) {
         _saveAnonLike(card.dataset.id, card._leadData);
     }
-    // Advance progressive score threshold
-    _advanceScoreStep();
+    // Advance progressive score threshold only on right-swipes (likes = real leads)
+    if (action === 'like') _advanceScoreStep();
     setTimeout(() => {
         card.remove(); S.queue.shift(); restack();
         if (S.queue.length <= 2) fetchFeed();

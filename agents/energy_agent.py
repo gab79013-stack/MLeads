@@ -267,6 +267,261 @@ ENERGY_SOURCES = [
         },
         "_is_permit": True,
     },
+
+    # ══════════════════════════════════════════════════════════════
+    #  NATIONAL — Benchmarking energético (score bajo = retrofit)
+    # ══════════════════════════════════════════════════════════════
+
+    # ── Washington DC — Building Energy Benchmarking ─────────────
+    # Edificios con alto consumo = oportunidad de insulación/HVAC
+    {
+        "city":    "Washington DC",
+        "engine":  "socrata",
+        "url":     "https://data.dc.gov/resource/66i2-g67p.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "reporting_year DESC",
+            "$where": "energy_star_score IS NOT NULL AND energy_star_score < 50",
+        },
+        "field_map": {
+            "id":           "property_id",
+            "address":      "address_of_record",
+            "name":         "reported_organization_name",
+            "type":         "primary_property_type_epa_calculated",
+            "sqft":         "property_gfa_calculated_buildings",
+            "year_built":   "year_built",
+            "energy_score": "energy_star_score",
+            "emissions":    "total_ghg_emissions_metric_tons_co2e",
+            "eui":          "weather_normalized_source_eui_kbtu_ft",
+        },
+    },
+
+    # ── Philadelphia — Building Energy Efficiency ─────────────────
+    {
+        "city":    "Philadelphia",
+        "engine":  "socrata",
+        "url":     "https://data.phila.gov/resource/f3b8-8c7c.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "year_ending DESC",
+            "$where": "energy_star_score IS NOT NULL AND energy_star_score < 50",
+        },
+        "field_map": {
+            "id":           "property_id",
+            "address":      "address",
+            "name":         "property_name",
+            "type":         "primary_property_type",
+            "sqft":         "gross_floor_area",
+            "year_built":   "year_built",
+            "energy_score": "energy_star_score",
+            "emissions":    "total_ghg_emissions",
+            "eui":          "site_eui",
+        },
+    },
+
+    # ── Chicago — Energy Benchmarking ────────────────────────────
+    {
+        "city":    "Chicago",
+        "engine":  "socrata",
+        "url":     "https://data.cityofchicago.org/resource/g5i5-yz37.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "data_year DESC",
+            "$where": "energy_star_score IS NOT NULL AND energy_star_score < 50",
+        },
+        "field_map": {
+            "id":           "chicago_building_id",
+            "address":      "address",
+            "name":         "property_name",
+            "type":         "primary_property_type",
+            "sqft":         "gross_floor_area",
+            "year_built":   "year_built",
+            "energy_score": "energy_star_score",
+            "emissions":    "total_ghg_emissions_metric_tons_co2e",
+            "eui":          "weather_normalized_site_eui",
+        },
+    },
+
+    # ── NYC — Local Law 84 Benchmarking 2023+ ─────────────────────
+    # Edificios NYC con baja eficiencia energética = LL97 compliance = retrofit
+    {
+        "city":    "New York City",
+        "engine":  "socrata",
+        "url":     "https://data.cityofnewyork.us/resource/5zyy-y8am.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "reporting_year DESC",
+            "$where": "energy_star_score IS NOT NULL AND energy_star_score < 50",
+        },
+        "field_map": {
+            "id":           "property_id",
+            "address":      "address_1_self_reported",
+            "name":         "property_name",
+            "type":         "primary_property_type_self_selected",
+            "sqft":         "largest_property_use_type_gross_floor_area_ft",
+            "year_built":   "year_built",
+            "energy_score": "energy_star_score",
+            "emissions":    "total_ghg_emissions_metric_tons_co2e",
+            "eui":          "weather_normalized_site_eui_kbtu_ft",
+        },
+    },
+
+    # ── Seattle — Building GHG Emissions ─────────────────────────
+    # Edificios con altas emisiones = candidatos a retrofit de insulación/HVAC
+    {
+        "city":    "Seattle",
+        "engine":  "socrata",
+        "url":     "https://data.seattle.gov/resource/id9p-6pwy.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "year DESC",
+            "$where": "energy_star_score IS NOT NULL AND energy_star_score < 50",
+        },
+        "field_map": {
+            "id":           "osebuildingid",
+            "address":      "address",
+            "name":         "buildingname",
+            "type":         "primarypropertytype",
+            "sqft":         "propertygfabuildings",
+            "year_built":   "yearbuilt",
+            "energy_score": "energy_star_score",
+            "emissions":    "totalghgemissions",
+            "eui":          "weathernormalizedsiteeui",
+        },
+    },
+
+    # ── Montgomery County MD — Benchmarking ───────────────────────
+    {
+        "city":    "Montgomery County MD",
+        "engine":  "socrata",
+        "url":     "https://data.montgomerycountymd.gov/resource/izzs-2bn4.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "year DESC",
+            "$where": "energy_star_score IS NOT NULL AND energy_star_score < 50",
+        },
+        "field_map": {
+            "id":           "property_id",
+            "address":      "address",
+            "name":         "property_name",
+            "type":         "primary_property_type",
+            "sqft":         "gross_floor_area",
+            "year_built":   "year_built",
+            "energy_score": "energy_star_score",
+            "emissions":    "total_ghg_emissions",
+            "eui":          "site_eui",
+        },
+    },
+
+    # ══════════════════════════════════════════════════════════════
+    #  CHICAGO — Años históricos recientes (2018-2021)
+    #  Edificios con score bajo en años recientes = aún sin retrofit
+    #  = oportunidad vigente para insulación/HVAC
+    # ══════════════════════════════════════════════════════════════
+
+    {
+        "city":    "Chicago (2021)",
+        "engine":  "socrata",
+        "url":     "https://data.cityofchicago.org/resource/gkf4-txtp.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$where": "energy_star_score IS NOT NULL AND energy_star_score < 50",
+        },
+        "field_map": {
+            "id":           "chicago_building_id",
+            "address":      "address",
+            "name":         "property_name",
+            "type":         "primary_property_type",
+            "sqft":         "gross_floor_area",
+            "year_built":   "year_built",
+            "energy_score": "energy_star_score",
+            "emissions":    "total_ghg_emissions_metric_tons_co2e",
+            "eui":          "weather_normalized_site_eui",
+        },
+    },
+
+    {
+        "city":    "Chicago (2020)",
+        "engine":  "socrata",
+        "url":     "https://data.cityofchicago.org/resource/ydbk-8hi6.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$where": "energy_star_score IS NOT NULL AND energy_star_score < 50",
+        },
+        "field_map": {
+            "id":           "chicago_building_id",
+            "address":      "address",
+            "name":         "property_name",
+            "type":         "primary_property_type",
+            "sqft":         "gross_floor_area",
+            "year_built":   "year_built",
+            "energy_score": "energy_star_score",
+            "emissions":    "total_ghg_emissions_metric_tons_co2e",
+            "eui":          "weather_normalized_site_eui",
+        },
+    },
+
+    {
+        "city":    "Chicago (2019)",
+        "engine":  "socrata",
+        "url":     "https://data.cityofchicago.org/resource/jn94-it7m.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$where": "energy_star_score IS NOT NULL AND energy_star_score < 50",
+        },
+        "field_map": {
+            "id":           "chicago_building_id",
+            "address":      "address",
+            "name":         "property_name",
+            "type":         "primary_property_type",
+            "sqft":         "gross_floor_area",
+            "year_built":   "year_built",
+            "energy_score": "energy_star_score",
+            "emissions":    "total_ghg_emissions_metric_tons_co2e",
+            "eui":          "weather_normalized_site_eui",
+        },
+    },
+
+    {
+        "city":    "Chicago (2018)",
+        "engine":  "socrata",
+        "url":     "https://data.cityofchicago.org/resource/m2kv-bmi3.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$where": "energy_star_score IS NOT NULL AND energy_star_score < 50",
+        },
+        "field_map": {
+            "id":           "chicago_building_id",
+            "address":      "address",
+            "name":         "property_name",
+            "type":         "primary_property_type",
+            "sqft":         "gross_floor_area",
+            "year_built":   "year_built",
+            "energy_score": "energy_star_score",
+            "emissions":    "total_ghg_emissions_metric_tons_co2e",
+            "eui":          "weather_normalized_site_eui",
+        },
+    },
 ]
 
 

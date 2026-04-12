@@ -36,6 +36,20 @@ logger = logging.getLogger("main")
 from utils.telegram import send_message
 from utils.db import init_db, get_stats
 from utils.contacts_loader import load_all_contacts   # precarga al importar
+
+# ── AI modules (optional — graceful if not configured) ────────────────
+try:
+    from utils.ai_bot import start_polling as _bot_start_polling
+    _AI_BOT_AVAILABLE = True
+except Exception:
+    _AI_BOT_AVAILABLE = False
+
+try:
+    from utils.endpoint_health import run_health_check as _run_health_check
+    _HEALTH_CHECK_AVAILABLE = True
+except Exception:
+    _HEALTH_CHECK_AVAILABLE = False
+
 from agents.permits_agent    import PermitsAgent
 from agents.solar_agent      import SolarAgent
 from agents.rodents_agent    import RodentsAgent
@@ -63,6 +77,7 @@ AGENT_REGISTRY = {
 
 # ⚡ Instancias singleton — creadas UNA sola vez
 _AGENT_INSTANCES: dict = {}
+_AGENT_INSTANCES_LOCK = __import__("threading").Lock()
 
 
 def _is_enabled(env_key: str) -> bool:
@@ -72,8 +87,10 @@ def _is_enabled(env_key: str) -> bool:
 def _get_or_create_agent(key: str):
     """Retorna la instancia singleton del agente (crea si no existe)."""
     if key not in _AGENT_INSTANCES:
-        _AGENT_INSTANCES[key] = AGENT_REGISTRY[key]["class"]()
-        logger.info(f"[{key}] Agente instanciado")
+        with _AGENT_INSTANCES_LOCK:
+            if key not in _AGENT_INSTANCES:  # double-checked locking
+                _AGENT_INSTANCES[key] = AGENT_REGISTRY[key]["class"]()
+                logger.info(f"[{key}] Agente instanciado")
     return _AGENT_INSTANCES[key]
 
 
@@ -168,6 +185,20 @@ def cmd_start():
         logger.info(f"[{key}] Programado cada {interval} min")
 
     logger.info(f"✅ Todos los agentes corriendo: {', '.join(k for k, _ in enabled)}")
+
+    # ── Telegram bot conversacional (polling) ──────────────────────
+    if _AI_BOT_AVAILABLE and os.getenv("TELEGRAM_BOT_TOKEN"):
+        _bot_start_polling(interval=2.0)
+        logger.info("🤖 AI Bot Telegram iniciado (polling activo)")
+    else:
+        logger.info("🤖 AI Bot desactivado (sin BOT_TOKEN o módulo no disponible)")
+
+    # ── Endpoint health check — verificación diaria ────────────────
+    if _HEALTH_CHECK_AVAILABLE:
+        schedule.every().day.at("07:00").do(
+            lambda: _run_health_check(notify=True)
+        )
+        logger.info("🔍 Health check de endpoints programado para 07:00 diario")
 
     while True:
         schedule.run_pending()

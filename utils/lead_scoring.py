@@ -7,7 +7,13 @@ Enfoque en 5 servicios clave:
   Roofing, Drywall, Paint, Landscaping, Electrical
 
 Score = f(valor_proyecto, tipo_proyecto, datos_contacto, recencia,
-          demografía, fuente, señales_servicio, inspección_próxima)
+          demografía, fuente, señales_servicio, inspección_próxima,
+          AI_trade_urgency, cross_source_signals)
+
+IA #2 — Boost por clasificación de trade (Claude):
+  - urgencia HIGH  → +10 pts
+  - urgencia MEDIUM → +5 pts
+  - trade exacto en servicios target → +8 pts extra
 
 Escala: 0-100
   90-100: 🔥 HOT    — contactar de inmediato
@@ -232,7 +238,33 @@ def score_lead(lead: dict) -> dict:
 
     total += min(service_signals, 10)
 
-    # ── 8. Inspección próxima (0-8 pts) ──────────────────────────────
+    # ── 8a. AI Trade Urgency boost (0-18 pts) ────────────────────
+    # Si el clasificador de IA ya corrió, aplicar boost de urgencia y trade
+    ai_urgency = lead.get("_urgency", "")
+    ai_trade   = lead.get("_trade", "")
+    _target_trades = {"ROOFING", "ELECTRICAL", "DRYWALL", "PAINTING",
+                      "LANDSCAPING", "INSULATION", "HVAC"}
+
+    if ai_urgency == "HIGH":
+        total += 10
+        reasons.append(f"AI urgencia ALTA ({ai_trade or 'general'})")
+    elif ai_urgency == "MEDIUM":
+        total += 5
+
+    if ai_trade in _target_trades:
+        total += 8
+        reasons.append(f"Trade target: {ai_trade}")
+
+    # ── 8b. Cross-source signal boost (0-15 pts) ─────────────────
+    # Propiedad detectada por múltiples agentes = señal más fuerte
+    cross_count = lead.get("_cross_agent_count", 0)
+    if cross_count >= 3:
+        total += 15
+        reasons.insert(0, f"🔗 {cross_count} fuentes cruzadas")
+    elif cross_count == 2:
+        total += 8
+
+    # ── 9. Inspección próxima (0-8 pts) ──────────────────────────────
     # Leads con inspecciones próximas merecen prioridad (GC en sitio)
     next_insp_date = lead.get("next_scheduled_inspection_date")
     if next_insp_date:

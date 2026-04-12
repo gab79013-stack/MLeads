@@ -295,6 +295,214 @@ REALESTATE_SOURCES = [
             "year_built": "year_built",
         },
     },
+
+    # ══════════════════════════════════════════════════════════════
+    #  NATIONAL — Ventas recientes = nuevo propietario que renueva
+    # ══════════════════════════════════════════════════════════════
+
+    # ── Connecticut — Ventas Estatales (2001-2023) ────────────────
+    # Cubre todo el estado: New Haven, Bridgeport, Stamford, Hartford
+    {
+        "city":    "Connecticut",
+        "engine":  "socrata",
+        "url":     "https://data.ct.gov/resource/5mzw-sjtu.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "daterecorded DESC",
+            "$where": (
+                "daterecorded >= '{cutoff_iso}' "
+                "AND saleamount > 300000"
+            ),
+        },
+        "field_map": {
+            "id":       "serialnumber",
+            "address":  "address",
+            "date":     "daterecorded",
+            "price":    "saleamount",
+            "buyer":    "town",
+            "seller":   "assessedvalue",
+            "year_built": None,
+        },
+    },
+
+    # ── Philadelphia — Ventas de Propiedades ──────────────────────
+    {
+        "city":    "Philadelphia",
+        "engine":  "socrata",
+        "url":     "https://data.phila.gov/resource/8m62-bye6.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "sale_date DESC",
+            "$where": (
+                "sale_date >= '{cutoff_iso}' "
+                "AND sale_price > 200000"
+            ),
+        },
+        "field_map": {
+            "id":       "objectid",
+            "address":  "location",
+            "date":     "sale_date",
+            "price":    "sale_price",
+            "buyer":    "grantees",
+            "seller":   "grantors",
+            "year_built": "year_built",
+        },
+    },
+
+    # ── New Orleans — Parcelas con datos de Venta ─────────────────
+    {
+        "city":    "New Orleans",
+        "engine":  "socrata",
+        "url":     "https://data.nola.gov/resource/pzqp-4ri7.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "sale_date DESC",
+            "$where": (
+                "sale_date >= '{cutoff_iso}' "
+                "AND sale_price > 150000"
+            ),
+        },
+        "field_map": {
+            "id":       "objectid",
+            "address":  "siteaddr",
+            "date":     "sale_date",
+            "price":    "sale_price",
+            "buyer":    "owner",
+            "seller":   "prev_owner",
+            "year_built": "year_built",
+        },
+    },
+
+    # ── Nashville TN — Ventas Históricas ─────────────────────────
+    {
+        "city":    "Nashville TN",
+        "engine":  "socrata",
+        "url":     "https://data.nashville.gov/resource/6399-vuxp.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "sale_date DESC",
+            "$where": (
+                "sale_date >= '{cutoff_iso}' "
+                "AND consideration > 200000"
+            ),
+        },
+        "field_map": {
+            "id":       "map_and_parcel",
+            "address":  "address",
+            "date":     "sale_date",
+            "price":    "consideration",
+            "buyer":    "grantee",
+            "seller":   "grantor",
+            "year_built": "year_built",
+        },
+    },
+
+    # ── Hartford CT — Tasación (CAMA) ────────────────────────────
+    # Propiedades con alta tasación = propietarios con capacidad de renovar
+    {
+        "city":    "Hartford CT",
+        "engine":  "socrata",
+        "url":     "https://data.hartford.gov/resource/8p3x-pg6n.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "sale_date DESC",
+            "$where": (
+                "sale_date >= '{cutoff_iso}' "
+                "AND sale_price > 150000"
+            ),
+        },
+        "field_map": {
+            "id":       "map_lot",
+            "address":  "location",
+            "date":     "sale_date",
+            "price":    "sale_price",
+            "buyer":    "owner",
+            "seller":   "prior_owner",
+            "year_built": "year_built",
+        },
+    },
+
+    # ── Orlando FL — Transacciones de Propiedad ───────────────────
+    {
+        "city":    "Orlando FL",
+        "engine":  "socrata",
+        "url":     "https://data.cityoforlando.net/resource/f63n-kp6t.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "sale_date DESC",
+            "$where": (
+                "sale_date >= '{cutoff_iso}' "
+                "AND sale_price > 200000"
+            ),
+        },
+        "field_map": {
+            "id":       "folio",
+            "address":  "address",
+            "date":     "sale_date",
+            "price":    "sale_price",
+            "buyer":    "owner_name",
+            "seller":   "previous_owner",
+            "year_built": "year_built",
+        },
+    },
+
+    # ── Edmonton Canada — Tasaciones de Propiedad ─────────────────
+    {
+        "city":    "Edmonton CA",
+        "engine":  "socrata",
+        "url":     "https://data.edmonton.ca/resource/qi6a-xu2d.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "assessment_year DESC",
+            "$where": "assessed_value > 300000",
+        },
+        "field_map": {
+            "id":       "account_number",
+            "address":  "house_number",
+            "date":     "assessment_year",
+            "price":    "assessed_value",
+            "buyer":    "neighbourhood",
+            "seller":   "property_use",
+            "year_built": "construction_year",
+        },
+    },
+
+    # ── Calgary Canada — Tasaciones Actuales ──────────────────────
+    {
+        "city":    "Calgary CA",
+        "engine":  "socrata",
+        "url":     "https://data.calgary.ca/resource/4bsw-nn7w.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "assessed_value DESC",
+            "$where": "assessed_value > 300000",
+        },
+        "field_map": {
+            "id":       "roll_number",
+            "address":  "address",
+            "date":     "tax_year",
+            "price":    "assessed_value",
+            "buyer":    "community_name",
+            "seller":   "property_use",
+            "year_built": "year_of_construction",
+        },
+    },
 ]
 
 

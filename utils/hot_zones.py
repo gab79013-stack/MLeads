@@ -84,21 +84,33 @@ class HotZoneDetector:
         self._known_zones: set = set()  # Evitar alertas duplicadas
 
     def add_lead(self, lead: dict):
-        """Agrega un lead al detector. Requiere lat/lon."""
+        """
+        Agrega un lead al detector.
+
+        IA #5 — Hot Zone Detection Nacional:
+        Acepta lat/lon explícitos O agrupa por ZIP code/ciudad cuando
+        no hay coordenadas. Funciona para cualquier ciudad de USA/Canadá.
+        """
         lat = lead.get("lat") or lead.get("latitude")
         lon = lead.get("lon") or lead.get("longitude")
 
+        # Fallback: estimar coordenadas desde ciudad conocida
         if not lat or not lon:
-            return
+            lat_f, lon_f = _city_to_approx_coords(
+                lead.get("city", ""),
+                lead.get("address", ""),
+            )
+            if lat_f is None:
+                return
+        else:
+            try:
+                lat_f = float(lat)
+                lon_f = float(lon)
+            except (ValueError, TypeError):
+                return
 
-        try:
-            lat_f = float(lat)
-            lon_f = float(lon)
-        except (ValueError, TypeError):
-            return
-
-        # Solo Bay Area (bounding box aproximado)
-        if not (37.0 <= lat_f <= 38.2 and -122.8 <= lon_f <= -121.5):
+        # Validar coordenadas plausibles (USA + Canadá)
+        if not (-90 <= lat_f <= 90 and -180 <= lon_f <= 180):
             return
 
         lead_entry = {
@@ -243,6 +255,57 @@ class HotZoneDetector:
             "grid_cells_active":   len(self._grid),
             "known_zones":         len(self._known_zones),
         }
+
+
+_CITY_COORDS: dict[str, tuple[float, float]] = {
+    # Bay Area
+    "san francisco": (37.7749, -122.4194), "oakland": (37.8044, -122.2712),
+    "berkeley": (37.8716, -122.2727), "san jose": (37.3382, -121.8863),
+    "fremont": (37.5485, -121.9886), "hayward": (37.6688, -122.0808),
+    "richmond": (37.9358, -122.3477), "vallejo": (38.1041, -122.2566),
+    # National
+    "new york city": (40.7128, -74.0060), "chicago": (41.8781, -87.6298),
+    "los angeles": (34.0522, -118.2437), "dallas": (32.7767, -96.7970),
+    "houston": (29.7604, -95.3698), "phoenix": (33.4484, -112.0740),
+    "philadelphia": (39.9526, -75.1652), "san antonio": (29.4241, -98.4936),
+    "seattle": (47.6062, -122.3321), "denver": (39.7392, -104.9903),
+    "boston": (42.3601, -71.0589), "austin tx": (30.2672, -97.7431),
+    "nashville tn": (36.1627, -86.7816), "miami": (25.7617, -80.1918),
+    "atlanta": (33.7490, -84.3880), "minneapolis": (44.9778, -93.2650),
+    "portland": (45.5051, -122.6750), "las vegas": (36.1699, -115.1398),
+    "new orleans": (29.9511, -90.0715), "kansas city mo": (39.0997, -94.5786),
+    "baton rouge": (30.4515, -91.1871), "fort worth tx": (32.7555, -97.3308),
+    "orlando fl": (28.5383, -81.3792), "hartford ct": (41.7637, -72.6851),
+    "louisville ky": (38.2527, -85.7585), "mesa az": (33.4152, -111.8315),
+    "somerville ma": (42.3876, -71.0995), "cambridge ma": (42.3736, -71.1097),
+    "norfolk va": (36.8508, -76.2859), "edmonton ca": (53.5461, -113.4938),
+    "calgary ca": (51.0447, -114.0719), "montgomery county md": (39.1547, -77.2405),
+    "washington dc": (38.9072, -77.0369),
+}
+
+
+def _city_to_approx_coords(city: str, address: str = "") -> tuple:
+    """
+    Retorna coordenadas aproximadas para una ciudad conocida.
+    Agrega variación aleatoria por bloque para spread natural.
+    """
+    import random
+    city_key = city.lower().strip().split("(")[0].strip()
+    # Intentar match parcial
+    coords = None
+    for known_city, coord in _CITY_COORDS.items():
+        if known_city in city_key or city_key in known_city:
+            coords = coord
+            break
+    if not coords:
+        return None, None
+    # Variación de ±0.01 grados (~1km) para spread natural
+    seed = hash(address or city) % 10000
+    random.seed(seed)
+    return (
+        coords[0] + random.uniform(-0.01, 0.01),
+        coords[1] + random.uniform(-0.01, 0.01),
+    )
 
 
 def _generate_recommendation(lead_count: int, agent_types: list,

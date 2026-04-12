@@ -17,6 +17,19 @@ from utils.telegram import send_message, send_message_to
 from utils.dedup import get_dedup_engine
 from utils.hot_zones import get_hot_zone_detector, format_hot_zone_alert
 
+# ── AI modules (graceful import — disabled if SDK not installed) ──────
+try:
+    from utils.ai_classifier import enrich_lead_with_classification as _ai_classify
+    _AI_CLASSIFIER_AVAILABLE = True
+except Exception:
+    _AI_CLASSIFIER_AVAILABLE = False
+
+try:
+    from utils.ai_bot import send_lead_with_actions as _send_with_actions
+    _AI_BOT_AVAILABLE = True
+except Exception:
+    _AI_BOT_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -134,6 +147,14 @@ class BaseAgent(ABC):
         for lead in new_leads:
             hz_detector.add_lead(lead)
 
+        # Paso 3b: Enriquecer con clasificación AI (trade, urgency, summary)
+        if _AI_CLASSIFIER_AVAILABLE:
+            for lead in new_leads:
+                try:
+                    _ai_classify(lead)
+                except Exception as e:
+                    logger.debug(f"[{self.agent_key}] AI classify error: {e}")
+
         # Paso 4: Enviar leads — siempre mensajes individuales
         sent_count = 0
         for lead in new_leads:
@@ -141,6 +162,26 @@ class BaseAgent(ABC):
                 self.notify(lead)
                 mark_sent(self.agent_key, lead["id"])
                 sent_count += 1
+
+                # Botones interactivos para leads HOT/WARM
+                if _AI_BOT_AVAILABLE:
+                    grade = lead.get("_scoring", {}).get("grade", "")
+                    if grade in ("HOT", "WARM"):
+                        try:
+                            score = lead.get("_scoring", {}).get("score", 0)
+                            grade_emoji = lead.get("_scoring", {}).get("grade_emoji", "")
+                            trade = lead.get("_trade", "")
+                            addr = lead.get("address", "")[:60]
+                            action_text = (
+                                f"{grade_emoji} *Lead {grade}* — {score}/100\n"
+                                f"📍 {addr}"
+                                + (f"\n🔨 {trade}" if trade else "")
+                                + "\n\n¿Te interesa este lead?"
+                            )
+                            _send_with_actions(lead, action_text)
+                        except Exception as e:
+                            logger.debug(f"[{self.agent_key}] AI bot action error: {e}")
+
                 # Fan out to individual bot_users whose preferences match.
                 try:
                     _fanout_to_bot_users(lead, self.agent_key)

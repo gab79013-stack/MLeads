@@ -12,7 +12,14 @@ from functools import wraps
 from flask import request, jsonify, g
 from utils.web_db import get_db_connection
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+if not SECRET_KEY or SECRET_KEY == "change-me-in-production":
+    import warnings
+    warnings.warn(
+        "JWT_SECRET_KEY is not set or is the insecure default. "
+        "The server will refuse to start via create_app().",
+        stacklevel=1,
+    )
 ACCESS_TOKEN_EXPIRY = int(os.getenv("JWT_ACCESS_EXPIRY", 3600))  # 1 hour
 REFRESH_TOKEN_EXPIRY = int(os.getenv("JWT_REFRESH_EXPIRY", 604800))  # 7 days
 

@@ -4,6 +4,11 @@ utils/dedup.py
 Deduplicación Cross-Agent — consolida leads de múltiples agentes
 que refieren a la MISMA propiedad en un solo lead enriquecido.
 
+IA #3 — Deduplicación semántica mejorada:
+  Además de match exacto por dirección, detecta propiedades similares
+  usando Jaccard similarity sobre tokens normalizados. Umbral: 0.75.
+  Esto captura "123 Main St" vs "123 MAIN STREET" vs "123 Main Street #A".
+
 Problema: la misma dirección "123 Main St, SF" puede aparecer como:
   - Permiso de construcción (permits_agent)
   - Inspección de framing (construction_agent)
@@ -94,6 +99,44 @@ def _address_key(address: str, city: str = "") -> str:
     if match:
         return match.group(1)
     return norm[:50]  # Fallback: primeros 50 chars
+
+
+def _jaccard_similarity(addr_a: str, addr_b: str) -> float:
+    """
+    IA #3 — Similitud semántica entre dos direcciones.
+    Usa Jaccard sobre tokens para detectar variaciones del mismo address.
+    '123 main st sf' vs '123 main street san francisco' → ~0.6
+    '123 main st'    vs '456 oak ave'                   → ~0.0
+    """
+    tokens_a = set(normalize_address(addr_a).split())
+    tokens_b = set(normalize_address(addr_b).split())
+    if not tokens_a or not tokens_b:
+        return 0.0
+    intersection = tokens_a & tokens_b
+    union        = tokens_a | tokens_b
+    return len(intersection) / len(union)
+
+
+def is_same_property(addr1: str, city1: str, addr2: str, city2: str,
+                     threshold: float = 0.72) -> bool:
+    """
+    Determina si dos leads son de la misma propiedad.
+    Combina key exacto + similitud Jaccard.
+    """
+    # Mismo key exacto → siempre match
+    if _address_key(addr1, city1) == _address_key(addr2, city2):
+        return True
+    # Ciudad diferente → nunca match
+    city1_n = city1.lower().strip().split("(")[0].strip()
+    city2_n = city2.lower().strip().split("(")[0].strip()
+    if city1_n and city2_n and city1_n != city2_n:
+        return False
+    # Similitud semántica
+    sim = _jaccard_similarity(
+        f"{addr1} {city1}",
+        f"{addr2} {city2}",
+    )
+    return sim >= threshold
 
 
 # ── Motor de Deduplicación ───────────────────────────────────────────

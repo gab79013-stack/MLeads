@@ -543,6 +543,579 @@ DECON_SOURCES = [
             "value":       "valuation",
         },
     },
+
+    # ══════════════════════════════════════════════════════════════
+    #  NATIONAL — Demolición específica con endpoints confirmados
+    # ══════════════════════════════════════════════════════════════
+
+    # ── Chicago — Demolition Permits (dataset específico) ────────
+    # Permisos SOLO de demolición: nueva construcción sigue = insulación nueva
+    {
+        "city":    "Chicago",
+        "engine":  "socrata",
+        "url":     "https://data.cityofchicago.org/resource/769j-m8ee.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "issue_date DESC",
+            "$where": "issue_date >= '{cutoff_iso}'",
+        },
+        "field_map": {
+            "id":          "permit_",
+            "address":     "street_number",
+            "desc":        "work_description",
+            "status":      "permit_status",
+            "date":        "issue_date",
+            "contractor":  "contractor_1_name",
+            "lic":         "contractor_1_license",
+            "owner":       "contact_1_name",
+            "value":       "reported_cost",
+        },
+    },
+
+    # ── Chicago — Demolition Permits (dataset alternativo) ───────
+    {
+        "city":    "Chicago (demolition-alt)",
+        "engine":  "socrata",
+        "url":     "https://data.cityofchicago.org/resource/e4xk-pud8.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "issue_date DESC",
+            "$where": "issue_date >= '{cutoff_iso}'",
+        },
+        "field_map": {
+            "id":          "permit_",
+            "address":     "street_number",
+            "desc":        "work_description",
+            "status":      "permit_status",
+            "date":        "issue_date",
+            "contractor":  "contractor_1_name",
+            "lic":         "contractor_1_license",
+            "owner":       "contact_1_name",
+            "value":       "reported_cost",
+        },
+    },
+
+    # ── Los Ángeles — Demolition Permits ─────────────────────────
+    # Demo → nueva construcción → toda la insulación nueva
+    {
+        "city":    "Los Angeles",
+        "engine":  "socrata",
+        "url":     "https://data.lacity.org/resource/nbyx-6y8e.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "issue_date DESC",
+            "$where": "issue_date >= '{cutoff_iso}'",
+        },
+        "field_map": {
+            "id":          "permit_nbr",
+            "address":     "address",
+            "desc":        "work_description",
+            "status":      "status",
+            "date":        "issue_date",
+            "contractor":  "contractors_business_name",
+            "lic":         "license_number",
+            "owner":       "applicant_name",
+            "value":       "valuation",
+        },
+    },
+
+    # ── Seattle — Demo Permits Activos ───────────────────────────
+    {
+        "city":    "Seattle",
+        "engine":  "socrata",
+        "url":     "https://data.seattle.gov/resource/54j8-iz5t.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "application_date DESC",
+            "$where": "application_date >= '{cutoff_iso}'",
+        },
+        "field_map": {
+            "id":          "application_permit_number",
+            "address":     "address",
+            "desc":        "description",
+            "status":      "status",
+            "date":        "application_date",
+            "contractor":  "applicant_name",
+            "lic":         None,
+            "owner":       "owner",
+            "value":       "value",
+        },
+    },
+
+    # ── Austin TX — Residential Demolitions ──────────────────────
+    {
+        "city":    "Austin TX",
+        "engine":  "socrata",
+        "url":     "https://data.austintexas.gov/resource/x6mf-sksh.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "issued_date DESC",
+            "$where": "issued_date >= '{cutoff_iso}'",
+        },
+        "field_map": {
+            "id":          "permit_num",
+            "address":     "address",
+            "desc":        "description",
+            "status":      "status",
+            "date":        "issued_date",
+            "contractor":  "contractor_company_name",
+            "lic":         "contractor_license_number",
+            "owner":       "legal_entity_name",
+            "value":       "job_value",
+        },
+    },
+
+    # ── NYC — HPD Housing Violations ─────────────────────────────
+    # Violaciones de mantenimiento de vivienda ABIERTAS = propietario
+    # obligado a contratar para reparar (roofing, plumbing, electrical)
+    {
+        "city":    "New York City (HPD Violations)",
+        "engine":  "socrata",
+        "url":     "https://data.cityofnewyork.us/resource/wvxf-8bms.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "novissueddate DESC",
+            "$where": (
+                "novissueddate >= '{cutoff_iso}' "
+                "AND currentstatus = 'Open'"
+            ),
+        },
+        "field_map": {
+            "id":          "violationid",
+            "address":     "housenumber",
+            "desc":        "novdescription",
+            "status":      "currentstatus",
+            "date":        "novissueddate",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "ownername",
+            "value":       None,
+        },
+        "_is_violation": True,
+    },
+
+    # ── Chicago — Edificios Vacantes ─────────────────────────────
+    # Edificios vacantes reportados = candidatos a demolición/renovación
+    {
+        "city":    "Chicago (Vacant Buildings)",
+        "engine":  "socrata",
+        "url":     "https://data.cityofchicago.org/resource/8v9j-7f9s.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "date_service_request_was_received DESC",
+            "$where": "date_service_request_was_received >= '{cutoff_iso}'",
+        },
+        "field_map": {
+            "id":          "service_request_number",
+            "address":     "street_address",
+            "desc":        "type_of_service_request",
+            "status":      "status",
+            "date":        "date_service_request_was_received",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       None,
+            "value":       None,
+        },
+        "_is_violation": True,
+    },
+
+    # ══════════════════════════════════════════════════════════════
+    #  BATCH 2 — Violaciones, asbestos y demoliciones adicionales
+    # ══════════════════════════════════════════════════════════════
+
+    # ── NYC — Asbestos Notifications (más reciente) ───────────────
+    # Remoción de asbesto = insulación vieja retirada = REEMPLAZO OBLIGATORIO
+    # Mejor oportunidad directa para sub-contractors de insulación
+    {
+        "city":    "New York City (Asbestos)",
+        "engine":  "socrata",
+        "url":     "https://data.cityofnewyork.us/resource/qvad-kvk3.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "_is_asbestos": True,
+        "params": {
+            "$limit": 100,
+            "$order": "start_date DESC",
+            "$where": "start_date >= '{cutoff_iso}'",
+        },
+        "field_map": {
+            "id":          "job_number",
+            "address":     "house_number",
+            "desc":        "description",
+            "status":      "filing_status",
+            "date":        "start_date",
+            "contractor":  "filing_representative",
+            "lic":         None,
+            "owner":       "owner",
+            "value":       None,
+        },
+    },
+
+    # ── NYC — HPD Housing Maintenance Complaints ──────────────────
+    # Quejas abiertas de mantenimiento = propietario debe contratar reparaciones
+    {
+        "city":    "New York City (HPD Complaints)",
+        "engine":  "socrata",
+        "url":     "https://data.cityofnewyork.us/resource/ygpa-z7cr.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "_is_violation": True,
+        "params": {
+            "$limit": 100,
+            "$order": "complaint_open_date DESC",
+            "$where": (
+                "complaint_open_date >= '{cutoff_iso}' "
+                "AND status = 'Open'"
+            ),
+        },
+        "field_map": {
+            "id":          "complaint_id",
+            "address":     "buildingaddress",
+            "desc":        "complaint_category",
+            "status":      "status",
+            "date":        "complaint_open_date",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "buildingid",
+            "value":       None,
+        },
+    },
+
+    # ── NYC — Open HPD Violations ────────────────────────────────
+    # Vista optimizada de violaciones activas solamente
+    {
+        "city":    "New York City (Open HPD)",
+        "engine":  "socrata",
+        "url":     "https://data.cityofnewyork.us/resource/csn4-vhvf.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "_is_violation": True,
+        "params": {
+            "$limit": 100,
+            "$order": "novissueddate DESC",
+            "$where": "novissueddate >= '{cutoff_iso}'",
+        },
+        "field_map": {
+            "id":          "violationid",
+            "address":     "housenumber",
+            "desc":        "novdescription",
+            "status":      "currentstatus",
+            "date":        "novissueddate",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "ownername",
+            "value":       None,
+        },
+    },
+
+    # ── NYC — Housing Litigations ────────────────────────────────
+    # Litigaciones judiciales = reparaciones obligadas por tribunal
+    # Alta urgencia: propietario DEBE contratar o paga multas
+    {
+        "city":    "New York City (Litigations)",
+        "engine":  "socrata",
+        "url":     "https://data.cityofnewyork.us/resource/59kj-x8nc.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "_is_violation": True,
+        "params": {
+            "$limit": 100,
+            "$order": "caseopendate DESC",
+            "$where": (
+                "caseopendate >= '{cutoff_iso}' "
+                "AND casestatus = 'OPEN'"
+            ),
+        },
+        "field_map": {
+            "id":          "litigationid",
+            "address":     "buildingaddress",
+            "desc":        "openpaper",
+            "status":      "casestatus",
+            "date":        "caseopendate",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "respondent",
+            "value":       None,
+        },
+    },
+
+    # ── SF — Building Inspections ─────────────────────────────────
+    # Inspecciones = detectan violaciones → propietario debe contratar
+    {
+        "city":    "San Francisco (Inspections)",
+        "engine":  "socrata",
+        "url":     "https://data.sfgov.org/resource/vckc-dh2h.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "_is_violation": True,
+        "params": {
+            "$limit": 100,
+            "$order": "inspection_date DESC",
+            "$where": (
+                "inspection_date >= '{cutoff_iso}' "
+                "AND result = 'Fail'"
+            ),
+        },
+        "field_map": {
+            "id":          "inspection_number",
+            "address":     "address",
+            "desc":        "violation_description",
+            "status":      "result",
+            "date":        "inspection_date",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "owner_name",
+            "value":       None,
+        },
+    },
+
+    # ── SF — DBI Complaints ───────────────────────────────────────
+    # Quejas a DBI (Dept. of Building Inspection) = reparaciones pendientes
+    {
+        "city":    "San Francisco (DBI Complaints)",
+        "engine":  "socrata",
+        "url":     "https://data.sfgov.org/resource/gm2e-bten.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "_is_violation": True,
+        "params": {
+            "$limit": 100,
+            "$order": "complaint_date DESC",
+            "$where": (
+                "complaint_date >= '{cutoff_iso}' "
+                "AND status = 'Open'"
+            ),
+        },
+        "field_map": {
+            "id":          "complaint_number",
+            "address":     "address",
+            "desc":        "complaint_description",
+            "status":      "status",
+            "date":        "complaint_date",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "owner_name",
+            "value":       None,
+        },
+    },
+
+    # ── SF — Notices of Violation (DBI) ──────────────────────────
+    # NOV emitido = propietario tiene plazo legal para contratar reparación
+    {
+        "city":    "San Francisco (NOV)",
+        "engine":  "socrata",
+        "url":     "https://data.sfgov.org/resource/nbtm-fbw5.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "_is_violation": True,
+        "params": {
+            "$limit": 100,
+            "$order": "notice_date DESC",
+            "$where": "notice_date >= '{cutoff_iso}'",
+        },
+        "field_map": {
+            "id":          "notice_number",
+            "address":     "address",
+            "desc":        "violation_description",
+            "status":      "status",
+            "date":        "notice_date",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "owner_name",
+            "value":       None,
+        },
+    },
+
+    # ── Seattle — Code Complaints & Violations ────────────────────
+    # Quejas de código abierto = propietario debe remediar = contratar subs
+    {
+        "city":    "Seattle (Code Violations)",
+        "engine":  "socrata",
+        "url":     "https://data.seattle.gov/resource/8s4s-3hc9.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "_is_violation": True,
+        "params": {
+            "$limit": 100,
+            "$order": "complaint_date DESC",
+            "$where": (
+                "complaint_date >= '{cutoff_iso}' "
+                "AND status = 'Open'"
+            ),
+        },
+        "field_map": {
+            "id":          "complaint_id",
+            "address":     "address",
+            "desc":        "complaint_type",
+            "status":      "status",
+            "date":        "complaint_date",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "owner_name",
+            "value":       None,
+        },
+    },
+
+    # ── Seattle — URM Buildings (Unreinforced Masonry) ────────────
+    # Edificios de mampostería sin refuerzo = retrofit sísmico OBLIGATORIO
+    # = contratos grandes de reconstrucción + insulación
+    {
+        "city":    "Seattle (URM Seismic)",
+        "engine":  "socrata",
+        "url":     "https://data.seattle.gov/resource/jgaf-27y2.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {"$limit": 100},
+        "field_map": {
+            "id":          "objectid",
+            "address":     "address",
+            "desc":        "occupancy",
+            "status":      "urm_status",
+            "date":        None,
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "owner_name",
+            "value":       None,
+        },
+        "_is_violation": True,
+    },
+
+    # ── Austin TX — Code Complaint Cases ─────────────────────────
+    {
+        "city":    "Austin TX (Code Complaints)",
+        "engine":  "socrata",
+        "url":     "https://data.austintexas.gov/resource/6wtj-zbtb.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "_is_violation": True,
+        "params": {
+            "$limit": 100,
+            "$order": "open_date DESC",
+            "$where": (
+                "open_date >= '{cutoff_iso}' "
+                "AND case_status = 'OPEN'"
+            ),
+        },
+        "field_map": {
+            "id":          "case_number",
+            "address":     "address",
+            "desc":        "case_type",
+            "status":      "case_status",
+            "date":        "open_date",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "owner_name",
+            "value":       None,
+        },
+    },
+
+    # ── Los Ángeles — Propiedades en Foreclosure 2025 ─────────────
+    # Propiedades en foreclosure = nuevo propietario (banco/inversor)
+    # que habitualmente renueva/demuele antes de revender
+    {
+        "city":    "Los Angeles (Foreclosure 2025)",
+        "engine":  "socrata",
+        "url":     "https://data.lacity.org/resource/2qnc-kq4g.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "_is_violation": True,
+        "params": {"$limit": 100},
+        "field_map": {
+            "id":          "apn",
+            "address":     "address",
+            "desc":        "property_type",
+            "status":      "status",
+            "date":        "registration_date",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "owner_name",
+            "value":       None,
+        },
+    },
+
+    # ── Los Ángeles — Propiedades en Foreclosure 2024 ─────────────
+    {
+        "city":    "Los Angeles (Foreclosure 2024)",
+        "engine":  "socrata",
+        "url":     "https://data.lacity.org/resource/aegg-btkk.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "_is_violation": True,
+        "params": {"$limit": 100},
+        "field_map": {
+            "id":          "apn",
+            "address":     "address",
+            "desc":        "property_type",
+            "status":      "status",
+            "date":        "registration_date",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "owner_name",
+            "value":       None,
+        },
+    },
+
+    # ── Los Ángeles — Demolition Permits (vista específica) ───────
+    {
+        "city":    "Los Angeles (Demo 2)",
+        "engine":  "socrata",
+        "url":     "https://data.lacity.org/resource/fsgi-y87k.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "params": {
+            "$limit": 100,
+            "$order": "issue_date DESC",
+            "$where": f"issue_date >= '{cutoff_iso}'",
+        },
+        "field_map": {
+            "id":          "permit_nbr",
+            "address":     "address",
+            "desc":        "work_description",
+            "status":      "status",
+            "date":        "issue_date",
+            "contractor":  "contractors_business_name",
+            "lic":         "license_number",
+            "owner":       "applicant_name",
+            "value":       "valuation",
+        },
+    },
+
+    # ── Chicago — Foreclosed Rental Properties ────────────────────
+    # Propiedades de alquiler en foreclosure = banco busca GC para reparar/vender
+    {
+        "city":    "Chicago (Foreclosed Rental)",
+        "engine":  "socrata",
+        "url":     "https://data.cityofchicago.org/resource/yhcw-iu53.json",
+        "timeout": SOURCE_TIMEOUT,
+        "_skip_if_no_data": True,
+        "_is_violation": True,
+        "params": {"$limit": 100},
+        "field_map": {
+            "id":          "pin",
+            "address":     "address",
+            "desc":        "property_type",
+            "status":      "registration_status",
+            "date":        "registration_date",
+            "contractor":  None,
+            "lic":         None,
+            "owner":       "contact_name",
+            "value":       None,
+        },
+    },
 ]
 
 
@@ -681,6 +1254,15 @@ class DeconstuctionAgent(BaseAgent):
                                 "opportunity": "Remoción de asbesto → reemplazo de insulación obligatorio",
                             }
 
+                        # Para violaciones de código (reparaciones obligatorias)
+                        if not decon_info and src.get("_is_violation"):
+                            decon_info = {
+                                "decon_type":  "code_violation",
+                                "priority":    4,
+                                "decon_emoji": "🚨",
+                                "opportunity": "Violación de código abierta → propietario obligado a contratar reparaciones",
+                            }
+
                         if not decon_info:
                             continue
 
@@ -690,8 +1272,8 @@ class DeconstuctionAgent(BaseAgent):
 
                         value = _parse_value(get(raw, "value"))
 
-                        # Filtrar por valor mínimo
-                        if value < MIN_DECON_VALUE:
+                        # Filtrar por valor mínimo (violaciones no tienen valor — se eximen)
+                        if not src.get("_is_violation") and value < MIN_DECON_VALUE:
                             continue
 
                         lead = {

@@ -42,6 +42,12 @@ _allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
 if _allowed_origins != "*":
     CORS(app, origins=[o.strip() for o in _allowed_origins.split(",")])
 else:
+    import warnings
+    warnings.warn(
+        "ALLOWED_ORIGINS is not set — CORS is open to all origins. "
+        "Set ALLOWED_ORIGINS in .env for production (e.g., https://your-domain.com).",
+        stacklevel=1,
+    )
     CORS(app)
 
 # ─── Rate Limiting ────────────────────────────────────────
@@ -361,7 +367,9 @@ def list_leads():
     agent_name = request.args.get('agent')
     min_score = request.args.get('min_score', 0, type=int)
     min_value = request.args.get('min_value', 0, type=int)
-    status = request.args.get('status', 'all')  # all, new, contacted, pending
+    status = request.args.get('status', 'all')
+    if status not in {'all', 'new', 'contacted', 'pending'}:
+        return jsonify({"error": "Invalid status. Must be one of: all, new, contacted, pending"}), 400
     inspection_days = request.args.get('inspection_days', type=int)  # Filter leads with upcoming inspections within N days
     page = request.args.get('page', 1, type=int)
     per_page = 100
@@ -629,6 +637,10 @@ def log_lead_contact(lead_id):
     contact_type = data.get('type', 'view')
     notes = data.get('notes', '')
 
+    valid_contact_types = {'view', 'phone_call', 'email', 'text', 'visit', 'other'}
+    if contact_type not in valid_contact_types:
+        contact_type = 'other'
+
     conn = get_db_connection()
     c = conn.cursor()
 
@@ -815,6 +827,7 @@ def require_admin(f):
 
 @app.route('/api/admin/users', methods=['POST'])
 @require_admin
+@limiter.limit("20 per minute")
 def create_user():
     """Create a new user (admin only)."""
     data = request.get_json() or {}
@@ -836,9 +849,19 @@ def create_user():
     # Calculate expiration timestamp
     expiration = None
     if expires_in_hours:
-        from datetime import timedelta
-        expiration = (datetime.utcnow() + timedelta(hours=int(expires_in_hours))).strftime("%Y-%m-%d %H:%M:%S")
+        hours = int(expires_in_hours)
+        if hours <= 0 or hours > 8760:  # max 1 year
+            return jsonify({"error": "expires_in_hours must be between 1 and 8760"}), 400
+        expiration = (datetime.utcnow() + timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
     elif expires_at:
+        try:
+            parsed_exp = datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return jsonify({"error": "expires_at must be in format: YYYY-MM-DD HH:MM:SS"}), 400
+        if parsed_exp <= datetime.utcnow():
+            return jsonify({"error": "expires_at must be in the future"}), 400
+        if parsed_exp > datetime.utcnow() + timedelta(days=3650):  # max 10 years
+            return jsonify({"error": "expires_at cannot be more than 10 years in the future"}), 400
         expiration = expires_at
 
     password_hash = hash_password(password)
@@ -903,8 +926,9 @@ def create_user():
         return jsonify(result), 201
 
     except Exception as e:
+        logger.error(f"Error creating user: {e}", exc_info=True)
         conn.close()
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": "Failed to create user. Username or email may already exist."}), 400
 
 
 @app.route('/api/admin/users/<int:user_id>/expiration', methods=['PUT'])
@@ -945,8 +969,23 @@ def update_user_expiration(user_id):
     # Calculate new expiration
     expiration = None
     if expires_in_hours:
-        expiration = (datetime.utcnow() + timedelta(hours=int(expires_in_hours))).strftime("%Y-%m-%d %H:%M:%S")
+        hours = int(expires_in_hours)
+        if hours <= 0 or hours > 8760:
+            conn.close()
+            return jsonify({"error": "expires_in_hours must be between 1 and 8760"}), 400
+        expiration = (datetime.utcnow() + timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
     elif expires_at:
+        try:
+            parsed_exp = datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            conn.close()
+            return jsonify({"error": "expires_at must be in format: YYYY-MM-DD HH:MM:SS"}), 400
+        if parsed_exp <= datetime.utcnow():
+            conn.close()
+            return jsonify({"error": "expires_at must be in the future"}), 400
+        if parsed_exp > datetime.utcnow() + timedelta(days=3650):
+            conn.close()
+            return jsonify({"error": "expires_at cannot be more than 10 years in the future"}), 400
         expiration = expires_at
     else:
         conn.close()
@@ -1001,7 +1040,7 @@ def list_scheduled_inspections():
 
     except Exception as e:
         logger.error(f"Error listing inspections: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/leads/<path:lead_id>/scheduled_inspections', methods=['GET'])
@@ -1028,7 +1067,7 @@ def get_lead_scheduled_inspections(lead_id):
 
     except Exception as e:
         logger.error(f"Error getting lead inspections: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/scheduled_inspections', methods=['POST'])
@@ -1087,7 +1126,7 @@ def create_scheduled_inspection():
 
     except Exception as e:
         logger.error(f"Error creating inspection: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 # ─────────────────────────────────────────────────────────
@@ -1106,7 +1145,7 @@ def get_scheduler_status_endpoint():
         return jsonify(status), 200
     except Exception as e:
         logger.error(f"Error getting scheduler status: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/admin/scheduler/fetch-now', methods=['POST'])
@@ -1125,7 +1164,7 @@ def trigger_inspection_fetch():
         }), 200
     except Exception as e:
         logger.error(f"Error triggering fetch: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/admin/scheduler/cleanup', methods=['POST'])
@@ -1147,7 +1186,7 @@ def trigger_cleanup():
         }), 200
     except Exception as e:
         logger.error(f"Error during cleanup: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 # ─────────────────────────────────────────────────────────
@@ -1217,7 +1256,7 @@ def list_all_users():
     except Exception as e:
         logger.error(f"Error listing users: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/admin/users/<int:user_id>', methods=['GET'])
@@ -1283,11 +1322,12 @@ def get_user_detail(user_id):
     except Exception as e:
         logger.error(f"Error getting user: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/admin/users/<int:user_id>', methods=['PUT'])
 @require_admin
+@limiter.limit("20 per minute")
 def update_user(user_id):
     """Update user information (admin only)."""
     user_id_current = g.user_id
@@ -1324,8 +1364,18 @@ def update_user(user_id):
             values.append(int(data['is_active']))
 
         if 'expires_at' in data:
+            raw_exp = data['expires_at']
+            if raw_exp is not None:
+                try:
+                    parsed_exp = datetime.strptime(raw_exp, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    conn.close()
+                    return jsonify({"error": "expires_at must be in format: YYYY-MM-DD HH:MM:SS"}), 400
+                if parsed_exp <= datetime.utcnow():
+                    conn.close()
+                    return jsonify({"error": "expires_at must be in the future"}), 400
             updates.append("expires_at = ?")
-            values.append(data['expires_at'])
+            values.append(raw_exp)
 
         if updates:
             updates.append("updated_at = CURRENT_TIMESTAMP")
@@ -1365,11 +1415,12 @@ def update_user(user_id):
     except Exception as e:
         logger.error(f"Error updating user: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/admin/users/<int:user_id>/roles', methods=['PUT'])
 @require_admin
+@limiter.limit("20 per minute")
 def update_user_roles(user_id):
     """Update user roles (admin only)."""
     user_id_current = g.user_id
@@ -1414,11 +1465,12 @@ def update_user_roles(user_id):
     except Exception as e:
         logger.error(f"Error updating roles: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/admin/users/<int:user_id>/access', methods=['PUT'])
 @require_admin
+@limiter.limit("20 per minute")
 def update_user_access(user_id):
     """Update user city and agent access (admin only)."""
     user_id_current = g.user_id
@@ -1464,11 +1516,12 @@ def update_user_access(user_id):
     except Exception as e:
         logger.error(f"Error updating access: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
 @require_admin
+@limiter.limit("10 per minute")
 def delete_user(user_id):
     """Delete user (soft or hard delete) (admin only)."""
     user_id_current = g.user_id
@@ -1522,7 +1575,7 @@ def delete_user(user_id):
     except Exception as e:
         logger.error(f"Error deleting user: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 # ─────────────────────────────────────────────────────────
@@ -1544,7 +1597,7 @@ def list_all_cities():
     except Exception as e:
         logger.error(f"Error listing cities: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/admin/agents', methods=['GET'])
@@ -1562,7 +1615,7 @@ def list_all_agents():
     except Exception as e:
         logger.error(f"Error listing agents: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 # ─────────────────────────────────────────────────────────
@@ -1608,7 +1661,7 @@ def get_lead_contact_history(lead_id):
     except Exception as e:
         logger.error(f"Error getting contact history: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/leads/<path:lead_id>/notes', methods=['GET'])
@@ -1660,7 +1713,7 @@ def get_lead_notes(lead_id):
     except Exception as e:
         logger.error(f"Error getting notes: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/leads/<path:lead_id>/notes', methods=['POST'])
@@ -1716,7 +1769,7 @@ def create_lead_note(lead_id):
     except Exception as e:
         logger.error(f"Error creating note: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/leads/<path:lead_id>/notes/<int:note_id>', methods=['PUT'])
@@ -1771,7 +1824,7 @@ def update_lead_note(lead_id, note_id):
     except Exception as e:
         logger.error(f"Error updating note: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/leads/<path:lead_id>/notes/<int:note_id>', methods=['DELETE'])
@@ -1815,7 +1868,7 @@ def delete_lead_note(lead_id, note_id):
     except Exception as e:
         logger.error(f"Error deleting note: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 # ─────────────────────────────────────────────────────────
@@ -1922,7 +1975,7 @@ def update_lead_view(view_id):
     except Exception as e:
         logger.error(f"Error updating view: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/leads/views/<int:view_id>', methods=['DELETE'])
@@ -2035,7 +2088,7 @@ def get_all_settings():
     except Exception as e:
         logger.error(f"Error getting settings: {e}")
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 # ─────────────────────────────────────────────────────────
@@ -2056,7 +2109,7 @@ def list_bot_users_endpoint():
         }), 200
     except Exception as e:
         logger.error(f"Error listing bot users: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/admin/bot-users/<int:bot_user_id>/trial', methods=['POST'])
@@ -2115,7 +2168,7 @@ def bot_users_stats():
     try:
         return jsonify(bu.get_stats()), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 # ─────────────────────────────────────────────────────────
@@ -2138,7 +2191,7 @@ def stripe_webhook():
         return jsonify({"received": True, "handled": handled}), 200
     except Exception as e:
         logger.exception(f"Stripe webhook handler error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 # ─────────────────────────────────────────────────────────
@@ -2182,16 +2235,17 @@ def _resolve_swipe_identity():
 
 
 def _count_swipes(user_id, anon_id) -> int:
+    """Count only right-swipes (likes) — dislikes don't consume quota."""
     conn = get_db_connection()
     c = conn.cursor()
     if user_id:
         c.execute(
-            "SELECT COUNT(*) FROM swipe_actions WHERE user_id = ?",
+            "SELECT COUNT(*) FROM swipe_actions WHERE user_id = ? AND action = 'like'",
             (user_id,),
         )
     elif anon_id:
         c.execute(
-            "SELECT COUNT(*) FROM swipe_actions WHERE anon_id = ?",
+            "SELECT COUNT(*) FROM swipe_actions WHERE anon_id = ? AND action = 'like'",
             (anon_id,),
         )
     else:
@@ -2730,6 +2784,13 @@ def swipe_action():
         return jsonify({"error": "failed to record swipe"}), 500
     conn.close()
 
+    # ── Alert admin after 50 consecutive rejections ───────────────────────────
+    if action == 'dislike':
+        try:
+            _check_and_alert_rejections(user_id, anon_id)
+        except Exception as _alert_err:
+            logger.debug(f"rejection alert check failed: {_alert_err}")
+
     swipes_count = _count_swipes(user_id, anon_id)
     remaining = None
     auth_required = False
@@ -2744,6 +2805,41 @@ def swipe_action():
         "swipes_count":  swipes_count,
         "remaining":     remaining,
     }), 200
+
+
+def _check_and_alert_rejections(user_id, anon_id):
+    """Send admin alert when a user hits 50 rejections (dislikes)."""
+    REJECTION_ALERT_THRESHOLD = 50
+    conn = get_db_connection()
+    c = conn.cursor()
+    if user_id:
+        c.execute(
+            "SELECT COUNT(*) FROM swipe_actions WHERE user_id = ? AND action = 'dislike'",
+            (user_id,)
+        )
+    elif anon_id:
+        c.execute(
+            "SELECT COUNT(*) FROM swipe_actions WHERE anon_id = ? AND action = 'dislike'",
+            (anon_id,)
+        )
+    else:
+        conn.close()
+        return
+    count = c.fetchone()[0]
+    conn.close()
+
+    if count == REJECTION_ALERT_THRESHOLD:
+        # Send Telegram notification to admin
+        try:
+            from utils.telegram import send_message
+            identity = f"user_id={user_id}" if user_id else f"anon_id={anon_id}"
+            send_message(
+                f"⚠️ *Alerta de desinterés*\n"
+                f"El usuario `{identity}` ha rechazado *{count} leads* consecutivos.\n"
+                f"Puede necesitar ayuda para encontrar leads relevantes."
+            )
+        except Exception as e:
+            logger.warning(f"Failed to send rejection alert: {e}")
 
 
 @app.route('/api/swipe/upgrade-info', methods=['GET'])
@@ -2985,6 +3081,15 @@ def swipe_claim_anon():
 
     conn = get_db_connection()
     c = conn.cursor()
+
+    # Get anon likes before migrating (to create lead_contacts records)
+    c.execute("""
+        SELECT lead_id FROM swipe_actions
+        WHERE anon_id = ? AND action = 'like' AND user_id IS NULL
+          AND lead_id NOT IN (SELECT lead_id FROM swipe_actions WHERE user_id = ?)
+    """, (anon_id, g.user_id))
+    anon_like_ids = [row[0] for row in c.fetchall()]
+
     c.execute("""
         UPDATE swipe_actions
            SET user_id = ?, anon_id = NULL
@@ -2995,6 +3100,17 @@ def swipe_claim_anon():
            )
     """, (g.user_id, anon_id, g.user_id))
     migrated = c.rowcount
+
+    # Also insert lead_contacts for every migrated like so history shows up in profile
+    for lead_id in anon_like_ids:
+        try:
+            c.execute("""
+                INSERT OR IGNORE INTO lead_contacts (user_id, lead_id, contact_type, notes)
+                VALUES (?, ?, 'swipe_like', 'migrated from anonymous session')
+            """, (g.user_id, lead_id))
+        except Exception:
+            pass
+
     # Drop any remaining anon rows for leads the user already swiped
     c.execute("DELETE FROM swipe_actions WHERE anon_id = ?", (anon_id,))
     conn.commit()
@@ -3096,6 +3212,8 @@ def swipe_log_contact():
     data = request.get_json(silent=True) or {}
     lead_id = (data.get('lead_id') or '').strip()
     contact_type = data.get('contact_type', 'phone')
+    if contact_type not in {'phone', 'email', 'text', 'visit', 'other'}:
+        contact_type = 'other'
     if not lead_id:
         return jsonify({"error": "lead_id required"}), 400
     conn = get_db_connection()
@@ -3132,7 +3250,7 @@ def list_feedback():
         rows = [dict(r) for r in c.fetchall()]
     except Exception as e:
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
     conn.close()
     return jsonify({"feedback": rows, "total": total, "page": page, "pages": (total + per_page - 1) // per_page}), 200
 
@@ -3155,10 +3273,10 @@ def delete_feedback(fb_id):
 def create_app():
     """Application factory."""
     # Validate required secrets before accepting traffic
-    jwt_secret = os.getenv("JWT_SECRET", "")
-    if not jwt_secret:
+    jwt_secret = os.getenv("JWT_SECRET_KEY", "")
+    if not jwt_secret or jwt_secret == "change-me-in-production":
         raise RuntimeError(
-            "JWT_SECRET environment variable is not set. "
+            "JWT_SECRET_KEY environment variable is not set or is the default value. "
             "Set it to a long random string before starting the server."
         )
 
