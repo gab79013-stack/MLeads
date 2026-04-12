@@ -1079,7 +1079,7 @@ DECON_SOURCES = [
         "params": {
             "$limit": 100,
             "$order": "issue_date DESC",
-            "$where": f"issue_date >= '{cutoff_iso}'",
+            "$where": "issue_date >= '{cutoff_iso}'",
         },
         "field_map": {
             "id":          "permit_nbr",

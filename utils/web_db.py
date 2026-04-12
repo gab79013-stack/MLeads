@@ -16,8 +16,33 @@ from pathlib import Path
 DB_PATH = os.getenv("DB_PATH", "data/leads.db")
 
 
+def _recover_wal_corruption(db_path: str) -> None:
+    """Remove stale WAL/SHM files that cause 'database disk image is malformed'."""
+    import logging
+    log = logging.getLogger(__name__)
+    for ext in (".db-wal", ".db-shm", "-wal", "-shm"):
+        candidate = db_path + ext if not db_path.endswith(".db") else db_path[:-3] + ext
+        # Also try replacing .db suffix
+        candidate2 = db_path.replace(".db", ext) if ".db" in db_path else None
+        for path in filter(None, [candidate, candidate2]):
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                    log.warning("Removed stale WAL/SHM file to recover DB: %s", path)
+                except OSError as e:
+                    log.error("Could not remove %s: %s", path, e)
+
+
 def init_web_db():
     """Initialize web dashboard schema (runs once on app startup)."""
+    # Guard against corrupted WAL that prevents startup
+    try:
+        test_conn = sqlite3.connect(DB_PATH, timeout=5)
+        test_conn.execute("PRAGMA integrity_check")
+        test_conn.close()
+    except sqlite3.DatabaseError:
+        _recover_wal_corruption(DB_PATH)
+
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
