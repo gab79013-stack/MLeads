@@ -51,29 +51,34 @@ try:
 except Exception:
     _HEALTH_CHECK_AVAILABLE = False
 
-from agents.permits_agent    import PermitsAgent
-from agents.solar_agent      import SolarAgent
-from agents.rodents_agent    import RodentsAgent
-from agents.flood_agent      import FloodAgent
-from agents.realestate_agent import RealEstateAgent
-from agents.energy_agent     import EnergyAgent
-from agents.places_agent     import PlacesAgent
-from agents.yelp_agent         import YelpAgent
-from agents.construction_agent import ConstructionAgent
-from agents.deconstruction_agent import DeconstuctionAgent
+from agents.permits_agent          import PermitsAgent
+from agents.solar_agent            import SolarAgent
+from agents.rodents_agent          import RodentsAgent
+from agents.flood_agent            import FloodAgent
+from agents.realestate_agent       import RealEstateAgent
+from agents.energy_agent           import EnergyAgent
+from agents.places_agent           import PlacesAgent
+from agents.yelp_agent             import YelpAgent
+from agents.construction_agent     import ConstructionAgent
+from agents.deconstruction_agent   import DeconstuctionAgent
+from agents.weather_agent          import WeatherAgent
+from agents.federal_contracts_agent import FederalContractsAgent
 
 # ── Registro de agentes ────────────────────────────────────────────
 AGENT_REGISTRY = {
-    "permits":      {"class": PermitsAgent,       "env_key": "AGENT_PERMITS",      "interval_key": "INTERVAL_PERMITS",      "default_interval": 60},
-    "solar":        {"class": SolarAgent,         "env_key": "AGENT_SOLAR",        "interval_key": "INTERVAL_SOLAR",        "default_interval": 60},
-    "rodents":      {"class": RodentsAgent,       "env_key": "AGENT_RODENTS",      "interval_key": "INTERVAL_RODENTS",      "default_interval": 120},
-    "flood":        {"class": FloodAgent,         "env_key": "AGENT_FLOOD",        "interval_key": "INTERVAL_FLOOD",        "default_interval": 30},
-    "construction": {"class": ConstructionAgent,  "env_key": "AGENT_CONSTRUCTION", "interval_key": "INTERVAL_CONSTRUCTION", "default_interval": 60},
-    "realestate":   {"class": RealEstateAgent,    "env_key": "AGENT_REALESTATE",   "interval_key": "INTERVAL_REALESTATE",   "default_interval": 120},
-    "energy":       {"class": EnergyAgent,        "env_key": "AGENT_ENERGY",       "interval_key": "INTERVAL_ENERGY",       "default_interval": 360},
-    "places":       {"class": PlacesAgent,        "env_key": "AGENT_PLACES",       "interval_key": "INTERVAL_PLACES",       "default_interval": 1440},
-    "yelp":         {"class": YelpAgent,          "env_key": "AGENT_YELP",         "interval_key": "INTERVAL_YELP",         "default_interval": 1440},
-    "deconstruction": {"class": DeconstuctionAgent, "env_key": "AGENT_DECONSTRUCTION", "interval_key": "INTERVAL_DECONSTRUCTION", "default_interval": 120},
+    "permits":           {"class": PermitsAgent,          "env_key": "AGENT_PERMITS",           "interval_key": "INTERVAL_PERMITS",           "default_interval": 60},
+    "solar":             {"class": SolarAgent,            "env_key": "AGENT_SOLAR",             "interval_key": "INTERVAL_SOLAR",             "default_interval": 60},
+    "rodents":           {"class": RodentsAgent,          "env_key": "AGENT_RODENTS",           "interval_key": "INTERVAL_RODENTS",           "default_interval": 120},
+    "flood":             {"class": FloodAgent,            "env_key": "AGENT_FLOOD",             "interval_key": "INTERVAL_FLOOD",             "default_interval": 30},
+    "construction":      {"class": ConstructionAgent,     "env_key": "AGENT_CONSTRUCTION",      "interval_key": "INTERVAL_CONSTRUCTION",      "default_interval": 60},
+    "realestate":        {"class": RealEstateAgent,       "env_key": "AGENT_REALESTATE",        "interval_key": "INTERVAL_REALESTATE",        "default_interval": 120},
+    "energy":            {"class": EnergyAgent,           "env_key": "AGENT_ENERGY",            "interval_key": "INTERVAL_ENERGY",            "default_interval": 360},
+    "places":            {"class": PlacesAgent,           "env_key": "AGENT_PLACES",            "interval_key": "INTERVAL_PLACES",            "default_interval": 1440},
+    "yelp":              {"class": YelpAgent,             "env_key": "AGENT_YELP",              "interval_key": "INTERVAL_YELP",              "default_interval": 1440},
+    "deconstruction":    {"class": DeconstuctionAgent,    "env_key": "AGENT_DECONSTRUCTION",    "interval_key": "INTERVAL_DECONSTRUCTION",    "default_interval": 120},
+    # ── Nuevos agentes (APIs gratuitas) ─────────────────────────────
+    "weather":           {"class": WeatherAgent,          "env_key": "AGENT_WEATHER",           "interval_key": "INTERVAL_WEATHER",           "default_interval": 120},
+    "federal_contracts": {"class": FederalContractsAgent, "env_key": "AGENT_FEDERAL_CONTRACTS", "interval_key": "INTERVAL_FEDERAL_CONTRACTS", "default_interval": 360},
 }
 
 # ⚡ Instancias singleton — creadas UNA sola vez

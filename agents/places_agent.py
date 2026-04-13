@@ -1,11 +1,14 @@
 """
 agents/places_agent.py
 ━━━━━━━━━━━━━━━━━━━━━━
-📍 Google Places — Negocios de Construcción Activos
+📍 Negocios de Construcción Activos — Bay Area
 
-Fuente: Google Places API (Nearby Search)
-  - Free tier: $200/mes en créditos (= ~5,000 búsquedas)
-  - Busca negocios activos de construcción, remodelación, HVAC
+Fuentes (en orden de prioridad):
+  1. Google Places API (Nearby Search) — $200/mes créditos gratuitos
+     → Más completo: rating, teléfono, website, horarios
+  2. OpenStreetMap Overpass API — COMPLETAMENTE GRATIS, sin key
+     → Fallback cuando no hay Google API key configurado
+     → Busca: craft=roofer/electrician/painter, office=contractor, shop=doityourself
 
 Lógica: Negocios de construcción activos en Bay Area = potenciales
 clientes o referidos para servicios de insulación.
@@ -55,8 +58,9 @@ class PlacesAgent(BaseAgent):
 
     def fetch_leads(self) -> list:
         if not GOOGLE_PLACES_KEY:
-            logger.info("[Places] GOOGLE_PLACES_API_KEY no configurado — omitido")
-            return []
+            logger.info("[Places] GOOGLE_PLACES_API_KEY no configurado — usando Overpass (OSM) gratuito")
+            return self._fetch_overpass_leads()
+
 
         leads = []
         seen_ids = set()
@@ -173,6 +177,148 @@ class PlacesAgent(BaseAgent):
             }
         except Exception:
             return {}
+
+    # ── OpenStreetMap Overpass API (fallback gratuito) ────────────────
+
+    def _fetch_overpass_leads(self) -> list:
+        """
+        OpenStreetMap Overpass API — búsqueda gratuita de contratistas.
+
+        Sin API key requerida. Busca negocios de construcción en Bay Area
+        usando tags de OpenStreetMap: craft, office, shop.
+        """
+        leads = []
+        seen_ids = set()
+
+        # Bounding box del Bay Area (sur-oeste, norte-este)
+        # lat: 36.9 - 38.9, lon: -123.1 - -121.2
+        bbox = "36.9,-123.1,38.9,-121.2"
+
+        overpass_query = f"""
+[out:json][timeout:30];
+(
+  node["craft"~"roofer|electrician|painter|carpenter|plumber|hvac"](bbox:{bbox});
+  node["office"="contractor"](bbox:{bbox});
+  node["office"="construction_company"](bbox:{bbox});
+  node["shop"="doityourself"](bbox:{bbox});
+  node["building"="construction"](bbox:{bbox});
+  way["craft"~"roofer|electrician|painter|carpenter|plumber|hvac"](bbox:{bbox});
+  way["office"="contractor"](bbox:{bbox});
+);
+out body center;
+""".replace("bbox:", f"({bbox}),")
+
+        # Formato correcto de Overpass QL
+        overpass_query = f"""
+[out:json][timeout:30];
+(
+  node["craft"~"roofer|electrician|painter|carpenter|plumber|hvac"]({bbox});
+  node["office"~"contractor|construction_company"]({bbox});
+  node["shop"="doityourself"]({bbox});
+  way["craft"~"roofer|electrician|painter|carpenter|plumber|hvac"]({bbox});
+  way["office"~"contractor|construction_company"]({bbox});
+);
+out body center;
+"""
+        try:
+            resp = requests.post(
+                "https://overpass-api.de/api/interpreter",
+                data={"data": overpass_query},
+                timeout=40,
+                headers={"Accept": "application/json"},
+            )
+            if resp.status_code != 200:
+                logger.debug(f"[Places/Overpass] HTTP {resp.status_code}")
+                return []
+
+            data = resp.json()
+            elements = data.get("elements", [])
+
+            for elem in elements:
+                tags = elem.get("tags", {})
+                name = tags.get("name", "")
+                if not name:
+                    continue
+
+                elem_id = f"osm_{elem.get('type', 'node')}_{elem.get('id', '')}"
+                if elem_id in seen_ids:
+                    continue
+                seen_ids.add(elem_id)
+
+                # Coordenadas (nodo directo o centroide de way)
+                lat = elem.get("lat") or elem.get("center", {}).get("lat")
+                lon = elem.get("lon") or elem.get("center", {}).get("lon")
+
+                # Construir dirección desde tags
+                street = tags.get("addr:street", "")
+                housen = tags.get("addr:housenumber", "")
+                city   = tags.get("addr:city", "")
+                postc  = tags.get("addr:postcode", "")
+                address = " ".join(filter(None, [housen, street])) or "Bay Area"
+                if city:
+                    address = f"{address}, {city}"
+
+                craft  = tags.get("craft", "")
+                office = tags.get("office", "")
+                trade_label = (craft or office or "contractor").replace("_", " ").title()
+
+                phone   = tags.get("phone", "") or tags.get("contact:phone", "")
+                website = tags.get("website", "") or tags.get("contact:website", "")
+                email   = tags.get("email", "") or tags.get("contact:email", "")
+
+                # Determinar trade
+                trade_map = {
+                    "roofer": "ROOFING",
+                    "electrician": "ELECTRICAL",
+                    "painter": "PAINTING",
+                    "plumber": "PLUMBING",
+                    "carpenter": "FRAMING",
+                    "hvac": "HVAC",
+                }
+                trade = trade_map.get(craft.lower(), "GENERAL")
+
+                score_data = score_lead(
+                    project_value=0,
+                    source_type="places",
+                    days_ago=0,
+                    service_type=trade,
+                )
+
+                lead = {
+                    "id":             elem_id,
+                    "city":           city or "Bay Area",
+                    "address":        address,
+                    "business_name":  name,
+                    "description":    f"{trade_label} — {name}",
+                    "phone":          phone,
+                    "website":        website,
+                    "contact_email":  email,
+                    "contact_phone":  phone,
+                    "contact_source": "OpenStreetMap",
+                    "search_keyword": craft or office,
+                    "lat":            lat,
+                    "lon":            lon,
+                    "_scoring":       score_data,
+                    "_trade":         trade,
+                    "_agent_key":     "places",
+                    "source":         "Overpass/OSM",
+                }
+
+                # Lookup en CSV local
+                match = lookup_contact(name, self._contacts)
+                if match:
+                    lead["contact_phone"]  = match.get("phone", "") or phone
+                    lead["contact_email"]  = match.get("email", "") or email
+                    lead["contact_source"] = f"CSV ({match['source']})"
+
+                leads.append(lead)
+
+            logger.info(f"[Places/Overpass] {len(leads)} contratistas encontrados en Bay Area (OSM)")
+
+        except Exception as e:
+            logger.warning(f"[Places/Overpass] Error: {e}")
+
+        return leads
 
     def notify(self, lead: dict):
         rating = lead.get("rating", 0)

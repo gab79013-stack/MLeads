@@ -217,9 +217,22 @@ def enrich_lead(lead: dict, force_refresh: bool = False) -> dict:
             result["demographics"] = demo_data
             result["sources"].append("Census")
             sources_count += 1
-    
+
+    # ── 6. FEMA Flood Zone — Zona de inundación (gratuito) ───────
+    lat = lead.get("lat") or lead.get("_lat")
+    lon = lead.get("lon") or lead.get("_lon") or lead.get("long")
+    if lat and lon:
+        try:
+            flood_data = _fema_flood_zone_lookup(float(lat), float(lon))
+            if flood_data:
+                result["flood_zone"] = flood_data
+                result["sources"].append("FEMA")
+                sources_count += 1
+        except (ValueError, TypeError):
+            pass
+
     # Calcular score de enriquecimiento
-    result["enrichment_score"] = min(sources_count * 20, 100)
+    result["enrichment_score"] = min(sources_count * 16, 100)
     
     # Guardar en cache
     _enrichment_cache[cache_key] = result
@@ -1778,6 +1791,89 @@ def clear_cache():
     _cache_timestamps.clear()
 
 
+# ── 6. FEMA Flood Zone (gratuito, sin key) ────────────────────────────
+
+# Códigos de zona FEMA y su significado para roofing/waterproofing
+_FEMA_ZONE_LABELS = {
+    "A":   "Área inundable (100 años) — riesgo alto",
+    "AE":  "Área inundable con BFE — riesgo alto",
+    "AH":  "Inundación superficial — riesgo alto",
+    "AO":  "Flujo superficial — riesgo alto",
+    "AR":  "Área en restauración — riesgo medio",
+    "A99": "Área con protección futura — riesgo alto",
+    "V":   "Zona costera (olas) — riesgo muy alto",
+    "VE":  "Zona costera con BFE — riesgo muy alto",
+    "X":   "Zona de bajo riesgo (500 años)",
+    "B":   "Riesgo moderado",
+    "C":   "Riesgo mínimo",
+    "D":   "Sin análisis disponible",
+}
+
+_FEMA_HIGH_RISK_ZONES = {"A", "AE", "AH", "AO", "AR", "A99", "V", "VE"}
+
+
+def _fema_flood_zone_lookup(lat: float, lon: float) -> dict:
+    """
+    Consulta FEMA NFHL (National Flood Hazard Layer) para zona de inundación.
+
+    API: ArcGIS REST Services del FEMA NFHL — completamente gratuita, sin key.
+    URL: https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer
+
+    Retorna: flood_zone, zone_description, sfha (Special Flood Hazard Area),
+             is_high_risk (bool útil para scoring de leads de roofing)
+    """
+    try:
+        resp = requests.get(
+            "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query",
+            params={
+                "geometry":          f"{lon},{lat}",
+                "geometryType":      "esriGeometryPoint",
+                "inSR":              "4326",
+                "spatialRel":        "esriSpatialRelIntersects",
+                "outFields":         "FLD_ZONE,ZONE_SUBTY,SFHA_TF,STUDY_TYP",
+                "returnGeometry":    "false",
+                "returnCountOnly":   "false",
+                "f":                 "json",
+            },
+            timeout=15,
+            headers={"Accept": "application/json"},
+        )
+        if resp.status_code != 200:
+            return {}
+
+        data = resp.json()
+        features = data.get("features", [])
+        if not features:
+            return {}
+
+        attrs    = features[0].get("attributes", {})
+        zone     = (attrs.get("FLD_ZONE") or "").strip()
+        subtype  = (attrs.get("ZONE_SUBTY") or "").strip()
+        sfha     = attrs.get("SFHA_TF", "F")  # T = Special Flood Hazard Area
+        study    = attrs.get("STUDY_TYP", "")
+
+        if not zone:
+            return {}
+
+        zone_label = _FEMA_ZONE_LABELS.get(zone, f"Zona {zone}")
+        is_sfha    = sfha == "T"
+        is_high    = zone in _FEMA_HIGH_RISK_ZONES
+
+        return {
+            "flood_zone":     zone,
+            "zone_subtype":   subtype,
+            "zone_label":     zone_label,
+            "sfha":           is_sfha,
+            "is_high_risk":   is_high,
+            "study_type":     study,
+            "source":         "FEMA NFHL",
+        }
+
+    except Exception as e:
+        logger.debug(f"[FEMA FloodZone] ({lat},{lon}): {e}")
+        return {}
+
+
 def format_enrichment_summary(enriched: dict) -> str:
     """
     Formatea resumen de enriquecimiento para mostrar en UI/Telegram.
@@ -1822,7 +1918,15 @@ def format_enrichment_summary(enriched: dict) -> str:
         income = demographics.get("median_household_income", 0)
         if income:
             parts.append(f"📊 Income: ${income:,}")
-    
+
+    # FEMA Flood Zone
+    flood_zone = enriched.get("flood_zone", {})
+    if flood_zone:
+        zone = flood_zone.get("flood_zone", "")
+        is_high = flood_zone.get("is_high_risk", False)
+        emoji_fz = "🌊" if is_high else "✅"
+        parts.append(f"{emoji_fz} Flood Zone: {zone}")
+
     return " | ".join(parts) if parts else "Sin datos de enriquecimiento"
 
 

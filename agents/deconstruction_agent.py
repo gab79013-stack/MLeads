@@ -18,9 +18,11 @@ Fuentes gratuitas:
   3. San Jose demolition permits (CKAN)
   4. Oakland demolition (Socrata)
   5. Berkeley demolition (Socrata)
+  6. EPA ECHO API — instalaciones con violaciones ambientales activas
+     (asbesto, hazmat, residuos peligrosos) en Bay Area (GRATIS, sin key)
 
 Fuentes de pago:
-  6. ATTOM Property Pre-foreclosure — propiedades en pre-foreclosure
+  7. ATTOM Property Pre-foreclosure — propiedades en pre-foreclosure
      frecuentemente se demolitan o renovan completamente
 """
 
@@ -1178,6 +1180,140 @@ def _fetch_source(source: dict) -> tuple[str, list]:
     return source["city"], records
 
 
+# ── EPA ECHO — Instalaciones con violaciones ambientales (gratis) ────
+
+# Ciudades principales del Bay Area para EPA ECHO
+_EPA_ECHO_CITIES = [
+    "San Francisco", "Oakland", "San Jose", "Berkeley",
+    "Fremont", "Hayward", "Concord", "Richmond",
+    "Sunnyvale", "Santa Clara", "San Mateo", "Vallejo",
+]
+
+_EPA_ECHO_BASE = "https://echodata.epa.gov/echo/air_rest_services"
+
+
+def _fetch_epa_echo_hazmat() -> list:
+    """
+    EPA ECHO API — instalaciones con violaciones del Clean Air Act activas.
+
+    Detecta sitios con incumplimiento de asbesto NESHAP (Clean Air Act) en
+    el Bay Area. Estas instalaciones necesitan abatimiento certificado → C-21.
+
+    API: https://echodata.epa.gov/echo/ — completamente gratuita, sin API key.
+    Proceso: 1) get_facilities (obtiene QueryID) → 2) get_qid (páginas de resultados)
+    """
+    leads = []
+    seen_ids: set = set()
+
+    for city in _EPA_ECHO_CITIES:
+        try:
+            # Paso 1: Obtener QueryID
+            r1 = requests.get(
+                f"{_EPA_ECHO_BASE}.get_facilities",
+                params={
+                    "output":      "JSON",
+                    "p_st":        "CA",
+                    "p_city":      city,
+                    "p_act":       "Y",
+                    "p_vio":       "Y",
+                    "responseset": "50",
+                },
+                timeout=20,
+                headers={"Accept": "application/json"},
+            )
+            if r1.status_code != 200:
+                continue
+
+            results_meta = r1.json().get("Results", {})
+            qid       = results_meta.get("QueryID", "")
+            total_rows = int(results_meta.get("QueryRows", 0) or 0)
+
+            if not qid or total_rows == 0:
+                continue
+
+            # Paso 2: Obtener primera página de resultados
+            r2 = requests.get(
+                f"{_EPA_ECHO_BASE}.get_qid",
+                params={"output": "JSON", "qid": qid, "pageno": 1},
+                timeout=20,
+                headers={"Accept": "application/json"},
+            )
+            if r2.status_code != 200:
+                continue
+
+            facilities = r2.json().get("Results", {}).get("Facilities", []) or []
+
+            for fac in facilities:
+                fac_id    = (fac.get("SourceID") or fac.get("RegistryID") or "").strip()
+                name      = (fac.get("AIRName") or "").strip()
+                address   = (fac.get("AIRStreet") or "").strip()
+                city_fac  = (fac.get("AIRCity") or city).strip().title()
+                zip_code  = (fac.get("AIRZip") or "").strip()
+
+                # Violaciones: quarters with violation + recent violation count
+                qtrs_viol  = int(fac.get("AIRQtrsWithViol", 0) or 0)
+                recent_cnt = int(fac.get("AIRRecentViolCnt", 0) or 0)
+                last_viol  = (fac.get("AIRLastViolDate") or "")[:10]
+                hpv_status = fac.get("AIRHpvStatus", "") or ""
+                compl_stat = fac.get("AIRComplStatus", "") or ""
+                is_hpv     = "High Priority" in hpv_status
+
+                if not fac_id or fac_id in seen_ids:
+                    continue
+                if not name or not address:
+                    continue
+                # Filter: must have actual violations
+                if qtrs_viol == 0 and recent_cnt == 0 and not is_hpv:
+                    continue
+
+                # Post-filter: solo Bay Area
+                _bay_cities_lower = {
+                    "san francisco", "oakland", "san jose", "berkeley",
+                    "fremont", "hayward", "concord", "richmond", "sunnyvale",
+                    "santa clara", "san mateo", "vallejo", "antioch", "daly city",
+                    "san leandro", "livermore", "napa", "petaluma", "santa rosa",
+                    "fairfield", "pittsburg", "vacaville", "alameda",
+                    "walnut creek", "el cerrito", "pleasant hill", "emeryville",
+                }
+                if city_fac.lower() not in _bay_cities_lower:
+                    continue
+
+                seen_ids.add(fac_id)
+                full_address = f"{address}, {city_fac}, CA {zip_code}".strip(", ")
+                num_viols = max(qtrs_viol, recent_cnt)
+
+                leads.append({
+                    "id":           f"epa_echo_{fac_id}",
+                    "city":         city_fac,
+                    "address":      full_address,
+                    "description":  (
+                        f"EPA CAA: {'⚡HPV — ' if is_hpv else ''}"
+                        f"{num_viols} violación(es) — {name}"
+                    ),
+                    "contractor":   name,
+                    "status":       hpv_status or compl_stat or "EPA Violation",
+                    "date":         last_viol,
+                    "source":       "EPA ECHO",
+                    "recent_violations": num_viols,
+                    "is_hpv":       is_hpv,
+                    "decon_type":    "asbestos",
+                    "decon_priority": 5 if is_hpv else 4,
+                    "decon_emoji":   "⚠️",
+                    "opportunity":   f"Violación EPA activa ({name}) — abatimiento hazmat/asbesto necesario",
+                    "_agent_key":    "deconstruction",
+                })
+
+            if facilities:
+                logger.info(f"[EPA ECHO/{city}] {total_rows} total, "
+                            f"{len(facilities)} en página 1, "
+                            f"{sum(1 for l in leads if l.get('city','').lower()==city.lower())} con violaciones")
+
+        except Exception as e:
+            logger.debug(f"[EPA ECHO/{city}] {e}")
+
+    return leads
+
+
 # ── ATTOM Pre-Foreclosure (pago) ─────────────────────────────────────
 
 def _fetch_preforeclosure(city: str, state: str = "CA") -> list:
@@ -1382,6 +1518,20 @@ class DeconstuctionAgent(BaseAgent):
                         logger.info(f"[ATTOM PreForeclosure/{city_name}] {len(properties)} propiedades")
                 except Exception as e:
                     logger.debug(f"[ATTOM PreForeclosure/{city_name}] {e}")
+
+        # ── EPA ECHO — Hazmat/Asbestos violations (gratis) ──────────
+        try:
+            epa_leads = _fetch_epa_echo_hazmat()
+            for lead in epa_leads:
+                scoring = score_lead(lead)
+                scoring["score"] = min(scoring["score"] + 16, 100)
+                scoring["reasons"].insert(0, "⚠️ Violación EPA activa")
+                lead["_scoring"] = scoring
+            leads.extend(epa_leads)
+            if epa_leads:
+                logger.info(f"[EPA ECHO] {len(epa_leads)} instalaciones con violaciones hazmat")
+        except Exception as e:
+            logger.debug(f"[EPA ECHO] Error: {e}")
 
         # Ordenar por prioridad y score
         leads.sort(key=lambda l: (

@@ -1586,46 +1586,47 @@ def _attom_property_lookup(address: str, city: str = "") -> dict:
 
 def _geocode_reverse(lat: float, lon: float) -> dict:
     """
-    Google Geocoding inverso — obtiene dirección estructurada.
-    Retorna: formatted_address, street, city, zip_code.
+    Geocodificación inversa — obtiene dirección estructurada desde coordenadas.
+
+    Prioridad:
+      1. Google Geocoding API (si GOOGLE_GEOCODE_API_KEY está configurado)
+      2. Nominatim / OpenStreetMap (gratuito, sin key) — fallback automático
     """
-    if not GOOGLE_GEOCODE_KEY:
+    from utils.geocoding import reverse_geocode as _rev_geocode
+    result = _rev_geocode(lat, lon)
+    if not result:
         return {}
-    try:
-        resp = requests.get(
-            "https://maps.googleapis.com/maps/api/geocode/json",
-            params={
-                "latlng": f"{lat},{lon}",
-                "key": GOOGLE_GEOCODE_KEY,
-                "result_type": "street_address",
-            },
-            timeout=10,
-        )
-        if resp.status_code != 200:
-            return {}
 
-        data = resp.json()
-        results = data.get("results", [])
-        if not results:
-            return {}
+    # Normalizar al formato esperado por rodents_agent
+    address_str = result.get("address", "")
+    city        = result.get("city", "")
+    zip_code    = result.get("zip", "")
 
-        result = results[0]
-        components = {
-            c["types"][0]: c["long_name"]
-            for c in result.get("address_components", [])
-            if c.get("types")
-        }
+    # Intentar extraer street number y name si es Google (tiene "address" detallado)
+    street_number = ""
+    street_name   = ""
+    if result.get("source") == "google":
+        parts = address_str.split(",")
+        if parts:
+            street_parts = parts[0].strip().split(" ", 1)
+            if len(street_parts) == 2 and street_parts[0].isdigit():
+                street_number = street_parts[0]
+                street_name   = street_parts[1]
+    elif address_str:
+        parts = address_str.split(",")
+        if parts:
+            street_parts = parts[0].strip().split(" ", 1)
+            if len(street_parts) == 2 and street_parts[0].isdigit():
+                street_number = street_parts[0]
+                street_name   = street_parts[1]
 
-        return {
-            "formatted_address": result.get("formatted_address", ""),
-            "street_number":     components.get("street_number", ""),
-            "street_name":       components.get("route", ""),
-            "city":              components.get("locality", ""),
-            "zip_code":          components.get("postal_code", ""),
-        }
-    except Exception as e:
-        logger.debug(f"[Geocoding] Error: {e}")
-        return {}
+    return {
+        "formatted_address": address_str,
+        "street_number":     street_number,
+        "street_name":       street_name,
+        "city":              city,
+        "zip_code":          zip_code,
+    }
 
 
 def _find_nearby_properties(lat: float, lon: float, radius_m: int = 200) -> list:
@@ -1797,8 +1798,9 @@ class RodentsAgent(BaseAgent):
                                         lead["contact_email"]  = owner_match.get("email", "")
                                         lead["contact_source"] = f"ATTOM+CSV ({owner_match['source']})"
 
-                        # ── Google Geocoding: mejorar dirección (pago) ─
-                        if GOOGLE_GEOCODE_KEY and lead.get("lat") and lead.get("lon"):
+                        # ── Geocodificación inversa: mejora dirección ──
+                        # Google si está configurado, Nominatim (OSM) gratis como fallback
+                        if lead.get("lat") and lead.get("lon"):
                             try:
                                 lat_f = float(lead["lat"])
                                 lon_f = float(lead["lon"])
