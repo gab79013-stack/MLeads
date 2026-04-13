@@ -2366,8 +2366,15 @@ _SERVICE_CAT_KEYWORDS: dict[str, list[str]] = {
     "roofing":     ["roof", "roofing", "re-roof", "reroof", "shingle", "tile roof", "torch down", "tpo"],
     "drywall":     ["drywall", "sheetrock", "gypsum", "taping", "texturing", "wall board"],
     "paint":       ["paint", "painting", "repaint", "painter", "stucco paint", "primer"],
-    "landscaping": ["landscap", "hardscape", "irrigation", "sprinkler", "retaining wall", "paver", "turf"],
     "electrical":  ["electrical", "panel upgrade", "ev charger", "200 amp", "rewire", "sub panel", "wiring"],
+    "plumbing":    ["plumb", "plumbing", "pipe", "sewer", "drain", "water heater", "gas line", "backflow", "repipe"],
+    "hvac":        ["hvac", "heating", "air condition", "furnace", "ductwork", "mini split", "heat pump", "ventilat"],
+    "flooring":    ["floor", "flooring", "hardwood", "tile", "laminate", "vinyl plank", "carpet", "epoxy floor"],
+    "concrete":    ["concrete", "foundation", "slab", "sidewalk", "driveway", "flatwork", "footer", "stem wall"],
+    "framing":     ["framing", "framer", "structural", "load bearing", "beam", "joist", "truss", "stud wall"],
+    "windows":     ["window", "door", "sliding door", "patio door", "skylight", "glass", "glazing", "storefront"],
+    "landscaping": ["landscap", "hardscape", "irrigation", "sprinkler", "retaining wall", "paver", "turf"],
+    "remodel":     ["remodel", "renovation", "kitchen", "bathroom", "addition", "adu", "accessory dwelling", "tenant improvement", "interior alteration"],
 }
 # These map directly to primary_service_type column
 _SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "energy", "rodents", "deconstruction"}

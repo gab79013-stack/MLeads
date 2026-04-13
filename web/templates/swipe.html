@@ -375,7 +375,7 @@
                     <span>🔥 Solo leads HOT</span>
                     <small>Score ≥ 90 — máxima temperatura</small>
                 </div>
-                <button class="tsw on" id="hotToggle" role="switch" aria-checked="true"></button>
+                <button class="tsw" id="hotToggle" role="switch" aria-checked="false"></button>
             </div>
 
             <!-- Subcontractors -->
@@ -386,11 +386,17 @@
                     <span class="fsec-count" id="subCount">0</span>
                 </div>
                 <div class="pills" id="subPills">
-                    <button class="pill sub" data-cat="roofing">🏚️ Roofing</button>
+                    <button class="pill sub" data-cat="roofing">🏠 Roofing</button>
                     <button class="pill sub" data-cat="drywall">🧱 Drywall</button>
                     <button class="pill sub" data-cat="paint">🎨 Pintura</button>
-                    <button class="pill sub" data-cat="landscaping">🌿 Paisajismo</button>
                     <button class="pill sub" data-cat="electrical">⚡ Eléctrico</button>
+                    <button class="pill sub" data-cat="plumbing">🔧 Plomería</button>
+                    <button class="pill sub" data-cat="hvac">❄️ HVAC</button>
+                    <button class="pill sub" data-cat="flooring">🪵 Pisos</button>
+                    <button class="pill sub" data-cat="concrete">🧱 Concreto</button>
+                    <button class="pill sub" data-cat="framing">🪚 Framing</button>
+                    <button class="pill sub" data-cat="windows">🪟 Ventanas</button>
+                    <button class="pill sub" data-cat="landscaping">🌿 Paisajismo</button>
                 </div>
             </div>
 
@@ -402,14 +408,15 @@
                     <span class="fsec-count" id="ltypeCount">0</span>
                 </div>
                 <div class="pills" id="ltypePills">
-                    <button class="pill ltype" data-cat="permits">🏗️ Permisos</button>
-                    <button class="pill ltype" data-cat="construction">👷 Construcción</button>
+                    <button class="pill ltype" data-cat="permits">📋 Permisos</button>
+                    <button class="pill ltype" data-cat="construction">👷 Construcción Activa</button>
+                    <button class="pill ltype" data-cat="realestate">🏡 Venta de Propiedad</button>
                     <button class="pill ltype" data-cat="solar">☀️ Solar</button>
-                    <button class="pill ltype" data-cat="realestate" data-i18n-ltype="realestate">🏗️ Nueva Construcción</button>
-                    <button class="pill ltype" data-cat="flood">💧 Daño Agua</button>
-                    <button class="pill ltype" data-cat="energy">💡 Energía</button>
-                    <button class="pill ltype" data-cat="rodents">🐭 Plagas</button>
-                    <button class="pill ltype" data-cat="deconstruction">💥 Demolición</button>
+                    <button class="pill ltype" data-cat="flood">💧 Daño por Agua</button>
+                    <button class="pill ltype" data-cat="deconstruction">🏚️ Demolición</button>
+                    <button class="pill ltype" data-cat="remodel">🔨 Remodelación</button>
+                    <button class="pill ltype" data-cat="energy">⚡ Eficiencia Energética</button>
+                    <button class="pill ltype" data-cat="rodents">🐀 Control de Plagas</button>
                 </div>
             </div>
 
@@ -1417,18 +1424,24 @@ function applyFilters() { saveFilters(); renderChips(); S.queue = []; fetchFeed(
 
 // ── Chips bar ─────────────────────────────────────────────────────────────────
 const SUB_LABELS = {
-    roofing:'🏚️ Roofing', drywall:'🧱 Drywall', paint:'🎨 Pintura',
-    landscaping:'🌿 Paisajismo', electrical:'⚡ Eléctrico',
+    roofing:'🏠 Roofing', drywall:'🧱 Drywall', paint:'🎨 Pintura',
+    electrical:'⚡ Eléctrico', plumbing:'🔧 Plomería', hvac:'❄️ HVAC',
+    flooring:'🪵 Pisos', concrete:'🧱 Concreto', framing:'🪚 Framing',
+    windows:'🪟 Ventanas', landscaping:'🌿 Paisajismo',
 };
 const LTYPE_LABELS = {
-    permits:'🏗️ Permisos', construction:'👷 Construcción', solar:'☀️ Solar',
-    realestate:'🏗️ Nueva Construcción', flood:'💧 Agua', energy:'💡 Energía',
-    rodents:'🐭 Plagas', deconstruction:'💥 Demolición',
+    permits:'📋 Permisos', construction:'👷 Construcción Activa',
+    realestate:'🏡 Venta de Propiedad', solar:'☀️ Solar',
+    flood:'💧 Daño por Agua', deconstruction:'🏚️ Demolición',
+    remodel:'🔨 Remodelación', energy:'⚡ Eficiencia Energética',
+    rodents:'🐀 Control de Plagas',
 };
 const LTYPE_LABELS_EN = {
-    permits:'🏗️ Permits', construction:'👷 Construction', solar:'☀️ Solar',
-    realestate:'🏗️ New Construction', flood:'💧 Water Damage', energy:'💡 Energy',
-    rodents:'🐭 Pest Control', deconstruction:'💥 Demolition',
+    permits:'📋 Permits', construction:'👷 Active Construction',
+    realestate:'🏡 Property Sale', solar:'☀️ Solar',
+    flood:'💧 Water Damage', deconstruction:'🏚️ Demolition',
+    remodel:'🔨 Remodeling', energy:'⚡ Energy Efficiency',
+    rodents:'🐀 Pest Control',
 };
 
 function renderChips() {
@@ -1699,8 +1712,8 @@ function applyLang() {
         if (ltypeLabels[cat]) p.textContent = ltypeLabels[cat];
     });
     // Sub pills
-    const subLabels_en = { roofing:'🏚️ Roofing', drywall:'🧱 Drywall', paint:'🎨 Painting', landscaping:'🌿 Landscaping', electrical:'⚡ Electrical' };
-    const subLabels_es = { roofing:'🏚️ Roofing', drywall:'🧱 Drywall', paint:'🎨 Pintura', landscaping:'🌿 Paisajismo', electrical:'⚡ Eléctrico' };
+    const subLabels_en = { roofing:'🏠 Roofing', drywall:'🧱 Drywall', paint:'🎨 Painting', electrical:'⚡ Electrical', plumbing:'🔧 Plumbing', hvac:'❄️ HVAC', flooring:'🪵 Flooring', concrete:'🧱 Concrete', framing:'🪚 Framing', windows:'🪟 Windows', landscaping:'🌿 Landscaping' };
+    const subLabels_es = { roofing:'🏠 Roofing', drywall:'🧱 Drywall', paint:'🎨 Pintura', electrical:'⚡ Eléctrico', plumbing:'🔧 Plomería', hvac:'❄️ HVAC', flooring:'🪵 Pisos', concrete:'🧱 Concreto', framing:'🪚 Framing', windows:'🪟 Ventanas', landscaping:'🌿 Paisajismo' };
     const subL = CURRENT_LANG === 'en' ? subLabels_en : subLabels_es;
     document.querySelectorAll('#subPills .pill').forEach(p => {
         const cat = p.dataset.cat;
