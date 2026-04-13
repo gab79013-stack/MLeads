@@ -280,13 +280,19 @@ class DeduplicationEngine:
                 # Extract primary_service_type from the first agent (primary source)
                 primary_service_type = agents[0] if agents else None
 
+                # Compute has_contact from lead data
+                has_contact = 1 if (
+                    (lead.get("contact_phone") or "").strip()
+                    or (lead.get("contact_email") or "").strip()
+                ) else 0
+
                 conn.execute("""
                     INSERT OR REPLACE INTO consolidated_leads
-                    (address_key, address, city, agent_sources, first_seen, last_updated, lead_data, notified, primary_service_type)
+                    (address_key, address, city, agent_sources, first_seen, last_updated, lead_data, notified, primary_service_type, has_contact)
                     VALUES (?, ?, ?, ?, COALESCE(
                         (SELECT first_seen FROM consolidated_leads WHERE address_key = ?),
                         ?
-                    ), ?, ?, 0, ?)
+                    ), ?, ?, 0, ?, ?)
                 """, (
                     addr_key,
                     lead.get("address", ""),
@@ -297,6 +303,7 @@ class DeduplicationEngine:
                     datetime.utcnow().isoformat(),
                     json.dumps(lead, default=str),
                     primary_service_type,
+                    has_contact,
                 ))
                 conn.commit()
         except Exception as e:

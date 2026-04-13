@@ -2202,6 +2202,7 @@ def stripe_webhook():
 # to log in with Google or Facebook.
 ANON_LEAD_LIMIT = int(os.getenv("SWIPE_ANON_LIMIT", "10"))
 FREE_USER_LEAD_LIMIT = int(os.getenv("SWIPE_FREE_LIMIT", "40"))
+REQUIRE_CONTACT = os.getenv("SWIPE_REQUIRE_CONTACT", "false").lower() in ("true", "1", "yes")
 PRO_LEAD_LIMIT = int(os.getenv("SWIPE_PRO_LIMIT", "200"))   # $29/mo tier
 # PREMIUM = is_paid flag + no limit ($99/mo)
 
@@ -2498,9 +2499,10 @@ def swipe_feed():
         )
         params.append(max_value)
 
-    # Contact info filter — PERMANENT POLICY: only show leads with phone or email
+    # Contact info filter — only show leads with phone or email when enabled
     # Uses the pre-computed has_contact column for index performance
-    conditions.append("has_contact = 1")
+    if REQUIRE_CONTACT:
+        conditions.append("has_contact = 1")
 
     # City filter: without radius → simple LIKE; with radius → post-process
     if city_filter and not do_radius:
