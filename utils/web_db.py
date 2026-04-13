@@ -355,14 +355,19 @@ def init_web_db():
         c.execute("SELECT has_contact FROM consolidated_leads LIMIT 1")
     except sqlite3.OperationalError:
         c.execute("ALTER TABLE consolidated_leads ADD COLUMN has_contact INTEGER DEFAULT 0")
-        # Backfill existing rows
-        c.execute("""
-            UPDATE consolidated_leads
-            SET has_contact = CASE
-                WHEN TRIM(COALESCE(json_extract(lead_data, '$.contact_phone'), '')) != ''
-                  OR TRIM(COALESCE(json_extract(lead_data, '$.contact_email'), '')) != ''
-                THEN 1 ELSE 0 END
-        """)
+
+    # Always re-sync has_contact from lead_data JSON (fixes rows inserted without it)
+    c.execute("""
+        UPDATE consolidated_leads
+        SET has_contact = CASE
+            WHEN TRIM(COALESCE(json_extract(lead_data, '$.contact_phone'), '')) != ''
+              OR TRIM(COALESCE(json_extract(lead_data, '$.contact_email'), '')) != ''
+            THEN 1 ELSE 0 END
+        WHERE has_contact != CASE
+            WHEN TRIM(COALESCE(json_extract(lead_data, '$.contact_phone'), '')) != ''
+              OR TRIM(COALESCE(json_extract(lead_data, '$.contact_email'), '')) != ''
+            THEN 1 ELSE 0 END
+    """)
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS property_signals (

@@ -35,6 +35,7 @@ logger = logging.getLogger("main")
 
 from utils.telegram import send_message
 from utils.db import init_db, get_stats
+from utils.web_db import init_web_db
 from utils.contacts_loader import load_all_contacts   # precarga al importar
 
 # ── AI modules (optional — graceful if not configured) ────────────────
@@ -149,6 +150,7 @@ def cmd_start():
     ⚡ El primer ciclo se ejecuta en paralelo para arranque rápido.
     """
     init_db()
+    init_web_db()   # consolidated_leads, property_signals, scheduled_inspections
 
     # Precargar contactos ANTES de instanciar agentes
     contacts = load_all_contacts()
@@ -219,6 +221,7 @@ if __name__ == "__main__":
         cmd_stats()
     elif args.run:
         init_db()
+        init_web_db()
         load_all_contacts()
         cmd_run_one(args.run)
     else:
