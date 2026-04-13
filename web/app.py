@@ -2363,21 +2363,21 @@ def _city_coords(city_name: str) -> tuple[float, float] | None:
 
 # ── Service category keyword mapping ──────────────────────────────────────────
 _SERVICE_CAT_KEYWORDS: dict[str, list[str]] = {
-    "roofing":     ["roof", "roofing", "re-roof", "reroof", "shingle", "tile roof", "torch down", "tpo"],
-    "drywall":     ["drywall", "sheetrock", "gypsum", "taping", "texturing", "wall board"],
-    "paint":       ["paint", "painting", "repaint", "painter", "stucco paint", "primer"],
-    "electrical":  ["electrical", "panel upgrade", "ev charger", "200 amp", "rewire", "sub panel", "wiring"],
-    "plumbing":    ["plumb", "plumbing", "pipe", "sewer", "drain", "water heater", "gas line", "backflow", "repipe"],
-    "hvac":        ["hvac", "heating", "air condition", "furnace", "ductwork", "mini split", "heat pump", "ventilat"],
-    "flooring":    ["floor", "flooring", "hardwood", "tile", "laminate", "vinyl plank", "carpet", "epoxy floor"],
-    "concrete":    ["concrete", "foundation", "slab", "sidewalk", "driveway", "flatwork", "footer", "stem wall"],
-    "framing":     ["framing", "framer", "structural", "load bearing", "beam", "joist", "truss", "stud wall"],
-    "windows":     ["window", "door", "sliding door", "patio door", "skylight", "glass", "glazing", "storefront"],
-    "landscaping": ["landscap", "hardscape", "irrigation", "sprinkler", "retaining wall", "paver", "turf"],
+    "roofing":     ["roof", "roofing", "re-roof", "reroof", "shingle", "tile roof", "torch down", "tpo", "flat roof", "gutter", "fascia"],
+    "drywall":     ["drywall", "sheetrock", "gypsum", "taping", "texturing", "wall board", "partition", "plaster"],
+    "paint":       ["paint", "painting", "repaint", "painter", "stucco paint", "primer", "coating"],
+    "electrical":  ["electrical", "panel upgrade", "ev charger", "200 amp", "rewire", "sub panel", "wiring", "low voltage", "circuit"],
+    "plumbing":    ["plumb", "plumbing", "pipe", "sewer", "drain", "water heater", "gas line", "backflow", "repipe", "fixture"],
+    "hvac":        ["hvac", "heating", "cooling", "air condition", "furnace", "ductwork", "mini split", "heat pump", "ventilat", "duct"],
+    "flooring":    ["floor", "flooring", "hardwood", "tile", "laminate", "vinyl plank", "carpet", "epoxy floor", "subfloor"],
+    "concrete":    ["concrete", "cement", "foundation", "slab", "sidewalk", "driveway", "flatwork", "footer", "stem wall", "curb"],
+    "framing":     ["framing", "framer", "structural", "load bearing", "beam", "joist", "truss", "stud wall", "lumber", "adu"],
+    "windows":     ["window", "door", "sliding door", "patio door", "skylight", "glass", "glazing", "storefront", "french door", "fenestration"],
+    "landscaping": ["landscap", "hardscape", "irrigation", "sprinkler", "retaining wall", "paver", "turf", "grading", "tree"],
     "remodel":     ["remodel", "renovation", "kitchen", "bathroom", "addition", "adu", "accessory dwelling", "tenant improvement", "interior alteration"],
 }
 # These map directly to primary_service_type column
-_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "energy", "rodents", "deconstruction"}
+_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "energy", "rodents", "deconstruction", "remodel"}
 
 
 @app.route('/api/swipe/feed', methods=['GET'])
@@ -2396,8 +2396,10 @@ def swipe_feed():
       - city:          filter by city name (partial match)
       - radius_miles:  miles radius from city (requires city param)
       - service_cats:  comma-separated list of categories
-                       (roofing, drywall, paint, landscaping, electrical,
-                        solar, permits, construction, realestate, flood, energy)
+                       subcontractor: roofing, drywall, paint, electrical,
+                         plumbing, hvac, flooring, concrete, framing, windows, landscaping
+                       lead type: solar, permits, construction, realestate,
+                         flood, energy, rodents, deconstruction, remodel
 
     Anonymous visitors can view up to ANON_LEAD_LIMIT leads total.
     """

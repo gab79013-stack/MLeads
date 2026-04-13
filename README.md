@@ -5,7 +5,7 @@ Sistema automatizado de generación de leads con IA para contratistas de Roofing
 
 Monitorea **54+ ciudades** en **9 condados** del Bay Area usando APIs públicas y de pago, detecta oportunidades de negocio por tipo de subcontratista, y entrega alertas en tiempo real con datos de contacto del GC directamente en Telegram.
 
-Incluye **dashboard multi-usuario**, **swipe feed público tipo Tinder**, y **bot de Telegram con monetización** integrada.
+Incluye **dashboard multi-usuario**, **swipe feed público tipo Tinder**, **bot de Telegram con monetización** integrada, y **13 agentes de detección** con 6 APIs gratuitas adicionales.
 
 ---
 
@@ -30,7 +30,7 @@ curl -s https://raw.githubusercontent.com/gab79013-stack/MLeads/main/quick-insta
 │                                                                 │
 │  ┌──────────────┐   ┌──────────────┐   ┌─────────────────────┐ │
 │  │   Agentes    │   │  Lead Engine │   │   Notificaciones    │ │
-│  │  (11 tipos)  │──▶│  Scoring AI  │──▶│  Telegram / WA /    │ │
+│  │  (13 tipos)  │──▶│  Scoring AI  │──▶│  Telegram / WA /    │ │
 │  │  54 ciudades │   │  Dedup/Merge │   │  Email / Slack      │ │
 │  └──────────────┘   └──────┬───────┘   └─────────────────────┘ │
 │                            │                                    │
@@ -58,15 +58,17 @@ curl -s https://raw.githubusercontent.com/gab79013-stack/MLeads/main/quick-insta
 |--------|---------|----------|-----------|---------------------|
 | Permisos de Construcción | Socrata, CKAN (26 fuentes) | 54 | 60 min | ADU/remodel/roofing/electrical |
 | Instalaciones Solares | Socrata, Google Solar, Aurora, EnergySage | 54 | 60 min | Solar → roofing/electrical/paint |
-| Reportes 311 Plagas | SeeClickFix, Socrata, Thumbtack | 54 | 2 hrs | Plagas → drywall/paint reparación |
-| Alertas NOAA Inundación | NOAA Weather API | 13 zonas | 30 min | Agua → drywall/paint/roofing |
+| Reportes 311 Plagas | SeeClickFix, Socrata, Thumbtack + **Nominatim/OSM** | 54 | 2 hrs | Plagas → drywall/paint reparación |
+| Alertas NOAA Inundación | NOAA Weather API + **FEMA NFHL** (zonas de inundación) | 13 zonas | 30 min | Agua → drywall/paint/roofing |
 | Construcciones Activas | Socrata, BuildZoom | 54 | 60 min | Framing → roofing/electrical |
 | **Calendario Inspecciones** | **PDF (CC/Berkeley) + CKAN (SJ) + Predicción** | **54** | **Daily 9 AM** | **GC en sitio — timing perfecto** |
-| Deconstrucción | Socrata, ATTOM | 54 | 2 hrs | Demolición → roofing/drywall |
+| Deconstrucción | Socrata, ATTOM + **EPA ECHO** (violaciones ambientales) | 54 | 2 hrs | Demolición → roofing/drywall |
 | Propiedades Vendidas | Socrata (assessor data) | 10 condados | 2 hrs | Nuevo dueño → renovación |
 | Eficiencia Energética | Socrata (benchmarking) | SF/Oak/SJ | 6 hrs | Baja eficiencia → panel upgrade |
-| Google Places | Google Places API | Bay Area | 24 hrs | Constructores activos |
+| Google Places | Google Places API + **Nominatim/OSM** (geocoding fallback) | Bay Area | 24 hrs | Constructores activos |
 | Yelp Contractors | Yelp Fusion API | Bay Area | 24 hrs | Contratistas activos |
+| **Pronóstico de Lluvia** | **Open-Meteo** (gratuito, sin key) | 9 ciudades principales | 1 hr | Tormenta → roofing/gutters/drywall |
+| **Contratos Federales** | **USASpending.gov** (gratuito, sin key) | Bay Area (9 condados) | 6 hrs | Contratos federales → subcontratistas |
 
 ---
 
@@ -383,6 +385,17 @@ GOOGLE_CLIENT_ID=
 FACEBOOK_APP_ID=
 STRIPE_WEBHOOK_SECRET=
 SENDGRID_API_KEY=
+
+# APIs gratuitas (sin key — configuración opcional)
+# Open-Meteo (weather_agent): sin key, configurable
+WEATHER_RAIN_THRESHOLD_MM=15       # mm/48h para alerta leve
+WEATHER_STORM_THRESHOLD_MM=50      # mm/48h para alerta tormenta
+# USASpending.gov (federal_contracts_agent): sin key
+FEDERAL_MIN_AWARD_USD=100000       # monto mínimo de contrato
+FEDERAL_MONTHS=3                   # ventana de búsqueda en meses
+# EPA ECHO (deconstruction_agent): sin key
+# FEMA NFHL (lead_enrichment): sin key
+# Nominatim/OSM (geocoding fallback): sin key
 ```
 
 ---
@@ -395,7 +408,7 @@ MLeads/
 ├── web_server.py              # Servidor web Flask
 ├── requirements.txt
 │
-├── agents/                    # Agentes de detección
+├── agents/                    # Agentes de detección (13)
 │   ├── base.py
 │   ├── permits_agent.py
 │   ├── solar_agent.py
@@ -406,7 +419,9 @@ MLeads/
 │   ├── realestate_agent.py
 │   ├── energy_agent.py
 │   ├── places_agent.py
-│   └── yelp_agent.py
+│   ├── yelp_agent.py
+│   ├── weather_agent.py       # Open-Meteo: pronóstico lluvia Bay Area (NUEVO)
+│   └── federal_contracts_agent.py  # USASpending: contratos federales (NUEVO)
 │
 ├── web/                       # Dashboard y API
 │   ├── app.py                 # Flask API (150+ endpoints)
@@ -443,6 +458,18 @@ MLeads/
 ---
 
 ## Changelog reciente
+
+### v3.1 — 6 APIs Gratuitas + Fixes de Feed
+- **Nuevo agente:** `weather_agent.py` — Open-Meteo (sin API key): alertas de lluvia intensa (>15mm/48h) y tormentas (>50mm/48h) en 9 ciudades principales → oportunidades de roofing/drywall/gutters
+- **Nuevo agente:** `federal_contracts_agent.py` — USASpending.gov (sin API key): contratos federales de construcción NAICS 236/237/238 en Bay Area → subcontratistas locales
+- **Geocoding gratuito:** Nominatim/OSM como alternativa a Google Maps en `places_agent` y `rodents_agent` — cero costo
+- **EPA ECHO** integrado en `deconstruction_agent`: violaciones ambientales de demolición como señal de lead
+- **FEMA NFHL** integrado en `lead_enrichment`: zonas de inundación para boost de score en permisos post-flood
+- Fix: columna `has_contact` no se seteaba en insert → leads con contacto no aparecían en feed
+- Fix: filtro del feed demasiado restrictivo → leads válidos eran excluidos
+- Fix: feed vacío en carga inicial → `init_web_db()` llamado al startup
+- Fix: íconos de banderas en toggle de idioma (español/inglés)
+- `main.py` y `.env` actualizados con registro de los 2 nuevos agentes
 
 ### v3.0 — Seguridad, UX y lógica de swipe
 - Termómetro 100% correlacionado con tipo de subcontratista seleccionado

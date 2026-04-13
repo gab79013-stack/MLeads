@@ -413,10 +413,10 @@
                     <button class="pill ltype" data-cat="realestate">🏡 Venta de Propiedad</button>
                     <button class="pill ltype" data-cat="solar">☀️ Solar</button>
                     <button class="pill ltype" data-cat="flood">💧 Daño por Agua</button>
-                    <button class="pill ltype" data-cat="deconstruction">🏚️ Demolición</button>
-                    <button class="pill ltype" data-cat="remodel">🔨 Remodelación</button>
                     <button class="pill ltype" data-cat="energy">⚡ Eficiencia Energética</button>
                     <button class="pill ltype" data-cat="rodents">🐀 Control de Plagas</button>
+                    <button class="pill ltype" data-cat="deconstruction">🏚️ Demolición</button>
+                    <button class="pill ltype" data-cat="remodel">🔨 Remodelación</button>
                 </div>
             </div>
 
@@ -597,8 +597,8 @@ const authHdrs = () => { const h = {'Content-Type':'application/json'}; const t 
 // ── Filter state ──────────────────────────────────────────────────────────────
 const F = {
     hotOnly:  false,
-    subCats:  new Set(),   // roofing, drywall, paint, landscaping, electrical
-    leadTypes: new Set(),  // permits, construction, solar, realestate, flood, energy, rodents, deconstruction
+    subCats:  new Set(),   // roofing, drywall, paint, electrical, plumbing, hvac, flooring, concrete, framing, windows, landscaping
+    leadTypes: new Set(),  // permits, construction, solar, realestate, flood, energy, rodents, deconstruction, remodel
     city:     '',
     radius:   25,
     minVal:   0,
@@ -722,18 +722,30 @@ function fmtPhone(p) {
 
 // ── Subcontractor type affinity mapping ───────────────────────────────────────
 const _SUBCAT_KEYWORDS = {
-    roofing:     ['roof','roofing','re-roof','reroof','shingle','tile roof','torch down','tpo','flat roof'],
-    drywall:     ['drywall','sheetrock','gypsum','taping','texturing','wallboard','wall board'],
-    paint:       ['paint','painting','repaint','painter','stucco paint','primer','exterior paint'],
-    landscaping: ['landscap','hardscape','irrigation','sprinkler','retaining wall','paver','turf','grading'],
-    electrical:  ['electrical','panel upgrade','ev charger','200 amp','rewire','sub panel','wiring','low voltage'],
+    roofing:     ['roof','roofing','re-roof','reroof','shingle','tile roof','torch down','tpo','flat roof','gutter','fascia','eave'],
+    drywall:     ['drywall','sheetrock','gypsum','taping','texturing','wallboard','wall board','partition','plaster'],
+    paint:       ['paint','painting','repaint','painter','stucco paint','primer','exterior paint','coating','finishes'],
+    landscaping: ['landscap','hardscape','irrigation','sprinkler','retaining wall','paver','turf','grading','tree','garden'],
+    electrical:  ['electrical','panel upgrade','ev charger','200 amp','rewire','sub panel','wiring','low voltage','circuit','outlet'],
+    plumbing:    ['plumb','plumber','pipe','sewer','drain','water heater','gas line','fixture','bathroom','kitchen remodel'],
+    hvac:        ['hvac','heating','cooling','furnace','ac unit','air condition','duct','ventilation','heat pump','thermostat'],
+    flooring:    ['floor','flooring','hardwood','tile','carpet','laminate','vinyl','epoxy floor','subfloor','slab'],
+    concrete:    ['concrete','cement','foundation','slab','flatwork','driveway','sidewalk','curb','retaining wall','footing'],
+    framing:     ['framing','frame','lumber','stud','joist','beam','structural','addition','adu','new construction','rough'],
+    windows:     ['window','door','skylight','glass','glazing','storefront','sliding door','french door','entry','fenestration'],
 };
 const _SUBCAT_SERVICE_TYPES = {
-    roofing:     ['permits','construction'],
-    drywall:     ['construction','permits'],
-    paint:       ['construction','permits'],
-    landscaping: ['permits','construction'],
-    electrical:  ['permits','construction','energy','solar'],
+    roofing:     ['permits','construction','flood'],
+    drywall:     ['construction','permits','flood','remodel'],
+    paint:       ['construction','permits','remodel'],
+    landscaping: ['permits','construction','realestate'],
+    electrical:  ['permits','construction','energy','solar','remodel'],
+    plumbing:    ['permits','construction','remodel','realestate'],
+    hvac:        ['permits','construction','energy','remodel'],
+    flooring:    ['construction','permits','remodel','realestate'],
+    concrete:    ['permits','construction','deconstruction'],
+    framing:     ['permits','construction'],
+    windows:     ['permits','construction','remodel','realestate'],
 };
 
 /**
@@ -1440,7 +1452,7 @@ const LTYPE_LABELS_EN = {
     permits:'📋 Permits', construction:'👷 Active Construction',
     realestate:'🏡 Property Sale', solar:'☀️ Solar',
     flood:'💧 Water Damage', deconstruction:'🏚️ Demolition',
-    remodel:'🔨 Remodeling', energy:'⚡ Energy Efficiency',
+    remodel:'🔨 Remodel', energy:'⚡ Energy Efficiency',
     rodents:'🐀 Pest Control',
 };
 
