@@ -124,6 +124,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.wfile.write(content)
             return
 
+        if parsed.path == "/login.html":
+            content = (ROOT / "dashboard" / "login.html").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+            return
+
         if parsed.path == "/health":
             self._json({"ok": True, "db": self.db_path})
             return
@@ -222,6 +231,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path in {"/", "/index.html"}:
             content = (ROOT / "dashboard" / "index.html").read_bytes()
+            self._head("text/html; charset=utf-8", len(content), 200)
+            return
+        if parsed.path == "/login.html":
+            content = (ROOT / "dashboard" / "login.html").read_bytes()
             self._head("text/html; charset=utf-8", len(content), 200)
             return
         if parsed.path == "/health":

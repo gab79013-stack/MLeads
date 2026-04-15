@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MLeads — Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --fg: #171717;
+            --fg-secondary: #6c7278;
+            --fg-muted: #9ca3af;
+            --bg-page: #f4f5f6;
+            --bg-surface: #ffffff;
+            --border: #e2e2e3;
+            --accent: #2490ef;
+            --accent-dark: #1a6fbd;
+            --red: #d1293d;
+            --radius: 8px;
+            --radius-lg: 12px;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-page);
+            color: var(--fg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+        }
+        .login-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 32px;
+        }
+        .login-logo {
+            width: 40px;
+            height: 40px;
+            background: var(--fg);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-logo svg { width: 22px; height: 22px; color: white; }
+        .login-title { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--fg-secondary);
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--fg);
+            background: var(--bg-surface);
+            transition: border-color 0.15s ease;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--fg);
+            box-shadow: 0 0 0 3px rgba(23,23,23,0.06);
+        }
+        .btn-login {
+            width: 100%;
+            padding: 12px;
+            background: var(--fg);
+            color: white;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            margin-top: 8px;
+        }
+        .btn-login:hover { background: #333; }
+        .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+        .error-msg {
+            color: var(--red);
+            font-size: 13px;
+            margin-top: 12px;
+            display: none;
+        }
+        .error-msg.visible { display: block; }
+        .login-footer {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--fg-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-brand">
+            <div class="login-logo">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <span class="login-title">MLeads</span>
+        </div>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" value="admin@kortix.local" autocomplete="email" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" value="ChangeMe123!" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn-login" id="loginBtn">Sign in</button>
+            <div class="error-msg" id="errorMsg">Invalid email or password</div>
+        </form>
+        <div class="login-footer">Powered by Kortix</div>
+    </div>
+    <script>
+        const form = document.getElementById('loginForm');
+        const loginBtn = document.getElementById('loginBtn');
+        const errorMsg = document.getElementById('errorMsg');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Signing in...';
+            errorMsg.classList.remove('visible');
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: document.getElementById('email').value,
+                        password: document.getElementById('password').value
+                    })
+                });
+                const data = await res.json();
+                if (data.token) {
+                    localStorage.setItem('mleads_token', data.token);
+                    window.location.href = '/';
+                } else {
+                    errorMsg.textContent = data.error || 'Invalid credentials';
+                    errorMsg.classList.add('visible');
+                }
+            } catch (err) {
+                errorMsg.textContent = 'Connection error';
+                errorMsg.classList.add('visible');
+            }
+
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'Sign in';
+        });
+    </script>
+</body>
+</html>
