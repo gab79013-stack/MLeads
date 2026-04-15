@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MLeads Dashboard</title>
+    <style>
+      body { font-family: Inter, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+      .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      .card { background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+      input, button { padding: 10px 12px; border-radius: 8px; border: 1px solid #475569; }
+      input { background: #020617; color: #e2e8f0; width: 100%; margin-bottom: 8px; }
+      button { background: #2563eb; color: white; cursor: pointer; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border-bottom: 1px solid #334155; padding: 8px; text-align: left; }
+      .muted { color: #94a3b8; }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>MLeads Dashboard</h1>
+      <p class="muted">Auth local, leads, billing y notificaciones inteligentes sobre Kortix.</p>
+
+      <div id="loginCard" class="card">
+        <h2>Iniciar sesión</h2>
+        <input id="email" value="admin@kortix.local" />
+        <input id="password" type="password" value="ChangeMe123!" />
+        <button onclick="login()">Entrar</button>
+        <p id="loginMsg" class="muted"></p>
+      </div>
+
+      <div id="app" class="hidden">
+        <div class="grid">
+          <div class="card"><h3>Total leads</h3><div id="totalLeads">-</div></div>
+          <div class="card"><h3>Qualified</h3><div id="qualifiedLeads">-</div></div>
+          <div class="card"><h3>Score promedio</h3><div id="avgScore">-</div></div>
+          <div class="card"><h3>Plan</h3><div id="planInfo">-</div></div>
+        </div>
+
+        <div class="card">
+          <h2>Triggers</h2>
+          <button onclick="evaluateTriggers()">Evaluar triggers</button>
+          <pre id="triggerResult" class="muted"></pre>
+        </div>
+
+        <div class="card">
+          <h2>Leads</h2>
+          <table>
+            <thead><tr><th>Nombre</th><th>Email</th><th>Empresa</th><th>Score</th><th>Status</th></tr></thead>
+            <tbody id="leadsTable"></tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h2>Notificaciones</h2>
+          <ul id="notifications"></ul>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let token = localStorage.getItem('mleadsToken') || '';
+
+      async function api(path, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const response = await fetch(path, { ...options, headers });
+        return response.json();
+      }
+
+      async function login() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const data = await api('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+        if (data.token) {
+          token = data.token;
+          localStorage.setItem('mleadsToken', token);
+          document.getElementById('loginCard').classList.add('hidden');
+          document.getElementById('app').classList.remove('hidden');
+          loadDashboard();
+        } else {
+          document.getElementById('loginMsg').textContent = 'Login fallido';
+        }
+      }
+
+      async function loadDashboard() {
+        const [stats, leads, notifications, subscription] = await Promise.all([
+          api('/api/stats'),
+          api('/api/leads?limit=10'),
+          api('/api/notifications'),
+          api('/api/subscription')
+        ]);
+
+        document.getElementById('totalLeads').textContent = stats.total;
+        document.getElementById('qualifiedLeads').textContent = stats.qualified;
+        document.getElementById('avgScore').textContent = Number(stats.avg_score || 0).toFixed(1);
+        document.getElementById('planInfo').textContent = subscription.subscription ? `${subscription.subscription.plan} (${subscription.subscription.current_leads}/${subscription.subscription.leads_limit})` : 'Sin suscripción';
+
+        document.getElementById('leadsTable').innerHTML = leads.leads.map(lead =>
+          `<tr><td>${lead.first_name || ''} ${lead.last_name || ''}</td><td>${lead.email}</td><td>${lead.company || '-'}</td><td>${lead.score}</td><td>${lead.status}</td></tr>`
+        ).join('');
+
+        document.getElementById('notifications').innerHTML = notifications.notifications.map(item =>
+          `<li><strong>${item.title}</strong> — ${item.message}</li>`
+        ).join('');
+      }
+
+      async function evaluateTriggers() {
+        const result = await api('/api/triggers/evaluate', { method: 'POST' });
+        document.getElementById('triggerResult').textContent = JSON.stringify(result, null, 2);
+        loadDashboard();
+      }
+
+      if (token) {
+        document.getElementById('loginCard').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+        loadDashboard();
+      }
+    </script>
+  </body>
+</html>
