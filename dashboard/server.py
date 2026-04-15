@@ -146,6 +146,292 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/me":
                 self._json({"user": user})
                 return
+            if parsed.path == "/api/leads":
+                limit = int(query.get("limit", ["100"])[0])
+                offset = int(query.get("offset", ["0"])[0])
+                city_id = query.get("city_id", [None])[0]
+                state = query.get("state", [None])[0]
+                service_type = query.get("service_type", [None])[0]
+                status_filter = query.get("status", [None])[0]
+                min_score = query.get("min_score", [None])[0]
+                search = query.get("search", [None])[0]
+
+                conditions = []
+                params = []
+
+                if city_id:
+                    conditions.append("l.city_id = ?")
+                    params.append(city_id)
+                if state:
+                    conditions.append("l.state = ?")
+                    params.append(state)
+                if service_type:
+                    conditions.append("l.service_type = ?")
+                    params.append(service_type)
+                if status_filter:
+                    conditions.append("l.status = ?")
+                    params.append(status_filter)
+                if min_score:
+                    conditions.append("l.score >= ?")
+                    params.append(float(min_score))
+                if search:
+                    conditions.append(
+                        "(l.first_name LIKE ? OR l.last_name LIKE ? OR l.email LIKE ? OR l.company LIKE ? OR l.address LIKE ? OR l.city LIKE ?)"
+                    )
+                    like_search = f"%{search}%"
+                    params.extend([like_search] * 6)
+
+                where = " WHERE " + " AND ".join(conditions) if conditions else ""
+                params_limit = list(params) + [limit, offset]
+
+                leads = [
+                    dict(row)
+                    for row in conn.execute(
+                        f"""SELECT l.id, l.first_name, l.last_name, l.email, l.phone,
+                            l.company, l.source, l.score, l.status, l.city, l.city_id,
+                            l.state, l.zip, l.address, l.estimated_value, l.service_type,
+                            l.agent_id, l.first_seen, l.next_inspection, l.created_at,
+                            l.updated_at
+                            FROM leads l{where}
+                            ORDER BY l.score DESC, l.updated_at DESC
+                            LIMIT ? OFFSET ?""",
+                        params_limit,
+                    ).fetchall()
+                ]
+
+                total = conn.execute(
+                    f"SELECT COUNT(*) FROM leads l{where}", params
+                ).fetchone()[0]
+
+                self._json({"leads": leads, "count": len(leads), "total": total})
+                return
+
+            # GET /api/leads/:id
+            if parsed.path.startswith("/api/leads/"):
+                lead_id = parsed.path[len("/api/leads/") :]
+                lead = conn.execute(
+                    """SELECT l.id, l.first_name, l.last_name, l.email, l.phone,
+                        l.company, l.source, l.score, l.status, l.city, l.city_id,
+                        l.state, l.zip, l.address, l.estimated_value, l.service_type,
+                        l.agent_id, l.first_seen, l.next_inspection, l.tags, l.notes,
+                        l.metadata, l.assigned_agent, l.created_at, l.updated_at
+                        FROM leads l WHERE l.id = ?""",
+                    (lead_id,),
+                ).fetchone()
+                if not lead:
+                    self._json({"error": "lead_not_found"}, 404)
+                    return
+                lead_dict = dict(lead)
+                # Get interactions
+                lead_dict["interactions"] = [
+                    dict(r)
+                    for r in conn.execute(
+                        "SELECT id, type, content, agent_id, metadata, created_at FROM lead_interactions WHERE lead_id = ? ORDER BY created_at DESC",
+                        (lead_id,),
+                    ).fetchall()
+                ]
+                # Get scoring history
+                lead_dict["scoring_history"] = [
+                    dict(r)
+                    for r in conn.execute(
+                        "SELECT id, score, model, factors, created_at FROM lead_scoring_history WHERE lead_id = ? ORDER BY created_at DESC",
+                        (lead_id,),
+                    ).fetchall()
+                ]
+                self._json({"lead": lead_dict})
+                return
+
+            # GET /api/cities
+            if parsed.path == "/api/cities":
+                state_filter = query.get("state", [None])[0]
+                active_only = query.get("active", ["1"])[0]
+                conditions = []
+                params = []
+                if state_filter:
+                    conditions.append("state = ?")
+                    params.append(state_filter)
+                if active_only == "1":
+                    conditions.append("active = 1")
+                where = " WHERE " + " AND ".join(conditions) if conditions else ""
+                cities = [
+                    dict(row)
+                    for row in conn.execute(
+                        f"SELECT id, name, state, country, jurisdiction, population, avg_home_value, active, metadata FROM cities{where} ORDER BY name",
+                        params,
+                    ).fetchall()
+                ]
+                self._json({"cities": cities, "count": len(cities)})
+                return
+
+            # GET /api/cities/:id/stats (must be before /api/cities/:id)
+            if parsed.path.endswith("/stats") and parsed.path.startswith(
+                "/api/cities/"
+            ):
+                city_id = parsed.path[len("/api/cities/") : -len("/stats")]
+                stats = {
+                    "city_id": city_id,
+                    "lead_count": conn.execute(
+                        "SELECT COUNT(*) FROM leads WHERE city_id = ?", (city_id,)
+                    ).fetchone()[0],
+                    "avg_score": conn.execute(
+                        "SELECT COALESCE(AVG(score), 0) FROM leads WHERE city_id = ?",
+                        (city_id,),
+                    ).fetchone()[0],
+                    "by_status": [
+                        dict(r)
+                        for r in conn.execute(
+                            "SELECT status, COUNT(*) as count FROM leads WHERE city_id = ? GROUP BY status",
+                            (city_id,),
+                        ).fetchall()
+                    ],
+                    "by_service_type": [
+                        dict(r)
+                        for r in conn.execute(
+                            "SELECT service_type, COUNT(*) as count FROM leads WHERE city_id = ? AND service_type IS NOT NULL GROUP BY service_type",
+                            (city_id,),
+                        ).fetchall()
+                    ],
+                    "total_estimated_value": conn.execute(
+                        "SELECT COALESCE(SUM(estimated_value), 0) FROM leads WHERE city_id = ?",
+                        (city_id,),
+                    ).fetchone()[0],
+                }
+                self._json({"stats": stats})
+                return
+
+            # GET /api/cities/:id
+            if parsed.path.startswith("/api/cities/"):
+                city_id = parsed.path[len("/api/cities/") :]
+                city = conn.execute(
+                    "SELECT * FROM cities WHERE id = ?", (city_id,)
+                ).fetchone()
+                if not city:
+                    self._json({"error": "city_not_found"}, 404)
+                    return
+                city_dict = dict(city)
+                city_dict["lead_count"] = conn.execute(
+                    "SELECT COUNT(*) FROM leads WHERE city_id = ?", (city_id,)
+                ).fetchone()[0]
+                city_dict["avg_score"] = conn.execute(
+                    "SELECT COALESCE(AVG(score), 0) FROM leads WHERE city_id = ?",
+                    (city_id,),
+                ).fetchone()[0]
+                city_dict["total_value"] = conn.execute(
+                    "SELECT COALESCE(SUM(estimated_value), 0) FROM leads WHERE city_id = ?",
+                    (city_id,),
+                ).fetchone()[0]
+                self._json({"city": city_dict})
+                return
+
+            # GET /api/bot-users
+            if parsed.path == "/api/bot-users":
+                status_filter = query.get("status", [None])[0]
+                city_filter = query.get("city_id", [None])[0]
+                conditions = []
+                params = []
+                if status_filter:
+                    conditions.append("status = ?")
+                    params.append(status_filter)
+                if city_filter:
+                    conditions.append("city_id = ?")
+                    params.append(city_filter)
+                where = " WHERE " + " AND ".join(conditions) if conditions else ""
+                bot_users = [
+                    dict(row)
+                    for row in conn.execute(
+                        f"SELECT * FROM bot_users{where} ORDER BY created_at DESC",
+                        params,
+                    ).fetchall()
+                ]
+                # Stats
+                total = conn.execute("SELECT COUNT(*) FROM bot_users").fetchone()[0]
+                on_trial = conn.execute(
+                    "SELECT COUNT(*) FROM bot_users WHERE status = 'trial'"
+                ).fetchone()[0]
+                paying = conn.execute(
+                    "SELECT COUNT(*) FROM bot_users WHERE status = 'active'"
+                ).fetchone()[0]
+                est_mrr = conn.execute(
+                    "SELECT COUNT(*) * 29 FROM bot_users WHERE status = 'active'"
+                ).fetchone()[0]
+                self._json(
+                    {
+                        "bot_users": bot_users,
+                        "count": len(bot_users),
+                        "stats": {
+                            "total": total,
+                            "on_trial": on_trial,
+                            "paying": paying,
+                            "est_mrr": est_mrr,
+                        },
+                    }
+                )
+                return
+
+            # GET /api/inspections
+            if parsed.path == "/api/inspections":
+                days_filter = query.get("days", [None])[0]
+                jurisdiction_filter = query.get("jurisdiction", [None])[0]
+                conditions = []
+                params = []
+                if days_filter:
+                    conditions.append(
+                        "inspection_date <= date('now', '+' || ? || ' days')"
+                    )
+                    params.append(int(days_filter))
+                if jurisdiction_filter:
+                    conditions.append("jurisdiction = ?")
+                    params.append(jurisdiction_filter)
+                where = " WHERE " + " AND ".join(conditions) if conditions else ""
+                inspections = [
+                    dict(row)
+                    for row in conn.execute(
+                        f"SELECT * FROM inspections{where} ORDER BY inspection_date ASC",
+                        params,
+                    ).fetchall()
+                ]
+                self._json({"inspections": inspections, "count": len(inspections)})
+                return
+
+            # GET /api/users
+            if parsed.path == "/api/users":
+                if not self._require_role(user, {"admin"}):
+                    return
+                users = [
+                    dict(row)
+                    for row in conn.execute(
+                        "SELECT id, email, role, created_at FROM app_users ORDER BY created_at DESC"
+                    ).fetchall()
+                ]
+                self._json({"users": users, "count": len(users)})
+                return
+
+            # GET /api/export/history
+            if parsed.path == "/api/export/history":
+                exports = [
+                    dict(row)
+                    for row in conn.execute(
+                        "SELECT * FROM export_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
+                        (user["id"],),
+                    ).fetchall()
+                ]
+                self._json({"exports": exports, "count": len(exports)})
+                return
+
+            # GET /api/feedback
+            if parsed.path == "/api/feedback":
+                if not self._require_role(user, {"admin"}):
+                    return
+                feedback = [
+                    dict(row)
+                    for row in conn.execute(
+                        "SELECT * FROM feedback ORDER BY created_at DESC LIMIT 50"
+                    ).fetchall()
+                ]
+                self._json({"feedback": feedback, "count": len(feedback)})
+                return
+
+            # GET /api/stats (enhanced with city breakdown)
             if parsed.path == "/api/stats":
                 total = conn.execute("SELECT COUNT(*) FROM leads").fetchone()[0]
                 qualified = conn.execute(
@@ -160,39 +446,34 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "SELECT status, COUNT(*) AS count FROM leads GROUP BY status ORDER BY count DESC"
                     ).fetchall()
                 ]
+                by_city = [
+                    dict(row)
+                    for row in conn.execute(
+                        """SELECT l.city, COUNT(*) as count, COALESCE(AVG(l.score), 0) as avg_score
+                           FROM leads l WHERE l.city IS NOT NULL
+                           GROUP BY l.city ORDER BY count DESC LIMIT 10"""
+                    ).fetchall()
+                ]
+                by_service_type = [
+                    dict(row)
+                    for row in conn.execute(
+                        """SELECT l.service_type, COUNT(*) as count
+                           FROM leads l WHERE l.service_type IS NOT NULL
+                           GROUP BY l.service_type ORDER BY count DESC"""
+                    ).fetchall()
+                ]
                 self._json(
                     {
                         "total": total,
                         "qualified": qualified,
                         "avg_score": avg_score,
                         "by_status": by_status,
+                        "by_city": by_city,
+                        "by_service_type": by_service_type,
                     }
                 )
                 return
-            if parsed.path == "/api/leads":
-                limit = int(query.get("limit", ["25"])[0])
-                leads = [
-                    dict(row)
-                    for row in conn.execute(
-                        "SELECT id, first_name, last_name, email, company, source, score, status, updated_at FROM leads ORDER BY score DESC, updated_at DESC LIMIT ?",
-                        (limit,),
-                    ).fetchall()
-                ]
-                self._json({"leads": leads, "count": len(leads)})
-                return
             if parsed.path == "/api/notifications":
-                notifications = [
-                    dict(row)
-                    for row in conn.execute(
-                        "SELECT id, trigger_id, title, message, status, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
-                        (user["id"],),
-                    ).fetchall()
-                ]
-                self._json(
-                    {"notifications": notifications, "count": len(notifications)}
-                )
-                return
-            if parsed.path == "/api/subscription":
                 row = conn.execute(
                     "SELECT id, plan, status, leads_limit, current_leads, updated_at FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1",
                     (user["id"],),
@@ -364,7 +645,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
                     lead_id = f"lead_{secrets.token_hex(8)}"
                     conn.execute(
-                        "INSERT INTO leads (id, first_name, last_name, email, phone, company, source, score, status, tags, notes, metadata, assigned_agent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'new', '[]', ?, ?, ?, datetime('now'), datetime('now'))",
+                        """INSERT INTO leads (id, first_name, last_name, email, phone, company,
+                           source, score, status, tags, notes, metadata, assigned_agent,
+                           city, city_id, state, zip, address, country, estimated_value,
+                           service_type, agent_id, first_seen, next_inspection,
+                           created_at, updated_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'new', '[]', ?, ?, ?,
+                                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                   datetime('now'), datetime('now'))""",
                         (
                             lead_id,
                             first_name,
@@ -378,6 +666,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
                                 payload.get("metadata") or {}, ensure_ascii=False
                             ),
                             user.get("id"),
+                            str(payload.get("city") or "").strip() or None,
+                            str(payload.get("city_id") or "").strip() or None,
+                            str(payload.get("state") or "").strip() or None,
+                            str(payload.get("zip") or "").strip() or None,
+                            str(payload.get("address") or "").strip() or None,
+                            str(payload.get("country") or "US").strip(),
+                            float(payload["estimated_value"])
+                            if payload.get("estimated_value")
+                            else None,
+                            str(payload.get("service_type") or "").strip() or None,
+                            str(payload.get("agent_id") or "").strip() or None,
+                            str(payload.get("first_seen") or "").strip() or None,
+                            str(payload.get("next_inspection") or "").strip() or None,
                         ),
                     )
                     conn.execute(
@@ -459,6 +760,241 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 {"user_id": user.get("id"), "created": len(created)},
             )
             self._json({"created": created, "count": len(created)})
+            return
+
+        # POST /api/notifications/test
+        if parsed.path == "/api/notifications/test":
+            payload = self._read_json()
+            with db_connect(self.db_path) as conn:
+                record_audit(
+                    conn, user.get("id"), "test_notification", "notification", None
+                )
+                conn.commit()
+            append_structured_log(
+                "dashboard_access.jsonl",
+                "dashboard.notification.test",
+                {"user_id": user.get("id")},
+            )
+            self._json({"ok": True, "message": "Test notification sent"})
+            return
+
+        # POST /api/export
+        if parsed.path == "/api/export":
+            payload = self._read_json()
+            export_id = f"export_{secrets.token_hex(8)}"
+            fmt = payload.get("format", "csv")
+            filters = payload.get("filters", {})
+            with db_connect(self.db_path) as conn:
+                count = conn.execute("SELECT COUNT(*) FROM leads").fetchone()[0]
+                conn.execute(
+                    "INSERT INTO export_history (id, user_id, format, filters, row_count, status, created_at) VALUES (?, ?, ?, ?, ?, 'completed', datetime('now'))",
+                    (export_id, user["id"], fmt, json.dumps(filters), count),
+                )
+                conn.commit()
+            self._json({"export_id": export_id, "row_count": count, "format": fmt})
+            return
+
+        # POST /api/feedback
+        if parsed.path == "/api/feedback":
+            payload = self._read_json()
+            feedback_id = f"fb_{secrets.token_hex(8)}"
+            fb_type = payload.get("type", "general")
+            message = payload.get("message", "")
+            rating = payload.get("rating")
+            if not message:
+                self._json({"error": "message_required"}, 400)
+                return
+            with db_connect(self.db_path) as conn:
+                conn.execute(
+                    "INSERT INTO feedback (id, user_id, type, rating, message, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+                    (
+                        feedback_id,
+                        user["id"],
+                        fb_type,
+                        rating,
+                        message,
+                        json.dumps(payload.get("metadata", {})),
+                    ),
+                )
+                conn.commit()
+            self._json({"id": feedback_id, "ok": True}, 201)
+            return
+
+        self._json({"error": "not_found"}, 404)
+
+    def do_PUT(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        user = self._require_auth()
+        if not user:
+            return
+
+        payload = self._read_json()
+
+        # PUT /api/leads/:id
+        if parsed.path.startswith("/api/leads/"):
+            if not self._require_role(user, {"admin", "ops", "sales"}):
+                return
+            lead_id = parsed.path[len("/api/leads/") :]
+            with db_connect(self.db_path) as conn:
+                existing = conn.execute(
+                    "SELECT id FROM leads WHERE id = ?", (lead_id,)
+                ).fetchone()
+                if not existing:
+                    self._json({"error": "lead_not_found"}, 404)
+                    return
+
+                fields = []
+                values = []
+                for key in [
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "phone",
+                    "company",
+                    "city",
+                    "city_id",
+                    "state",
+                    "zip",
+                    "address",
+                    "country",
+                    "estimated_value",
+                    "service_type",
+                    "agent_id",
+                    "score",
+                    "status",
+                    "notes",
+                    "assigned_agent",
+                    "first_seen",
+                    "next_inspection",
+                ]:
+                    if key in payload:
+                        fields.append(f"{key} = ?")
+                        values.append(payload[key])
+                fields.append("updated_at = datetime('now')")
+                values.append(lead_id)
+
+                conn.execute(
+                    f"UPDATE leads SET {', '.join(fields)} WHERE id = ?", values
+                )
+                record_audit(
+                    conn,
+                    user.get("id"),
+                    "update_lead",
+                    "lead",
+                    lead_id,
+                    metadata={"fields": list(payload.keys())},
+                )
+                conn.commit()
+            append_structured_log(
+                "dashboard_access.jsonl",
+                "dashboard.lead.updated",
+                {"user_id": user.get("id"), "lead_id": lead_id},
+            )
+            self._json({"ok": True, "lead_id": lead_id})
+            return
+
+        # PUT /api/users/:id
+        if parsed.path.startswith("/api/users/") and not parsed.path.endswith(
+            "/password"
+        ):
+            if not self._require_role(user, {"admin"}):
+                return
+            user_id = parsed.path[len("/api/users/") :]
+            with db_connect(self.db_path) as conn:
+                existing = conn.execute(
+                    "SELECT id FROM app_users WHERE id = ?", (user_id,)
+                ).fetchone()
+                if not existing:
+                    self._json({"error": "user_not_found"}, 404)
+                    return
+                for key in ["role", "email"]:
+                    if key in payload:
+                        conn.execute(
+                            f"UPDATE app_users SET {key} = ? WHERE id = ?",
+                            (payload[key], user_id),
+                        )
+                conn.commit()
+            self._json({"ok": True, "user_id": user_id})
+            return
+
+        # PUT /api/users/:id/password
+        if parsed.path.startswith("/api/users/") and parsed.path.endswith("/password"):
+            user_id = parsed.path[len("/api/users/") : -len("/password")]
+            new_password = payload.get("password", "")
+            if not new_password or len(new_password) < 8:
+                self._json({"error": "password_too_short"}, 400)
+                return
+            from scripts.auth_utils import hash_password
+
+            password_hash = hash_password(new_password)
+            with db_connect(self.db_path) as conn:
+                # Admin can change any user's password, users can only change their own
+                if user["role"] != "admin" and user["id"] != user_id:
+                    self._json({"error": "forbidden"}, 403)
+                    return
+                conn.execute(
+                    "UPDATE app_users SET password_hash = ? WHERE id = ?",
+                    (password_hash, user_id),
+                )
+                conn.commit()
+            self._json({"ok": True})
+            return
+
+        self._json({"error": "not_found"}, 404)
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        user = self._require_auth()
+        if not user:
+            return
+
+        # DELETE /api/leads/:id
+        if parsed.path.startswith("/api/leads/"):
+            if not self._require_role(user, {"admin"}):
+                return
+            lead_id = parsed.path[len("/api/leads/") :]
+            with db_connect(self.db_path) as conn:
+                existing = conn.execute(
+                    "SELECT id FROM leads WHERE id = ?", (lead_id,)
+                ).fetchone()
+                if not existing:
+                    self._json({"error": "lead_not_found"}, 404)
+                    return
+                conn.execute("DELETE FROM leads WHERE id = ?", (lead_id,))
+                conn.execute(
+                    "DELETE FROM lead_interactions WHERE lead_id = ?", (lead_id,)
+                )
+                conn.execute(
+                    "DELETE FROM lead_scoring_history WHERE lead_id = ?", (lead_id,)
+                )
+                record_audit(conn, user.get("id"), "delete_lead", "lead", lead_id)
+                conn.commit()
+            append_structured_log(
+                "dashboard_access.jsonl",
+                "dashboard.lead.deleted",
+                {"user_id": user.get("id"), "lead_id": lead_id},
+            )
+            self._json({"ok": True, "lead_id": lead_id})
+            return
+
+        # DELETE /api/users/:id
+        if parsed.path.startswith("/api/users/"):
+            if not self._require_role(user, {"admin"}):
+                return
+            user_id = parsed.path[len("/api/users/") :]
+            if user_id == user["id"]:
+                self._json({"error": "cannot_delete_self"}, 400)
+                return
+            with db_connect(self.db_path) as conn:
+                existing = conn.execute(
+                    "SELECT id FROM app_users WHERE id = ?", (user_id,)
+                ).fetchone()
+                if not existing:
+                    self._json({"error": "user_not_found"}, 404)
+                    return
+                conn.execute("DELETE FROM app_users WHERE id = ?", (user_id,))
+                conn.commit()
+            self._json({"ok": True, "user_id": user_id})
             return
 
         self._json({"error": "not_found"}, 404)
