@@ -1,0 +1,113 @@
+{
+  "leads": [
+    {
+      "id": "lead_phase4_001",
+      "first_name": "Lucia",
+      "last_name": "Mora",
+      "email": "lucia.mora@techcorp.com",
+      "phone": "+34 600 111 222",
+      "company": "TechCorp",
+      "source": "referral",
+      "score": 69.3,
+      "status": "contacted",
+      "tags": "[]",
+      "notes": "Primary record",
+      "metadata": "{}",
+      "created_at": "2026-04-14T23:08:53.136404+00:00",
+      "updated_at": "2026-04-15T04:09:01.915270+00:00"
+    },
+    {
+      "id": "lead_phase4_002",
+      "first_name": "Lucia",
+      "last_name": "Mora",
+      "email": "lmora@techcorp.com",
+      "phone": "+34 600 111 222",
+      "company": "TechCorp",
+      "source": "linkedin",
+      "score": 63.09,
+      "status": "contacted",
+      "tags": "[]",
+      "notes": "Possible duplicate",
+      "metadata": "{}",
+      "created_at": "2026-04-15T00:08:53.137731+00:00",
+      "updated_at": "2026-04-15T04:09:01.832440+00:00"
+    }
+  ],
+  "stats": {
+    "total": 2,
+    "new": 0,
+    "contacted": 2,
+    "qualified": 0,
+    "avg_score": 66.195
+  },
+  "audit": [
+    {
+      "id": 6,
+      "actor_id": "user_local_admin",
+      "action": "login",
+      "entity_type": "user",
+      "entity_id": "user_local_admin",
+      "status": "success",
+      "created_at": "2026-04-15T04:43:59.566377+00:00"
+    },
+    {
+      "id": 5,
+      "actor_id": "user_local_admin",
+      "action": "login",
+      "entity_type": "user",
+      "entity_id": "user_local_admin",
+      "status": "success",
+      "created_at": "2026-04-15T04:09:54.422181+00:00"
+    },
+    {
+      "id": 4,
+      "actor_id": "autowork",
+      "action": "score_lead",
+      "entity_type": "lead",
+      "entity_id": "lead_phase4_001",
+      "status": "success",
+      "created_at": "2026-04-15T04:09:01.917593+00:00"
+    },
+    {
+      "id": 3,
+      "actor_id": "autowork",
+      "action": "score_lead",
+      "entity_type": "lead",
+      "entity_id": "lead_phase4_002",
+      "status": "success",
+      "created_at": "2026-04-15T04:09:01.837817+00:00"
+    },
+    {
+      "id": 2,
+      "actor_id": "user_local_admin",
+      "action": "login",
+      "entity_type": "user",
+      "entity_id": "user_local_admin",
+      "status": "success",
+      "created_at": "2026-04-15T04:08:34.837821+00:00"
+    },
+    {
+      "id": 1,
+      "actor_id": "user_local_admin",
+      "action": "login",
+      "entity_type": "user",
+      "entity_id": "user_local_admin",
+      "status": "success",
+      "created_at": "2026-04-15T04:08:02.649433+00:00"
+    }
+  ],
+  "scoring": [
+    {
+      "lead_id": "lead_phase4_001",
+      "score": 69.3,
+      "model": "heuristic-v2",
+      "created_at": "2026-04-15T04:09:01.913513+00:00"
+    },
+    {
+      "lead_id": "lead_phase4_002",
+      "score": 63.09,
+      "model": "heuristic-v2",
+      "created_at": "2026-04-15T04:09:01.832136+00:00"
+    }
+  ]
+}

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MLeads Dashboard — Preview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --fg: #171717; --fg-secondary: #6c7278; --fg-muted: #9ca3af;
+            --bg-page: #f4f5f6; --bg-surface: #ffffff; --bg-subtle: #f8f9fa;
+            --bg-hover: #f0f1f2; --bg-active: #ebeef0; --border: #e2e2e3;
+            --border-light: #efefef; --accent: #2490ef; --accent-light: #e8f3fd;
+            --accent-dark: #1a6fbd; --red: #d1293d; --red-light: #fff0f0;
+            --green: #10b981; --green-light: #ecfdf5; --orange: #f59e0b;
+            --orange-light: #fffbeb; --purple: #8b5cf6; --purple-light: #f3f0ff;
+            --sidebar-w: 220px; --header-h: 52px; --radius: 8px; --radius-lg: 12px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+        }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg-page); color: var(--fg); line-height: 1.5; font-size: 14px; }
+        .app { display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: var(--sidebar-w); background: var(--bg-surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+        .sidebar-header { height: var(--header-h); padding: 0 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+        .sidebar-logo { width: 32px; height: 32px; background: var(--fg); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .sidebar-logo svg { width: 18px; height: 18px; color: white; }
+        .sidebar-brand-name { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
+        .sidebar-nav { flex: 1; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+        .nav-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: none; background: none; color: var(--fg-secondary); font-size: 13px; font-weight: 500; font-family: inherit; border-radius: var(--radius); cursor: pointer; transition: all 0.15s ease; }
+        .nav-item:hover { background: var(--bg-hover); color: var(--fg); }
+        .nav-item.active { background: var(--bg-active); color: var(--fg); font-weight: 600; }
+        .nav-icon { width: 20px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .nav-icon svg { width: 18px; height: 18px; }
+        .sidebar-footer { border-top: 1px solid var(--border); padding: 8px; }
+        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .header { height: var(--header-h); background: var(--bg-surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; }
+        .header-title { font-size: 16px; font-weight: 600; letter-spacing: -0.2px; }
+        .header-user { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 20px; border: 1px solid var(--border); }
+        .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--fg); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+        .avatar-name { font-size: 13px; font-weight: 500; }
+        .content { flex: 1; overflow-y: auto; padding: 24px; }
+        .view { display: none; } .view.active { display: block; }
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; transition: box-shadow 0.15s ease; }
+        .stat-card:hover { box-shadow: var(--shadow); }
+        .stat-label { font-size: 12px; font-weight: 500; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .stat-value { font-size: 28px; font-weight: 700; color: var(--fg); letter-spacing: -0.5px; }
+        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .section-title { font-size: 15px; font-weight: 600; }
+        .table-wrap { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; }
+        thead { background: var(--bg-subtle); }
+        th { padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+        td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border-light); }
+        tbody tr:hover { background: var(--bg-subtle); }
+        .badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+        .badge-warm { background: var(--orange-light); color: #b45309; }
+        .badge-medium { background: var(--purple-light); color: var(--purple); }
+        .badge-success { background: var(--green-light); color: #065f46; }
+        .badge-info { background: var(--accent-light); color: var(--accent); }
+        .contact-info { display: flex; flex-direction: column; gap: 2px; }
+        .contact-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-secondary); }
+        .contact-item svg { width: 13px; height: 13px; flex-shrink: 0; }
+        .score-badge { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 24px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+        .score-high { background: var(--green-light); color: #065f46; }
+        .score-medium { background: var(--orange-light); color: #92400e; }
+        .score-low { background: var(--bg-hover); color: var(--fg-muted); }
+        .preview-banner { background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%); color: white; padding: 10px 20px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+        .preview-banner svg { width: 16px; height: 16px; flex-shrink: 0; }
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--fg-muted); }
+        .audit-time { font-size: 11px; color: var(--fg-muted); }
+        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="preview-banner">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Preview Mode — Datos reales de la base de datos. Para la versión interactiva, abre el puerto 80 en Azure NSG.
+    </div>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                <span class="sidebar-brand-name">MLeads</span>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" onclick="showView('dashboard', this)"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>Dashboard</button>
+                <button class="nav-item" onclick="showView('leads', this)"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></span>Leads</button>
+                <button class="nav-item" onclick="showView('audit', this)"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>Audit Log</button>
+                <button class="nav-item" onclick="showView('scoring', this)"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>Scoring</button>
+            </nav>
+            <div class="sidebar-footer">
+                <div style="padding: 8px 10px; font-size: 11px; color: var(--fg-muted);">
+                    <div style="font-weight: 600; color: var(--fg); margin-bottom: 2px;">MLeads v1.0</div>
+                    <div>Kortix Integration</div>
+                </div>
+            </div>
+        </aside>
+        <div class="main">
+            <header class="header">
+                <h1 class="header-title" id="pageTitle">Dashboard</h1>
+                <div class="header-user">
+                    <div class="avatar">A</div>
+                    <span class="avatar-name">admin@kortix.local</span>
+                </div>
+            </header>
+            <div class="content">
+                <!-- DASHBOARD VIEW -->
+                <div class="view active" id="dashboard-view">
+                    <div class="stats-row">
+                        <div class="stat-card"><div class="stat-label">Total Leads</div><div class="stat-value" id="statTotal">2</div></div>
+                        <div class="stat-card"><div class="stat-label">Contacted</div><div class="stat-value" id="statContacted">2</div></div>
+                        <div class="stat-card"><div class="stat-label">Avg Score</div><div class="stat-value" id="statAvgScore">66.2</div></div>
+                        <div class="stat-card"><div class="stat-label">Scoring Model</div><div class="stat-value" style="font-size:16px; color: var(--accent);">heuristic-v2</div></div>
+                    </div>
+                    <div class="section-header"><h3 class="section-title">Recent Leads</h3></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Name</th><th>Contact</th><th>Company</th><th>Source</th><th>Score</th><th>Status</th></tr></thead>
+                            <tbody id="dashboardLeads"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- LEADS VIEW -->
+                <div class="view" id="leads-view">
+                    <div class="section-header"><h3 class="section-title">All Leads</h3></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Company</th><th>Source</th><th>Score</th><th>Status</th><th>Updated</th></tr></thead>
+                            <tbody id="allLeads"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- AUDIT VIEW -->
+                <div class="view" id="audit-view">
+                    <div class="section-header"><h3 class="section-title">Audit Log</h3></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>ID</th><th>Actor</th><th>Action</th><th>Entity</th><th>Status</th><th>Timestamp</th></tr></thead>
+                            <tbody id="auditLog"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- SCORING VIEW -->
+                <div class="view" id="scoring-view">
+                    <div class="section-header"><h3 class="section-title">Scoring History</h3></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Lead ID</th><th>Score</th><th>Model</th><th>Timestamp</th></tr></thead>
+                            <tbody id="scoringHistory"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const DATA = {"leads":[{"id":"lead_phase4_001","first_name":"Lucia","last_name":"Mora","email":"lucia.mora@techcorp.com","phone":"+34 600 111 222","company":"TechCorp","source":"referral","score":69.3,"status":"contacted","notes":"Primary record","created_at":"2026-04-14T23:08:53.136404+00:00","updated_at":"2026-04-15T04:09:01.915270+00:00"},{"id":"lead_phase4_002","first_name":"Lucia","last_name":"Mora","email":"lmora@techcorp.com","phone":"+34 600 111 222","company":"TechCorp","source":"linkedin","score":63.09,"status":"contacted","notes":"Possible duplicate","created_at":"2026-04-15T00:08:53.137731+00:00","updated_at":"2026-04-15T04:09:01.832440+00:00"}],"stats":{"total":2,"new":0,"contacted":2,"qualified":0,"avg_score":66.195},"audit":[{"id":6,"actor_id":"user_local_admin","action":"login","entity_type":"user","entity_id":"user_local_admin","status":"success","created_at":"2026-04-15T04:43:59.566377+00:00"},{"id":5,"actor_id":"user_local_admin","action":"login","entity_type":"user","entity_id":"user_local_admin","status":"success","created_at":"2026-04-15T04:09:54.422181+00:00"},{"id":4,"actor_id":"autowork","action":"score_lead","entity_type":"lead","entity_id":"lead_phase4_001","status":"success","created_at":"2026-04-15T04:09:01.917593+00:00"},{"id":3,"actor_id":"autowork","action":"score_lead","entity_type":"lead","entity_id":"lead_phase4_002","status":"success","created_at":"2026-04-15T04:09:01.837817+00:00"},{"id":2,"actor_id":"user_local_admin","action":"login","entity_type":"user","entity_id":"user_local_admin","status":"success","created_at":"2026-04-15T04:08:34.837821+00:00"},{"id":1,"actor_id":"user_local_admin","action":"login","entity_type":"user","entity_id":"user_local_admin","status":"success","created_at":"2026-04-15T04:08:02.649433+00:00"}],"scoring":[{"lead_id":"lead_phase4_001","score":69.3,"model":"heuristic-v2","created_at":"2026-04-15T04:09:01.913513+00:00"},{"lead_id":"lead_phase4_002","score":63.09,"model":"heuristic-v2","created_at":"2026-04-15T04:09:01.832136+00:00"}]};
+
+        function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+        function fmtDate(d) { return new Date(d).toLocaleString('es-ES', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+        function scoreClass(s) { return s >= 70 ? 'score-high' : s >= 50 ? 'score-medium' : 'score-low'; }
+        function statusBadge(s) {
+            const m = {new:'badge-info',contacted:'badge-warm',qualified:'badge-success',proposal:'badge-medium',won:'badge-success',lost:'badge-danger'};
+            return `<span class="badge ${m[s]||'badge-info'}">${esc(s)}</span>`;
+        }
+
+        // Dashboard leads
+        document.getElementById('dashboardLeads').innerHTML = DATA.leads.map(l => `
+            <tr>
+                <td><strong>${esc(l.first_name)} ${esc(l.last_name)}</strong></td>
+                <td><div class="contact-info"><div class="contact-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>${esc(l.email)}</div><div class="contact-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>${esc(l.phone)}</div></div></td>
+                <td>${esc(l.company)}</td>
+                <td>${esc(l.source)}</td>
+                <td><span class="score-badge ${scoreClass(l.score)}">${l.score}</span></td>
+                <td>${statusBadge(l.status)}</td>
+            </tr>
+        `).join('');
+
+        // All leads
+        document.getElementById('allLeads').innerHTML = DATA.leads.map(l => `
+            <tr>
+                <td style="font-family:monospace;font-size:11px;color:var(--fg-muted);">${esc(l.id)}</td>
+                <td><strong>${esc(l.first_name)} ${esc(l.last_name)}</strong>${l.notes ? `<div style="font-size:11px;color:var(--fg-muted);">${esc(l.notes)}</div>` : ''}</td>
+                <td>${esc(l.email)}</td>
+                <td>${esc(l.phone)}</td>
+                <td>${esc(l.company)}</td>
+                <td>${esc(l.source)}</td>
+                <td><span class="score-badge ${scoreClass(l.score)}">${l.score}</span></td>
+                <td>${statusBadge(l.status)}</td>
+                <td style="font-size:12px;color:var(--fg-muted);">${fmtDate(l.updated_at)}</td>
+            </tr>
+        `).join('');
+
+        // Audit log
+        document.getElementById('auditLog').innerHTML = DATA.audit.map(a => `
+            <tr>
+                <td>${a.id}</td>
+                <td><code style="font-size:11px;background:var(--bg-subtle);padding:2px 6px;border-radius:4px;">${esc(a.actor_id)}</code></td>
+                <td><strong>${esc(a.action)}</strong></td>
+                <td><span style="font-size:12px;">${esc(a.entity_type)}:${esc(a.entity_id)}</span></td>
+                <td><span class="badge badge-success">${esc(a.status)}</span></td>
+                <td class="audit-time">${fmtDate(a.created_at)}</td>
+            </tr>
+        `).join('');
+
+        // Scoring history
+        document.getElementById('scoringHistory').innerHTML = DATA.scoring.map(s => `
+            <tr>
+                <td style="font-family:monospace;font-size:11px;">${esc(s.lead_id)}</td>
+                <td><span class="score-badge ${scoreClass(s.score)}">${s.score}</span></td>
+                <td><code style="font-size:11px;background:var(--bg-subtle);padding:2px 6px;border-radius:4px;">${esc(s.model)}</code></td>
+                <td class="audit-time">${fmtDate(s.created_at)}</td>
+            </tr>
+        `).join('');
+
+        // Navigation
+        const titles = {dashboard:'Dashboard',leads:'Leads',audit:'Audit Log',scoring:'Scoring History'};
+        function showView(name, btn) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById(name+'-view').classList.add('active');
+            if(btn) btn.classList.add('active');
+            document.getElementById('pageTitle').textContent = titles[name]||name;
+        }
+    </script>
+</body>
+</html>
