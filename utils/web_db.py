@@ -356,16 +356,36 @@ def init_web_db():
     except sqlite3.OperationalError:
         c.execute("ALTER TABLE consolidated_leads ADD COLUMN has_contact INTEGER DEFAULT 0")
 
-    # Always re-sync has_contact from lead_data JSON (fixes rows inserted without it)
+    # Migration: add has_phone column (phone only — required for swipe feed)
+    try:
+        c.execute("SELECT has_phone FROM consolidated_leads LIMIT 1")
+    except sqlite3.OperationalError:
+        c.execute("ALTER TABLE consolidated_leads ADD COLUMN has_phone INTEGER DEFAULT 0")
+
+    # Migration: add is_dead_lead column (GC self-pull = lead muerto)
+    try:
+        c.execute("SELECT is_dead_lead FROM consolidated_leads LIMIT 1")
+    except sqlite3.OperationalError:
+        c.execute("ALTER TABLE consolidated_leads ADD COLUMN is_dead_lead INTEGER DEFAULT 0")
+
+    # Always re-sync has_contact and has_phone from lead_data JSON
+    # has_contact = phone OR email present  (backwards compat)
+    # has_phone   = phone present (used by swipe feed filter)
     c.execute("""
         UPDATE consolidated_leads
         SET has_contact = CASE
             WHEN TRIM(COALESCE(json_extract(lead_data, '$.contact_phone'), '')) != ''
               OR TRIM(COALESCE(json_extract(lead_data, '$.contact_email'), '')) != ''
+            THEN 1 ELSE 0 END,
+            has_phone = CASE
+            WHEN TRIM(COALESCE(json_extract(lead_data, '$.contact_phone'), '')) != ''
             THEN 1 ELSE 0 END
         WHERE has_contact != CASE
             WHEN TRIM(COALESCE(json_extract(lead_data, '$.contact_phone'), '')) != ''
               OR TRIM(COALESCE(json_extract(lead_data, '$.contact_email'), '')) != ''
+            THEN 1 ELSE 0 END
+            OR has_phone != CASE
+            WHEN TRIM(COALESCE(json_extract(lead_data, '$.contact_phone'), '')) != ''
             THEN 1 ELSE 0 END
     """)
 
@@ -618,6 +638,14 @@ def init_web_db():
     c.execute("""
         CREATE INDEX IF NOT EXISTS idx_consolidated_leads_has_contact
         ON consolidated_leads(has_contact)
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_consolidated_leads_has_phone
+        ON consolidated_leads(has_phone)
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_consolidated_leads_is_dead
+        ON consolidated_leads(is_dead_lead)
     """)
 
     # ─────────────────────────────────────────────────────
@@ -893,6 +921,7 @@ def seed_cities_and_agents():
     # ─────────────────────────────────────────────────────
     service_types = [
         # Core sources
+        ("crossdata", "Cross-Data", "🔮", "Multi-source cross-data predictions", "building"),
         ("permits", "Building Permits", "📋", "Building and demolition permits", "building"),
         ("solar", "Solar Installation", "☀️", "Solar installation leads", "green"),
         ("energy", "Energy Efficiency", "🔋", "Energy efficiency programs", "green"),

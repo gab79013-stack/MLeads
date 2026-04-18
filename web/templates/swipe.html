@@ -2,8 +2,8 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>MLeads — Descubre Leads</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>WoLeads — Descubre Leads</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
@@ -15,7 +15,7 @@
             --shadow:0 10px 30px rgba(0,0,0,.12),0 4px 12px rgba(0,0,0,.06);
         }
         html,body{height:100%;font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--fg);overflow:hidden;overscroll-behavior:none}
-        body{display:flex;flex-direction:column;align-items:center;min-height:100dvh;padding:10px 14px 14px}
+        body{display:flex;flex-direction:column;align-items:center;min-height:100dvh;padding:10px 14px 14px;padding-top:max(10px,env(safe-area-inset-top));padding-bottom:max(14px,env(safe-area-inset-bottom))}
 
         /* ─── Header ─────────────────────────────────── */
         .hdr{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:420px;padding:4px 0 8px}
@@ -304,7 +304,7 @@
 <header class="hdr">
     <div class="brand">
         <div class="brand-icon" style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-1px">$</div>
-        <span>MLeads</span>
+        <span>WoLeads</span>
     </div>
     <div class="hdr-right">
         <button class="lang-btn" id="langToggle" aria-label="Cambiar idioma">🇲🇽</button>
@@ -417,6 +417,7 @@
                     <button class="pill ltype" data-cat="rodents">🐀 Control de Plagas</button>
                     <button class="pill ltype" data-cat="deconstruction">🏚️ Demolición</button>
                     <button class="pill ltype" data-cat="remodel">🔨 Remodelación</button>
+                    <button class="pill ltype" data-cat="crossdata">🔮 Cross-Data</button>
                 </div>
             </div>
 
@@ -509,6 +510,29 @@
                 </svg>
                 Empezar gratis con Facebook
             </button>
+            <!-- Email/password registration toggle -->
+            <div style="display:flex;align-items:center;gap:8px;margin:10px 0 4px">
+                <div style="flex:1;height:1px;background:var(--border)"></div>
+                <span style="font-size:12px;color:var(--muted)">o regístrate con email</span>
+                <div style="flex:1;height:1px;background:var(--border)"></div>
+            </div>
+            <div id="pwEmailForm" style="display:none;flex-direction:column;gap:8px">
+                <input id="pwRegName" type="text" placeholder="Tu nombre" autocomplete="name"
+                    style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--fg);font-size:14px;box-sizing:border-box">
+                <input id="pwRegEmail" type="email" placeholder="Email" autocomplete="email"
+                    style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--fg);font-size:14px;box-sizing:border-box">
+                <input id="pwRegPass" type="password" placeholder="Contraseña (mín. 6 caracteres)" autocomplete="new-password"
+                    style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--fg);font-size:14px;box-sizing:border-box">
+                <button id="pwRegSubmit" onclick="submitEmailRegister()"
+                    style="width:100%;padding:11px;border-radius:10px;background:var(--accent);color:#fff;border:none;font-weight:700;font-size:14px;cursor:pointer">
+                    Crear cuenta gratis
+                </button>
+                <p id="pwRegError" style="display:none;color:#ef4444;font-size:12px;text-align:center;margin:0"></p>
+            </div>
+            <button onclick="toggleEmailForm()" id="pwToggleEmail"
+                style="background:none;border:none;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;padding:4px 0;width:100%">
+                Usar email y contraseña
+            </button>
         </div>
 
         <!-- Upgrade flow (paid tiers) -->
@@ -565,7 +589,7 @@
         </div>
         <div class="fb-body">
             <div class="fb-notice" id="fbNotice">
-                <strong>🚀 MLeads está en BETA</strong><br>
+                <strong>🚀 WoLeads está en BETA</strong><br>
                 Estamos mejorando la app con tu ayuda. Cuéntanos qué funciona bien, qué falla o qué te gustaría ver.
             </div>
             <textarea class="fb-textarea" id="fbText" rows="4" placeholder="Tu sugerencia o comentario..."></textarea>
@@ -874,7 +898,7 @@ async function fetchFeed() {
         const _dynScore = _getDynamicMinScore();
         if (_dynScore > 0) url.searchParams.set('min_score', _dynScore);
 
-        if (F.minVal > 0) url.searchParams.set('min_value', F.minVal);
+        url.searchParams.set('min_value', Math.max(50000, F.minVal));
         if (F.maxVal > 0) url.searchParams.set('max_value', F.maxVal);
         if (F.city) {
             url.searchParams.set('city', F.city);
@@ -919,14 +943,15 @@ async function postSwipe(leadId, action) {
 const $deck = document.getElementById('deck');
 
 function updateCounter() {
-    document.getElementById('swipesCount').textContent = S.swipes;
-    if (!S.authed) {
-        document.getElementById('swipesLimit').textContent = S.limit;
-    } else if (S.isPaid) {
-        document.getElementById('swipesLimit').textContent = '∞';
-    } else {
-        document.getElementById('swipesLimit').textContent = 40;
+    const cnt = document.getElementById('counter');
+    if (S.isPaid) {
+        cnt.innerHTML = '<strong style="color:var(--like)">Pro</strong> ✨';
+        return;
     }
+    const limit = S.authed ? 40 : (S.limit || 10);
+    const remaining = Math.max(0, limit - S.swipes);
+    const label = CURRENT_LANG === 'en' ? 'left' : 'restantes';
+    cnt.innerHTML = `<strong id="swipesCount">${remaining}</strong><span id="swipesLimit" style="color:var(--fg2)"> / ${limit} ${label}</span>`;
 }
 
 let _uid = 0;
@@ -941,7 +966,7 @@ function buildCard(lead, idx) {
     card.style.opacity   = idx < 3 ? 1 : 0;
 
     const score      = Number(lead.score || 0);
-    const thermScore = _computeTypeMatchScore(lead);  // type-match driven thermometer
+    const thermScore = score;  // thermometer shows the real lead score
     const grade   = (lead.grade || '').toUpperCase();
     const isHot   = grade === 'HOT'  || score >= 90;
     const isWarm  = !isHot && (grade === 'WARM'   || score >= 70);
@@ -1015,6 +1040,18 @@ function buildCard(lead, idx) {
         lead.value        ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Value':'Valor'}:</span><span class="det-v" style="color:#15803d;font-weight:700">${fmtMoney(lead.value)}</span></div>` : '',
     ].filter(Boolean).join('');
 
+    // ── AI classification section (Qwen) ────────────────────────────────────────
+    const urgencyColor = {'HIGH':'#ef4444','MEDIUM':'#f97316','LOW':'#6b7280'}[lead.ai_urgency] || '#6b7280';
+    const budgetStr = (lead.ai_budget_min && lead.ai_budget_max)
+        ? `${fmtMoney(lead.ai_budget_min)} – ${fmtMoney(lead.ai_budget_max)}`
+        : '';
+    const rows_ai = lead.ai_trade ? [
+        `<div class="det-row"><span class="det-k">▸ ${isEN?'Trade':'Oficio'}:</span><span class="det-v" style="font-weight:700">${esc(lead.ai_trade)}</span></div>`,
+        lead.ai_urgency ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Urgency':'Urgencia'}:</span><span class="det-v" style="color:${urgencyColor};font-weight:700">${esc(lead.ai_urgency)}</span></div>` : '',
+        budgetStr ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Est. Budget':'Presupuesto'}:</span><span class="det-v">${budgetStr}</span></div>` : '',
+        lead.ai_summary ? `<div class="det-row"><span class="det-k">▸ ${isEN?'AI Pitch':'Resumen AI'}:</span><span class="det-v wrap" style="font-style:italic">${esc(lead.ai_summary)}</span></div>` : '',
+    ].filter(Boolean).join('') : '';
+
     // ── Contractor section ─────────────────────────────────────────────────────
     const rows_gc = [
         lead.contractor  ? `<div class="det-row"><span class="det-k">▸ GC:</span><span class="det-v" style="font-weight:700">${esc(lead.contractor)}</span></div>` : '',
@@ -1054,8 +1091,9 @@ function buildCard(lead, idx) {
         const mapsBtn = mapsQ
             ? `<a href="https://www.google.com/maps/search/?api=1&query=${mapsQ}" target="_blank" rel="noopener"
                 onclick="event.stopPropagation()"
-                style="display:inline-flex;align-items:center;gap:5px;margin-top:7px;padding:6px 12px;background:#1d4ed8;color:#fff;border-radius:8px;text-decoration:none;font-size:12px;font-weight:700">
-                🗺 ${isEN ? 'Open in Maps' : 'Ver en Maps'}
+                style="display:inline-flex;align-items:center;gap:6px;margin-top:7px;padding:6px 12px;background:#1d4ed8;color:#fff;border-radius:8px;text-decoration:none;font-size:12px;font-weight:700">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" style="display:block"><path fill="#EA4335" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle fill="white" cx="12" cy="9" r="2.5"/></svg>
+                ${isEN ? 'Open in Maps' : 'Ver en Maps'}
               </a>`
             : '';
 
@@ -1126,8 +1164,9 @@ function buildCard(lead, idx) {
                     const mapsQ = encodeURIComponent((lead.address||'') + ', ' + (lead.city||'') + ', CA');
                     return `<a href="https://www.google.com/maps/search/?api=1&query=${mapsQ}" target="_blank" rel="noopener"
                         onclick="event.stopPropagation()"
-                        style="flex-shrink:0;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:3px 7px;font-size:11px;font-weight:700;color:#fff;text-decoration:none;white-space:nowrap">
-                        🗺 Maps
+                        style="flex-shrink:0;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:3px 7px;font-size:11px;font-weight:700;color:#fff;text-decoration:none;white-space:nowrap;display:inline-flex;align-items:center;gap:4px">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" style="display:block"><path fill="#EA4335" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle fill="white" cx="12" cy="9" r="2.5"/></svg>
+                        Maps
                     </a>`;
                 })() : ''}
             </div>
@@ -1141,6 +1180,11 @@ function buildCard(lead, idx) {
         </div>
 
         <div class="cbody">
+            ${rows_ai ? `<div class="det-sec">
+                <div class="det-title">🤖 ${isEN?'AI Analysis (WoLeads)':'Análisis IA (WoLeads)'}</div>
+                ${rows_ai}
+            </div>` : ''}
+
             ${rows_permit ? `<div class="det-sec">
                 <div class="det-title">📋 ${isEN?'Permit':'Permiso'}</div>
                 ${rows_permit}
@@ -1249,20 +1293,33 @@ function showEmpty() {
 
 // ── Swipe logic ───────────────────────────────────────────────────────────────
 function attachDrag(card) {
-    let sx=0, sy=0, dx=0, dy=0, dragging=false;
+    let sx=0, sy=0, dx=0, dy=0, dragging=false, lockDir=null;
     const sl = card.querySelector('.stamp.like');
     const sn = card.querySelector('.stamp.nope');
 
     function start(e) {
         if (card !== $deck.querySelector('.card')) return;
-        dragging = true; card.classList.add('drag');
         const p = e.touches ? e.touches[0] : e;
-        sx = p.clientX; sy = p.clientY; dx = 0; dy = 0;
+        sx = p.clientX; sy = p.clientY; dx = 0; dy = 0; lockDir = null;
+        if (e.touches) {
+            dragging = false; // delay until direction determined
+        } else {
+            dragging = true; card.classList.add('drag');
+        }
     }
     function move(e) {
-        if (!dragging) return;
+        if (card !== $deck.querySelector('.card')) return;
         const p = e.touches ? e.touches[0] : e;
         dx = p.clientX - sx; dy = p.clientY - sy;
+        // For touch: detect horizontal vs vertical on first significant movement
+        if (e.touches && !lockDir) {
+            if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+                lockDir = Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v';
+                if (lockDir === 'h') { dragging = true; card.classList.add('drag'); }
+            }
+            if (!dragging) return; // vertical scroll — don't interfere
+        }
+        if (!dragging) return;
         card.style.transform = `translate(${dx}px,${dy}px) rotate(${dx/20}deg)`;
         const op = Math.min(Math.abs(dx)/100, 1);
         if      (dx > 0) { sl.style.opacity = op; sn.style.opacity = 0; }
@@ -1271,8 +1328,10 @@ function attachDrag(card) {
         if (e.cancelable) e.preventDefault();
     }
     function end() {
-        if (!dragging) return;
-        dragging = false; card.classList.remove('drag');
+        card.classList.remove('drag');
+        const wasH = dragging;
+        dragging = false; lockDir = null;
+        if (!wasH) return;
         if      (dx > 110)  commit(card, 'like');
         else if (dx < -110) commit(card, 'dislike');
         else { card.style.transform = ''; sl.style.opacity = 0; sn.style.opacity = 0; }
@@ -1446,14 +1505,14 @@ const LTYPE_LABELS = {
     realestate:'🏡 Venta de Propiedad', solar:'☀️ Solar',
     flood:'💧 Daño por Agua', deconstruction:'🏚️ Demolición',
     remodel:'🔨 Remodelación', energy:'⚡ Eficiencia Energética',
-    rodents:'🐀 Control de Plagas',
+    rodents:'🐀 Control de Plagas', crossdata:'🔮 Cross-Data',
 };
 const LTYPE_LABELS_EN = {
     permits:'📋 Permits', construction:'👷 Active Construction',
     realestate:'🏡 Property Sale', solar:'☀️ Solar',
     flood:'💧 Water Damage', deconstruction:'🏚️ Demolition',
     remodel:'🔨 Remodel', energy:'⚡ Energy Efficiency',
-    rodents:'🐀 Pest Control',
+    rodents:'🐀 Pest Control', crossdata:'🔮 Cross-Data',
 };
 
 function renderChips() {
@@ -1527,14 +1586,24 @@ function showPaywall(mode) {
 }
 function hidePaywall() { $loginModal.classList.remove('open'); }
 
-function handleUpgrade(tier) {
-    // Placeholder for Stripe integration — for now show a toast with contact info
-    const msgs = {
-        pro:     '¡Genial! Escríbenos a hola@mleads.io para activar Plan Pro ($29/mes).',
-        premium: '¡Perfecto! Escríbenos a hola@mleads.io para activar Plan Premium ($99/mes).',
-    };
-    hidePaywall();
-    toast(msgs[tier] || 'Contacta a soporte para activar tu plan.');
+async function handleUpgrade(tier) {
+    if (!S.authed) { showPaywall(); return; }
+    const btn = document.querySelector(`#pwUpgradeSection button[onclick="handleUpgrade('${tier}')"]`);
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    try {
+        const res = await fetch('/api/payment/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHdrs() },
+            body: JSON.stringify({ tier })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error al iniciar pago');
+        hidePaywall();
+        window.location.href = data.checkout_url;
+    } catch (e) {
+        toast(e.message || 'Error al conectar con el servidor de pagos');
+        if (btn) { btn.disabled = false; btn.textContent = tier === 'pro' ? 'Elegir Pro' : 'Elegir Premium'; }
+    }
 }
 
 // ── OAuth: Google ─────────────────────────────────────────────────────────────
@@ -1627,7 +1696,7 @@ const I18N = {
         betaText:      'Esta app está en versión BETA. ¡Tu opinión nos ayuda a mejorar!',
         betaBtn:       'Comentar',
         fbTitle:       '💬 Deja tu comentario',
-        fbNotice:      '<strong>🚀 MLeads está en BETA</strong><br>Estamos mejorando la app con tu ayuda. Cuéntanos qué funciona bien, qué falla o qué te gustaría ver.',
+        fbNotice:      '<strong>🚀 WoLeads está en BETA</strong><br>Estamos mejorando la app con tu ayuda. Cuéntanos qué funciona bien, qué falla o qué te gustaría ver.',
         fbPH:          'Tu sugerencia o comentario...',
         fbSubmit:      'Enviar comentario',
         fbSent:        '¡Gracias por tu comentario! 🙌',
@@ -1665,7 +1734,7 @@ const I18N = {
         betaText:      'This app is in BETA. Your feedback helps us improve!',
         betaBtn:       'Comment',
         fbTitle:       '💬 Leave a comment',
-        fbNotice:      '<strong>🚀 MLeads is in BETA</strong><br>We\'re improving the app with your help. Tell us what works, what doesn\'t, or what you\'d like to see.',
+        fbNotice:      '<strong>🚀 WoLeads is in BETA</strong><br>We\'re improving the app with your help. Tell us what works, what doesn\'t, or what you\'d like to see.',
         fbPH:          'Your suggestion or comment...',
         fbSubmit:      'Send comment',
         fbSent:        'Thanks for your feedback! 🙌',
@@ -1950,12 +2019,94 @@ async function submitFeedback() {
     }
 }
 
+// ── Email registration helpers ────────────────────────────────────────────────
+function toggleEmailForm() {
+    const form = document.getElementById('pwEmailForm');
+    const btn  = document.getElementById('pwToggleEmail');
+    const show = form.style.display === 'none' || !form.style.display;
+    form.style.display = show ? 'flex' : 'none';
+    btn.textContent = show ? 'Usar Google o Facebook' : 'Usar email y contraseña';
+}
+
+async function submitEmailRegister() {
+    const name  = document.getElementById('pwRegName').value.trim();
+    const email = document.getElementById('pwRegEmail').value.trim();
+    const pass  = document.getElementById('pwRegPass').value;
+    const errEl = document.getElementById('pwRegError');
+    const subBtn = document.getElementById('pwRegSubmit');
+    errEl.style.display = 'none';
+    if (!email || !pass) { errEl.textContent = 'Email y contraseña requeridos'; errEl.style.display = 'block'; return; }
+    subBtn.disabled = true; subBtn.textContent = 'Creando cuenta…';
+    try {
+        const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password: pass, full_name: name })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error al registrar');
+        await handleAuth(data);
+        updateCounter();
+    } catch (e) {
+        errEl.textContent = e.message;
+        errEl.style.display = 'block';
+    } finally {
+        subBtn.disabled = false; subBtn.textContent = 'Crear cuenta gratis';
+    }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
+// Handle Stripe return URLs
+(function checkPaymentReturn() {
+    const params = new URLSearchParams(window.location.search);
+    const payStatus = params.get('payment');
+    if (payStatus === 'success') {
+        toast('🎉 ¡Pago completado! Tu plan ya está activo.');
+        history.replaceState(null, '', window.location.pathname);
+    } else if (payStatus === 'cancel') {
+        toast('Pago cancelado. Puedes intentarlo de nuevo cuando quieras.');
+        history.replaceState(null, '', window.location.pathname);
+    }
+})();
+
 loadFilters();   // restore saved filters before first render
 applyLang();
 syncContactsBtn();
 renderChips();
 fetchFeed();
+
+// ── Real-time sync: poll /api/swipe/pulse every 30s ──────────────────────────
+(function startPulse() {
+    let _lastUpdate = '';
+    let _pollInterval = null;
+
+    async function _pulse() {
+        try {
+            const params = _lastUpdate ? `?since=${encodeURIComponent(_lastUpdate)}` : '';
+            const res = await fetch(`/api/swipe/pulse${params}`, { headers: authHdrs() });
+            if (!res.ok) return;
+            const data = await res.json();
+
+            if (!_lastUpdate) {
+                // First call — just record baseline
+                _lastUpdate = data.latest_update || '';
+                return;
+            }
+
+            if (data.latest_update && data.latest_update !== _lastUpdate && data.new_since > 0) {
+                _lastUpdate = data.latest_update;
+                // Only auto-refresh if deck is nearly empty to avoid interrupting user
+                if (S.queue.length <= 2 && !S.loading) {
+                    fetchFeed();
+                    toast('🔄 Nuevos leads disponibles');
+                }
+            }
+        } catch (_) {}
+    }
+
+    _pulse(); // baseline
+    _pollInterval = setInterval(_pulse, 30000); // poll every 30s
+})();
 </script>
 </body>
 </html>

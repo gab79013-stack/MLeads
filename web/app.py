@@ -51,11 +51,15 @@ else:
     CORS(app)
 
 # ─── Rate Limiting ────────────────────────────────────────
+# Use Redis if available (shared across gunicorn workers), else fall back to
+# memory per-worker. In production with multiple workers use:
+#   RATELIMIT_STORAGE_URI=redis://localhost:6379/0
+_rl_uri = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
 limiter = Limiter(
     key_func=get_remote_address,
     app=app,
     default_limits=[],          # no global limit — set per-route
-    storage_uri="memory://",
+    storage_uri=_rl_uri,
 )
 
 logger = logging.getLogger("web_api")
@@ -241,6 +245,63 @@ def login():
         "token_type": "Bearer",
         "expires_in": int(os.getenv("JWT_ACCESS_EXPIRY", 3600))
     }), 200
+
+
+@app.route('/api/auth/register', methods=['POST'])
+@limiter.limit("5 per minute")
+def register():
+    """Public registration for the swipe / web app."""
+    data = request.get_json(silent=True) or {}
+    email    = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    full_name = (data.get('full_name') or data.get('name') or '').strip()
+
+    if not email or '@' not in email or '.' not in email.split('@')[-1]:
+        return jsonify({"error": "Email válido requerido"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "La contraseña debe tener al menos 6 caracteres"}), 400
+
+    # Derive username from email prefix, ensure uniqueness
+    base_uname = email.split('@')[0][:32].lower()
+    base_uname = ''.join(c for c in base_uname if c.isalnum() or c in ('_', '-')) or 'user'
+    username = base_uname
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT id FROM users WHERE email = ?", (email,))
+        if c.fetchone():
+            return jsonify({"error": "Este email ya está registrado"}), 409
+
+        suffix = 1
+        while True:
+            c.execute("SELECT id FROM users WHERE username = ?", (username,))
+            if not c.fetchone():
+                break
+            username = f"{base_uname}{suffix}"
+            suffix += 1
+
+        password_hash = hash_password(password)
+        c.execute("""
+            INSERT INTO users (username, email, password_hash, full_name, is_active)
+            VALUES (?, ?, ?, ?, 1)
+        """, (username, email, password_hash, full_name or username))
+        user_id = c.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+
+    access_token, refresh_token = generate_tokens(user_id)
+    return jsonify({
+        "access_token":  access_token,
+        "refresh_token": refresh_token,
+        "user": {
+            "id":        user_id,
+            "email":     email,
+            "full_name": full_name or username,
+            "provider":  "email",
+        },
+    }), 201
 
 
 @app.route('/api/auth/refresh', methods=['POST'])
@@ -2172,26 +2233,131 @@ def bot_users_stats():
 
 
 # ─────────────────────────────────────────────────────────
-# Stripe webhook (Phase 4 — billing)
+# Stripe — checkout + webhook
 # ─────────────────────────────────────────────────────────
+
+@app.route('/api/payment/checkout', methods=['POST'])
+@require_auth
+@limiter.limit("10 per minute")
+def create_payment_checkout():
+    """
+    Create a Stripe Checkout session for the authenticated web user.
+    Body: {"tier": "pro" | "premium"}
+    Returns: {"checkout_url": "https://checkout.stripe.com/..."}
+    Requires STRIPE_API_KEY and STRIPE_PRICE_ID_PRO / STRIPE_PRICE_ID_PREMIUM in env.
+    """
+    data = request.get_json(silent=True) or {}
+    tier = (data.get('tier') or 'pro').lower()
+    if tier not in ('pro', 'premium'):
+        return jsonify({"error": "Tier must be 'pro' or 'premium'"}), 400
+
+    stripe_key = os.getenv('STRIPE_API_KEY', '')
+    price_id   = os.getenv(f'STRIPE_PRICE_ID_{tier.upper()}', os.getenv('STRIPE_PRICE_ID', ''))
+    if not stripe_key or not price_id:
+        return jsonify({"error": "Pago no configurado. Contacta a soporte.", "code": "stripe_not_configured"}), 503
+
+    try:
+        import stripe as _stripe
+        _stripe.api_key = stripe_key
+
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("SELECT email, full_name FROM users WHERE id = ?", (g.user_id,))
+        user = c.fetchone()
+        conn.close()
+
+        base_url = os.getenv('BASE_URL', 'http://104.42.252.241:5000')
+        session = _stripe.checkout.Session.create(
+            mode='subscription',
+            line_items=[{'price': price_id, 'quantity': 1}],
+            success_url=f"{base_url}/swipe?payment=success",
+            cancel_url=f"{base_url}/swipe?payment=cancel",
+            customer_email=user['email'] if user else None,
+            client_reference_id=str(g.user_id),
+            metadata={'user_id': str(g.user_id), 'tier': tier},
+        )
+        return jsonify({"checkout_url": session.url, "session_id": session.id}), 200
+    except Exception as e:
+        logger.exception(f"Stripe checkout creation failed: {e}")
+        return jsonify({"error": "Error al procesar el pago. Intenta de nuevo."}), 500
+
 
 @app.route('/api/stripe/webhook', methods=['POST'])
 def stripe_webhook():
     """
-    Receive Stripe webhook events. Verifies the signature and applies
-    paid/expired status to the corresponding bot_user.
+    Receive Stripe webhook events. Handles both bot_users (Telegram) and
+    web app users (swipe app) based on metadata fields.
     """
-    payload = request.get_data()
+    payload   = request.get_data()
     signature = request.headers.get('Stripe-Signature', '')
-    event = billing.verify_webhook(payload, signature)
+    event     = billing.verify_webhook(payload, signature)
     if not event:
         return jsonify({"error": "invalid signature or billing not configured"}), 400
     try:
-        handled = billing.handle_event(event)
+        # Check if this event is for a web user (has user_id in metadata)
+        data_obj  = (event.get('data') or {}).get('object') or {}
+        meta      = data_obj.get('metadata') or {}
+        web_user_id = meta.get('user_id') or data_obj.get('client_reference_id')
+
+        if web_user_id:
+            handled = _handle_web_user_stripe_event(event, web_user_id)
+        else:
+            handled = billing.handle_event(event)
+
         return jsonify({"received": True, "handled": handled}), 200
     except Exception as e:
         logger.exception(f"Stripe webhook handler error: {e}")
         return jsonify({"error": "Internal server error"}), 500
+
+
+def _handle_web_user_stripe_event(event: dict, web_user_id: str) -> bool:
+    """Apply a Stripe event to the web app users table."""
+    event_type = event.get('type', '')
+    data_obj   = (event.get('data') or {}).get('object') or {}
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        if event_type in ('checkout.session.completed', 'invoice.paid', 'invoice.payment_succeeded'):
+            stripe_customer = data_obj.get('customer')
+            # Get period end from invoice lines if available
+            period_end = None
+            try:
+                lines = data_obj.get('lines', {}).get('data', [])
+                if lines:
+                    period_end = lines[0].get('period', {}).get('end')
+            except Exception:
+                pass
+            paid_until = (
+                datetime.utcfromtimestamp(int(period_end)).strftime('%Y-%m-%d %H:%M:%S')
+                if period_end else
+                (datetime.utcnow() + timedelta(days=31)).strftime('%Y-%m-%d %H:%M:%S')
+            )
+            c.execute("""
+                UPDATE users
+                   SET is_paid = 1,
+                       paid_since = COALESCE(paid_since, CURRENT_TIMESTAMP),
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?
+            """, (int(web_user_id),))
+            conn.commit()
+            logger.info(f"[webhook] web user {web_user_id} marked paid until {paid_until}")
+            return True
+
+        if event_type in ('customer.subscription.deleted', 'customer.subscription.paused'):
+            c.execute("""
+                UPDATE users
+                   SET is_paid = 0,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?
+            """, (int(web_user_id),))
+            conn.commit()
+            logger.info(f"[webhook] web user {web_user_id} subscription ended")
+            return True
+    finally:
+        conn.close()
+
+    return False
 
 
 # ─────────────────────────────────────────────────────────
@@ -2363,21 +2529,22 @@ def _city_coords(city_name: str) -> tuple[float, float] | None:
 
 # ── Service category keyword mapping ──────────────────────────────────────────
 _SERVICE_CAT_KEYWORDS: dict[str, list[str]] = {
-    "roofing":     ["roof", "roofing", "re-roof", "reroof", "shingle", "tile roof", "torch down", "tpo", "flat roof", "gutter", "fascia"],
-    "drywall":     ["drywall", "sheetrock", "gypsum", "taping", "texturing", "wall board", "partition", "plaster"],
-    "paint":       ["paint", "painting", "repaint", "painter", "stucco paint", "primer", "coating"],
-    "electrical":  ["electrical", "panel upgrade", "ev charger", "200 amp", "rewire", "sub panel", "wiring", "low voltage", "circuit"],
-    "plumbing":    ["plumb", "plumbing", "pipe", "sewer", "drain", "water heater", "gas line", "backflow", "repipe", "fixture"],
-    "hvac":        ["hvac", "heating", "cooling", "air condition", "furnace", "ductwork", "mini split", "heat pump", "ventilat", "duct"],
-    "flooring":    ["floor", "flooring", "hardwood", "tile", "laminate", "vinyl plank", "carpet", "epoxy floor", "subfloor"],
-    "concrete":    ["concrete", "cement", "foundation", "slab", "sidewalk", "driveway", "flatwork", "footer", "stem wall", "curb"],
-    "framing":     ["framing", "framer", "structural", "load bearing", "beam", "joist", "truss", "stud wall", "lumber", "adu"],
-    "windows":     ["window", "door", "sliding door", "patio door", "skylight", "glass", "glazing", "storefront", "french door", "fenestration"],
-    "landscaping": ["landscap", "hardscape", "irrigation", "sprinkler", "retaining wall", "paver", "turf", "grading", "tree"],
-    "remodel":     ["remodel", "renovation", "kitchen", "bathroom", "addition", "adu", "accessory dwelling", "tenant improvement", "interior alteration"],
+    # Keywords are matched against description, permit_type, and AI _trade fields only
+    "roofing":     ["roof", "roofing", "re-roof", "reroof", "shingle", "tile roof", "torch down", "tpo", "flat roof", "gutter", "fascia", "reroofing"],
+    "drywall":     ["drywall", "sheetrock", "gypsum board", "taping", "texturing", "wallboard", "wall board", "partition wall", "plaster", "drywall repair", "interior wall", "drywall install"],
+    "paint":       ["paint", "painting", "repaint", "painter", "stucco", "primer", "exterior paint", "interior paint", "paint coat"],
+    "electrical":  ["electrical", "panel upgrade", "ev charger", "200 amp", "rewire", "sub panel", "wiring", "low voltage", "circuit breaker", "outlet install", "service upgrade", "electric", "meter socket"],
+    "plumbing":    ["plumb", "sewer", "water heater", "gas line", "backflow", "repipe", "water main", "gas pipe", "water pipe", "drain line", "water line"],
+    "hvac":        ["hvac", "heating", "cooling", "air condition", "furnace", "ductwork", "mini split", "heat pump", "ventilation", "ac unit", "air handler", "mechanical"],
+    "flooring":    ["flooring", "hardwood floor", "tile floor", "floor tile", "laminate", "vinyl plank", "carpet", "epoxy floor", "subfloor", "ceramic tile", "floor install", "wood floor"],
+    "concrete":    ["concrete", "cement", "foundation", "slab", "sidewalk", "driveway", "flatwork", "footing", "stem wall", "curb", "concrete work", "slab on grade"],
+    "framing":     ["framing", "structural", "load bearing", "beam", "joist", "truss", "stud wall", "rough framing", "wood frame", "framer", "timber"],
+    "windows":     ["window", "window install", "window replace", "sliding door", "patio door", "skylight", "glass replacement", "glazing", "storefront", "french door", "fenestration", "door install", "door replace"],
+    "landscaping": ["landscap", "hardscape", "irrigation", "sprinkler", "retaining wall", "paver", "turf", "grading", "tree removal", "landscape install"],
+    "remodel":     ["remodel", "renovation", "kitchen remodel", "bathroom remodel", "addition", "adu", "accessory dwelling", "tenant improvement", "interior alteration", "room addition"],
 }
 # These map directly to primary_service_type column
-_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "energy", "rodents", "deconstruction", "remodel"}
+_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "energy", "rodents", "deconstruction", "remodel", "crossdata"}
 
 
 @app.route('/api/swipe/feed', methods=['GET'])
@@ -2508,10 +2675,14 @@ def swipe_feed():
         )
         params.append(max_value)
 
-    # Contact info filter — only show leads with phone or email when enabled
-    # Uses the pre-computed has_contact column for index performance
-    if REQUIRE_CONTACT:
-        conditions.append("has_contact = 1")
+    # Phone filter — always required: only leads with a phone number are shown.
+    # has_phone is a pre-computed indexed column (set at insert time in dedup.py
+    # and re-synced at startup in web_db.py) so this is a fast index scan.
+    conditions.append("has_phone = 1")
+
+    # Dead-lead filter — exclude GC self-pull leads (contractor pulling own permit).
+    # is_dead_lead is a pre-computed indexed column set by gc_detector.py via base.py.
+    conditions.append("COALESCE(is_dead_lead, 0) = 0")
 
     # City filter: without radius → simple LIKE; with radius → post-process
     if city_filter and not do_radius:
@@ -2519,14 +2690,26 @@ def swipe_feed():
         params.append(f"%{city_filter}%")
 
     # ── Service category filter ────────────────────────────────────────────────
+    # Subcontractor types are matched against specific JSON fields only:
+    #   $.description  — permit work description
+    #   $.permit_type  — permit type name
+    #   $._trade       — Qwen AI trade classification
+    # This avoids false positives from searching the entire JSON blob
+    # (e.g. "floor" matching floor drain plumbing leads, "tile" matching
+    # tile-roof leads when user filters for flooring, etc.)
     if selected_cats:
         cat_parts: list[str] = []
         for cat in selected_cats:
             if cat in _SERVICE_CAT_KEYWORDS:
                 kws = _SERVICE_CAT_KEYWORDS[cat]
-                kw_sql = " OR ".join(["LOWER(lead_data) LIKE ?" for _ in kws])
-                cat_parts.append(f"({kw_sql})")
-                params.extend(f"%{k}%" for k in kws)
+                field_parts = []
+                for field in ("$.description", "$.permit_type", "$._trade"):
+                    fld_sql = " OR ".join(
+                        [f"LOWER(COALESCE(json_extract(lead_data, '{field}'), '')) LIKE ?" for _ in kws]
+                    )
+                    field_parts.append(f"({fld_sql})")
+                    params.extend(f"%{k}%" for k in kws)
+                cat_parts.append("(" + " OR ".join(field_parts) + ")")
             elif cat in _SERVICE_TYPE_CATS:
                 cat_parts.append("primary_service_type = ?")
                 params.append(cat)
@@ -2535,22 +2718,45 @@ def swipe_feed():
 
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
-    # Fetch extra rows when radius filtering (post-process will trim)
-    fetch_limit = limit * 10 if do_radius else limit
+    # Fetch a large pool for diversity, then apply city round-robin
+    # This prevents any single city from monopolizing the feed
+    fetch_limit = max(limit * 30, 300) if not do_radius else limit * 10
 
     query = f"""
         SELECT address_key, address, city, agent_sources, lead_data,
                primary_service_type, first_seen
         FROM consolidated_leads
         {where_sql}
-        ORDER BY CAST(json_extract(lead_data, '$._scoring.score') AS INTEGER) DESC,
-                 last_updated DESC
+        ORDER BY CAST(json_extract(lead_data, '$._scoring.score') AS INTEGER) / 25 DESC,
+                 RANDOM()
         LIMIT ?
     """
     params.append(fetch_limit)
     c.execute(query, params)
+    raw_rows = c.fetchall()
 
-    rows = c.fetchall()
+    # ── City round-robin: pick from each city in rotation ─────────────────────
+    # Groups leads by city and interleaves them so no single city dominates.
+    # Within each city, leads are already ordered best-first (score/25 DESC).
+    if not city_filter and not do_radius and len(raw_rows) > limit:
+        from collections import defaultdict
+        city_buckets: dict = defaultdict(list)
+        for r in raw_rows:
+            city_buckets[dict(r).get("city", "")].append(r)
+        # Sort cities by number of leads (more leads = more variety)
+        ordered_cities = sorted(city_buckets.keys(), key=lambda c: -len(city_buckets[c]))
+        diversified = []
+        i = 0
+        while len(diversified) < fetch_limit and any(city_buckets.values()):
+            city = ordered_cities[i % len(ordered_cities)]
+            if city_buckets[city]:
+                diversified.append(city_buckets[city].pop(0))
+            i += 1
+            if i > len(ordered_cities) * 1000:
+                break
+        rows = diversified
+    else:
+        rows = list(raw_rows)
 
     c.execute("SELECT name, display_label, emoji FROM service_types")
     service_types_map = {
@@ -2590,6 +2796,13 @@ def swipe_feed():
             lead_data = json.loads(row_dict.get("lead_data") or "{}")
         except Exception:
             lead_data = {}
+
+        # ── Phone guard (belt-and-suspenders after DB filter) ─────────────────
+        # The WHERE clause already filters has_phone=1, but lead_data may have
+        # been updated after the column was computed. Skip stale rows.
+        phone_check = (lead_data.get("contact_phone") or "").strip()
+        if not phone_check:
+            continue
 
         # ── Radius filter (post-process) ───────────────────────────────────────
         if do_radius and radius_miles > 0:
@@ -2684,6 +2897,18 @@ def swipe_feed():
             "inspection_source":inspection_source,
             "gc_probability":   round(float(gc_probability or 0), 2),
             "created_at":       row_dict.get("first_seen", ""),
+            # AI classification fields (Qwen)
+            "ai_trade":         lead_data.get("_trade", ""),
+            "ai_urgency":       lead_data.get("_urgency", ""),
+            "ai_summary":       lead_data.get("_ai_summary", ""),
+            "ai_budget_min":    lead_data.get("_budget_min"),
+            "ai_budget_max":    lead_data.get("_budget_max"),
+            "ai_services":      lead_data.get("_services", []),
+            "ai_is_residential":lead_data.get("_is_residential", False),
+            "ai_is_commercial": lead_data.get("_is_commercial", False),
+            # GC self-pull detection (gc_detector.py)
+            "is_gc_self_pull":  lead_data.get("_is_gc_self_pull", False),
+            "gc_pull_reason":   lead_data.get("_gc_pull_reason", ""),
         })
 
         if len(leads) >= limit:
@@ -3241,6 +3466,38 @@ def swipe_log_contact():
     return jsonify({"ok": True}), 200
 
 
+@app.route('/api/swipe/pulse', methods=['GET'])
+def swipe_pulse():
+    """
+    Lightweight polling endpoint for real-time sync.
+    Returns the count of leads newer than `since` (ISO timestamp).
+    The swipe UI polls this every 30s and refreshes the deck when new leads arrive.
+    """
+    since = request.args.get("since", "")
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        if since:
+            c.execute(
+                "SELECT COUNT(*) FROM consolidated_leads WHERE last_updated > ?",
+                (since,),
+            )
+        else:
+            c.execute("SELECT COUNT(*) FROM consolidated_leads")
+        total_new = c.fetchone()[0]
+
+        c.execute("SELECT MAX(last_updated) FROM consolidated_leads")
+        latest = c.fetchone()[0] or ""
+    finally:
+        conn.close()
+
+    return jsonify({
+        "new_since": total_new,
+        "latest_update": latest,
+        "server_time": datetime.utcnow().isoformat(),
+    }), 200
+
+
 @app.route('/api/admin/feedback', methods=['GET'])
 @require_admin
 def list_feedback():
@@ -3307,7 +3564,184 @@ def create_app():
     except Exception as e:
         logger.warning(f"Failed to start Telegram bot worker: {e}")
 
+    # NYC 311 Service Requests blueprint
+    from web.nyc311 import bp as nyc311_bp
+    app.register_blueprint(nyc311_bp)
+
+    # Construction & Demolition Permits blueprint
+    from web.permits import bp as permits_bp
+    app.register_blueprint(permits_bp)
+
     return app
+
+
+# ── CrossData Prediction endpoints ────────────────────────────────────────────
+
+@app.route('/api/ai/classify', methods=['POST'])
+@require_auth
+def ai_classify_lead():
+    """
+    Clasifica un lead con Qwen.
+    Body: { "lead_id": "..." } o { "lead": { lead dict } }
+    """
+    body = request.get_json(silent=True) or {}
+    lead_id = body.get("lead_id")
+    lead_dict = body.get("lead")
+
+    if lead_id:
+        conn = get_db_connection()
+        row = conn.execute(
+            "SELECT lead_data FROM consolidated_leads WHERE address_key = ?", (lead_id,)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return jsonify({"error": "Lead not found"}), 404
+        try:
+            lead_dict = json.loads(row["lead_data"])
+        except Exception:
+            return jsonify({"error": "Invalid lead_data"}), 500
+
+    if not lead_dict:
+        return jsonify({"error": "Provide lead_id or lead"}), 400
+
+    try:
+        from utils.ai_classifier import enrich_lead_with_classification, get_cache_stats
+        enriched = enrich_lead_with_classification(dict(lead_dict))
+        return jsonify({
+            "trade":       enriched.get("_trade"),
+            "urgency":     enriched.get("_urgency"),
+            "budget_min":  enriched.get("_budget_min"),
+            "budget_max":  enriched.get("_budget_max"),
+            "services":    enriched.get("_services", []),
+            "summary":     enriched.get("_ai_summary"),
+            "is_residential": enriched.get("_is_residential"),
+            "is_commercial":  enriched.get("_is_commercial"),
+            "owner_type":     enriched.get("_owner_type"),
+            "source":         enriched.get("_classifier_source"),
+            "cache_stats":    get_cache_stats(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/ai/classify-batch', methods=['POST'])
+@require_auth
+def ai_classify_batch():
+    """
+    Clasifica los N leads más recientes sin clasificar con Qwen.
+    Body: { "limit": 100 }
+    """
+    body = request.get_json(silent=True) or {}
+    limit = min(int(body.get("limit", 50)), 500)
+
+    conn = get_db_connection()
+    rows = conn.execute("""
+        SELECT address_key, lead_data FROM consolidated_leads
+        WHERE lead_data NOT LIKE '%_classifier_source%'
+          AND (lead_data LIKE '%description%' OR lead_data LIKE '%permit_type%')
+        ORDER BY last_updated DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+
+    if not rows:
+        return jsonify({"status": "nothing_to_classify", "count": 0})
+
+    import threading
+    def _batch():
+        try:
+            from utils.ai_classifier import enrich_lead_with_classification
+            classified = 0
+            CHUNK = 20  # commit every 20 records to avoid long DB locks
+            for i in range(0, len(rows), CHUNK):
+                chunk = rows[i:i + CHUNK]
+                db = get_db_connection()
+                try:
+                    for row in chunk:
+                        try:
+                            ld = json.loads(row["lead_data"] or "{}")
+                            enriched = enrich_lead_with_classification(ld)
+                            db.execute(
+                                "UPDATE consolidated_leads SET lead_data=?, last_updated=? WHERE address_key=?",
+                                (json.dumps(enriched, default=str), datetime.utcnow().isoformat(), row["address_key"])
+                            )
+                            classified += 1
+                        except Exception as e:
+                            logger.warning(f"batch classify error: {e}")
+                    db.commit()
+                except Exception as e:
+                    logger.error(f"[AI Batch] chunk commit failed: {e}")
+                finally:
+                    db.close()
+            logger.info(f"[AI Batch] classified {classified} leads with Qwen")
+        except Exception as e:
+            logger.error(f"[AI Batch] failed: {e}")
+
+    threading.Thread(target=_batch, daemon=True).start()
+    return jsonify({"status": "started", "leads_queued": len(rows)}), 202
+
+
+@app.route('/api/crossdata/run', methods=['POST'])
+@require_auth
+def crossdata_run():
+    """Dispara manualmente un ciclo de predicción cross-data."""
+    import threading
+    def _run():
+        try:
+            from agents.crossdata_agent import run_cross_prediction
+            run_cross_prediction()
+        except Exception as e:
+            logger.error(f"crossdata manual run error: {e}")
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "message": "Cross-data prediction running in background"}), 202
+
+
+@app.route('/api/crossdata/stats', methods=['GET'])
+@require_auth
+def crossdata_stats():
+    """Estadísticas del agente cross-data."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT COUNT(*) FROM consolidated_leads WHERE lead_data LIKE '%_cross_prediction%'")
+        cross_leads = c.fetchone()[0]
+
+        c.execute("SELECT COUNT(*) FROM consolidated_leads WHERE agent_sources LIKE '%,%'")
+        multi_agent = c.fetchone()[0]
+
+        c.execute("SELECT COUNT(*) FROM scheduled_inspections")
+        inspections = c.fetchone()[0]
+
+        c.execute("""
+            SELECT json_extract(lead_data, '$._cross_prediction.combo_matched') as combo, COUNT(*) as cnt
+            FROM consolidated_leads
+            WHERE lead_data LIKE '%combo_matched%'
+            GROUP BY combo ORDER BY cnt DESC LIMIT 10
+        """)
+        combos = [{"combo": r[0], "count": r[1]} for r in c.fetchall()]
+
+        c.execute("""
+            SELECT json_extract(lead_data, '$._cross_prediction.urgency') as urgency, COUNT(*) as cnt
+            FROM consolidated_leads
+            WHERE lead_data LIKE '%_cross_prediction%'
+            GROUP BY urgency ORDER BY cnt DESC
+        """)
+        by_urgency = {r[0]: r[1] for r in c.fetchall()}
+
+        c.execute("SELECT COUNT(*) FROM property_signals WHERE agent_key='crossdata'")
+        crossdata_signals = c.fetchone()[0]
+
+    finally:
+        conn.close()
+
+    return jsonify({
+        "cross_predicted_leads": cross_leads,
+        "multi_agent_leads": multi_agent,
+        "scheduled_inspections": inspections,
+        "crossdata_signals": crossdata_signals,
+        "by_urgency": by_urgency,
+        "top_combos": combos,
+    })
 
 
 if __name__ == '__main__':

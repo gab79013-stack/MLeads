@@ -425,12 +425,8 @@ ENERGY_SOURCES = [
         },
     },
 
-    # ══════════════════════════════════════════════════════════════
-    #  CHICAGO — Años históricos recientes (2018-2021)
-    #  Edificios con score bajo en años recientes = aún sin retrofit
-    #  = oportunidad vigente para insulación/HVAC
-    # ══════════════════════════════════════════════════════════════
-
+    # ── Chicago — Años históricos (2018-2021) ─────────────────────
+    # Edificios con score bajo que probablemente aún no fueron retrofiteados
     {
         "city":    "Chicago (2021)",
         "engine":  "socrata",
@@ -453,7 +449,6 @@ ENERGY_SOURCES = [
             "eui":          "weather_normalized_site_eui",
         },
     },
-
     {
         "city":    "Chicago (2020)",
         "engine":  "socrata",
@@ -476,7 +471,6 @@ ENERGY_SOURCES = [
             "eui":          "weather_normalized_site_eui",
         },
     },
-
     {
         "city":    "Chicago (2019)",
         "engine":  "socrata",
@@ -499,7 +493,6 @@ ENERGY_SOURCES = [
             "eui":          "weather_normalized_site_eui",
         },
     },
-
     {
         "city":    "Chicago (2018)",
         "engine":  "socrata",
@@ -522,6 +515,7 @@ ENERGY_SOURCES = [
             "eui":          "weather_normalized_site_eui",
         },
     },
+
 ]
 
 

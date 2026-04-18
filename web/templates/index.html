@@ -1048,17 +1048,62 @@
         }
 
         /* ── RESPONSIVE ── */
+        .hamburger {
+            display: none;
+            width: 36px;
+            height: 36px;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            background: none;
+            color: var(--fg);
+            border-radius: var(--radius);
+            cursor: pointer;
+            flex-shrink: 0;
+            padding: 0;
+        }
+        .hamburger:hover { background: var(--bg-hover); }
+        .hamburger svg { width: 20px; height: 20px; }
+
+        .mobile-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 499;
+        }
+        .mobile-overlay.show { display: block; }
+
         @media (max-width: 768px) {
-            .sidebar { width: var(--sidebar-collapsed); }
+            .hamburger { display: flex; }
+            .sidebar {
+                position: fixed;
+                left: calc(-1 * var(--sidebar-w));
+                top: 0;
+                height: 100%;
+                z-index: 500;
+                width: var(--sidebar-w) !important;
+                transition: left 0.25s ease;
+                box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+            }
+            .sidebar.mobile-open { left: 0; }
             .sidebar .nav-label,
             .sidebar .sidebar-brand-name,
-            .sidebar .toggle-label { display: none; }
+            .sidebar .toggle-label { display: block !important; }
+            .sidebar-footer { display: none; }
+            .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
             .side-panel { width: 100%; right: -100%; }
             .stats-row { grid-template-columns: 1fr 1fr; }
             .filters-bar { flex-direction: column; }
             .header { padding: 0 16px; }
             .content { padding: 16px; }
             .modal-box { width: 95%; }
+        }
+
+        @media (max-width: 480px) {
+            .stats-row { grid-template-columns: 1fr; }
+            .avatar-name { display: none; }
+            .content { padding: 12px; }
         }
 
         /* scrollbar */
@@ -1128,6 +1173,11 @@
             <!-- HEADER -->
             <header class="header">
                 <div class="header-left">
+                    <button class="hamburger" id="hamburgerBtn" aria-label="Open menu">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+                        </svg>
+                    </button>
                     <h1 class="header-title" id="pageTitle">Dashboard</h1>
                 </div>
                 <div class="header-right">
@@ -1610,6 +1660,8 @@
         </div>
     </div>
 
+    <div class="mobile-overlay" id="mobileOverlay"></div>
+
     <script>
         // ── SVG icon helpers ──
         const ICON = {
@@ -1641,6 +1693,19 @@
             if (label) label.textContent = sb.classList.contains('collapsed') ? '' : 'Collapse';
         });
 
+        // ── Mobile sidebar ──
+        const _mobileOverlay = document.getElementById('mobileOverlay');
+        function openMobileSidebar() {
+            document.getElementById('sidebar').classList.add('mobile-open');
+            _mobileOverlay.classList.add('show');
+        }
+        function closeMobileSidebar() {
+            document.getElementById('sidebar').classList.remove('mobile-open');
+            _mobileOverlay.classList.remove('show');
+        }
+        document.getElementById('hamburgerBtn').addEventListener('click', openMobileSidebar);
+        _mobileOverlay.addEventListener('click', closeMobileSidebar);
+
         // ── Navigation ──
         document.querySelectorAll('.nav-item').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -1650,6 +1715,7 @@
                 document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
                 document.getElementById(`${viewName}-view`).classList.add('active');
                 document.getElementById('pageTitle').textContent = PAGE_TITLES[viewName] || viewName;
+                if (window.innerWidth <= 768) closeMobileSidebar();
                 if (viewName === 'dashboard') loadDashboard();
                 if (viewName === 'leads') { loadLeads(); loadSavedViews(); }
                 if (viewName === 'users') loadUsers();

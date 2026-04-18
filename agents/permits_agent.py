@@ -1473,6 +1473,340 @@ def _build_sources() -> list:
                 "url_tpl":"https://kcmo.gov/building-codes/",
             },
         },
+
+        # ── Austin TX ──────────────────────────────────────────────
+        {
+            "city": "Austin TX", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.austintexas.gov/resource/3syk-w9eu.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": (
+                    f"issue_date >= '{cutoff_iso}' AND ("
+                    "UPPER(work_class) LIKE '%ROOF%' OR "
+                    "UPPER(work_class) LIKE '%DRYWALL%' OR "
+                    "UPPER(work_class) LIKE '%REMODEL%' OR "
+                    "UPPER(description) LIKE '%ROOF%' OR "
+                    "UPPER(description) LIKE '%DRYWALL%')"
+                ),
+            },
+            "field_map": {
+                "id": "permit_number", "address": "original_address1",
+                "permit_type": "permit_type_desc", "description": "work_class",
+                "status": "status_current", "issued_date": "issue_date",
+                "contractor": "contractor_company_name",
+                "owner": "owner_name", "value": "total_valuation",
+                "url_tpl": "https://austintexas.gov/permits",
+            },
+        },
+
+        # ── NYC DOB Permits ─────────────────────────────────────────
+        {
+            "city": "New York City NY", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.cityofnewyork.us/resource/ipu4-2q9a.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issuance_date DESC",
+                "$where": (
+                    f"issuance_date >= '{cutoff_iso}' AND ("
+                    "permit_type='SH' OR permit_type='EW' OR "
+                    "UPPER(work_type) LIKE '%RF%' OR "
+                    "UPPER(work_type) LIKE '%GC%')"
+                ),
+            },
+            "field_map": {
+                "id": "job__", "address": "house__",
+                "address2": "street_name",
+                "permit_type": "permit_type", "description": "work_type",
+                "status": "permit_status", "issued_date": "issuance_date",
+                "contractor": "permittee_s_business_name",
+                "phone": "permittee_s_phone__",
+                "lic_number": "permittee_s_license__",
+                "url_tpl": "https://www.nyc.gov/buildings",
+            },
+        },
+
+        # ── Chicago General Permits ─────────────────────────────────
+        {
+            "city": "Chicago IL", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.cityofchicago.org/resource/ydr8-5enu.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": (
+                    f"issue_date >= '{cutoff_iso}' AND ("
+                    "UPPER(work_description) LIKE '%ROOF%' OR "
+                    "UPPER(work_description) LIKE '%DRYWALL%' OR "
+                    "UPPER(work_description) LIKE '%SHINGLE%' OR "
+                    "UPPER(work_description) LIKE '%INTERIOR%' OR "
+                    "UPPER(permit_type) LIKE '%ROOF%')"
+                ),
+            },
+            "field_map": {
+                "id": "permit_", "address": "street_number",
+                "address2": "street_name",
+                "permit_type": "permit_type", "description": "work_description",
+                "issued_date": "issue_date",
+                "contractor": "contact_1_name",
+                "value": "reported_cost",
+                "url_tpl": "https://webapps1.chicago.gov/permitview/",
+            },
+        },
+
+        # ── Houston TX ─────────────────────────────────────────────
+        {
+            "city": "Houston TX", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.houstontx.gov/resource/yqhd-c7vv.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "date_issued DESC",
+                "$where": (
+                    f"date_issued >= '{cutoff_iso}' AND ("
+                    "UPPER(proj_desc) LIKE '%ROOF%' OR "
+                    "UPPER(proj_desc) LIKE '%DRYWALL%' OR "
+                    "UPPER(proj_desc) LIKE '%SHINGLE%')"
+                ),
+            },
+            "field_map": {
+                "id": "permit_no", "address": "site_addr",
+                "permit_type": "permit_type", "description": "proj_desc",
+                "status": "status", "issued_date": "date_issued",
+                "contractor": "contractor_trade_name",
+                "owner": "owner_name", "value": "est_val",
+                "url_tpl": "https://permits.houstontx.gov/",
+            },
+        },
+
+        # ── Dallas TX ──────────────────────────────────────────────
+        {
+            "city": "Dallas TX", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://www.dallasopendata.com/resource/wzn8-6uj2.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": (
+                    f"issue_date >= '{cutoff_iso}' AND ("
+                    "UPPER(description) LIKE '%ROOF%' OR "
+                    "UPPER(description) LIKE '%DRYWALL%')"
+                ),
+            },
+            "field_map": {
+                "id": "permit_num", "address": "address",
+                "permit_type": "type", "description": "description",
+                "status": "status", "issued_date": "issue_date",
+                "contractor": "contractor_name",
+                "owner": "owner_name", "value": "declared_value",
+                "url_tpl": "https://dallascityhall.com/departments/sustainabledevelopment/buildinginspection/Pages/default.aspx",
+            },
+        },
+
+        # ── Phoenix AZ ─────────────────────────────────────────────
+        {
+            "city": "Phoenix AZ", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.phoenix.gov/resource/hjjt-zxqf.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "applied_date DESC",
+                "$where": (
+                    f"applied_date >= '{cutoff_iso}' AND ("
+                    "UPPER(description) LIKE '%ROOF%' OR "
+                    "UPPER(description) LIKE '%DRYWALL%')"
+                ),
+            },
+            "field_map": {
+                "id": "permit_number", "address": "address",
+                "permit_type": "type", "description": "description",
+                "status": "status", "issued_date": "applied_date",
+                "contractor": "contractor_name",
+                "owner": "owner_name", "value": "valuation",
+                "url_tpl": "https://permits.phoenix.gov/",
+            },
+        },
+
+        # ── Denver CO ──────────────────────────────────────────────
+        {
+            "city": "Denver CO", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.denvergov.org/resource/fbmd-4ufm.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": (
+                    f"issued_date >= '{cutoff_iso}' AND ("
+                    "UPPER(work_description) LIKE '%ROOF%' OR "
+                    "UPPER(work_description) LIKE '%DRYWALL%')"
+                ),
+            },
+            "field_map": {
+                "id": "permit_no", "address": "address",
+                "permit_type": "permit_type", "description": "work_description",
+                "status": "status", "issued_date": "issued_date",
+                "contractor": "contractor_name",
+                "owner": "owner_name", "value": "valuation",
+                "url_tpl": "https://www.denvergov.org/business/permits-licenses",
+            },
+        },
+
+        # ── Nashville TN ────────────────────────────────────────────
+        {
+            "city": "Nashville TN", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.nashville.gov/resource/3h5a-ygsk.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "date_issued DESC",
+                "$where": (
+                    f"date_issued >= '{cutoff_iso}' AND ("
+                    "UPPER(permit_type_description) LIKE '%ROOF%' OR "
+                    "UPPER(purpose) LIKE '%ROOF%' OR "
+                    "UPPER(purpose) LIKE '%DRYWALL%')"
+                ),
+            },
+            "field_map": {
+                "id": "permit_number", "address": "address",
+                "permit_type": "permit_type_description", "description": "purpose",
+                "status": "status", "issued_date": "date_issued",
+                "contractor": "contractor_name",
+                "owner": "applicant_name", "value": "const_cost",
+                "url_tpl": "https://nashville.gov/departments/codes",
+            },
+        },
+
+        # ── Portland OR ─────────────────────────────────────────────
+        {
+            "city": "Portland OR", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.portlandoregon.gov/resource/b5b5-mfvq.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": (
+                    f"issued_date >= '{cutoff_iso}' AND ("
+                    "UPPER(work_description) LIKE '%ROOF%' OR "
+                    "UPPER(work_description) LIKE '%DRYWALL%')"
+                ),
+            },
+            "field_map": {
+                "id": "permit_number", "address": "address",
+                "permit_type": "type_description", "description": "work_description",
+                "status": "status", "issued_date": "issued_date",
+                "contractor": "contractor_name",
+                "owner": "applicant_name", "value": "declared_valuation",
+                "url_tpl": "https://www.portland.gov/bds/permitting",
+            },
+        },
+
+        # ── San Antonio TX ──────────────────────────────────────────
+        {
+            "city": "San Antonio TX", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.sanantonio.gov/resource/b8cv-mhqn.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": (
+                    f"issued_date >= '{cutoff_iso}' AND ("
+                    "UPPER(work_description) LIKE '%ROOF%' OR "
+                    "UPPER(work_description) LIKE '%DRYWALL%')"
+                ),
+            },
+            "field_map": {
+                "id": "permit_number", "address": "address",
+                "permit_type": "permit_type", "description": "work_description",
+                "status": "status", "issued_date": "issued_date",
+                "contractor": "contractor_name",
+                "owner": "owner_name", "value": "declared_valuation",
+                "url_tpl": "https://www.sanantonio.gov/DSD/Permits",
+            },
+        },
+
+        # ── Minneapolis MN ──────────────────────────────────────────
+        {
+            "city": "Minneapolis MN", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://opendata.minneapolismn.gov/resource/m3ft-wbkv.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": (
+                    f"issued_date >= '{cutoff_iso}' AND ("
+                    "UPPER(permitdescription) LIKE '%ROOF%' OR "
+                    "UPPER(permitdescription) LIKE '%DRYWALL%')"
+                ),
+            },
+            "field_map": {
+                "id": "permitnum", "address": "address",
+                "permit_type": "permittype", "description": "permitdescription",
+                "status": "statuscurrent", "issued_date": "issued_date",
+                "contractor": "contractorcompanyname",
+                "owner": "applicantname", "value": "contractamount",
+                "url_tpl": "https://www.minneapolismn.gov/business-services/permits/",
+            },
+        },
+
+        # ── Boston MA ───────────────────────────────────────────────
+        {
+            "city": "Boston MA", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.boston.gov/resource/6ddd-vnp3.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issued_date DESC",
+                "$where": (
+                    f"issued_date >= '{cutoff_iso}' AND ("
+                    "UPPER(description) LIKE '%ROOF%' OR "
+                    "UPPER(description) LIKE '%DRYWALL%')"
+                ),
+            },
+            "field_map": {
+                "id": "permitnumber", "address": "address",
+                "permit_type": "worktype", "description": "description",
+                "status": "status", "issued_date": "issued_date",
+                "contractor": "applicantname",
+                "owner": "ownername", "value": "declared_valuation",
+                "url_tpl": "https://www.boston.gov/departments/inspectional-services",
+            },
+        },
+
+        # ── Atlanta GA ──────────────────────────────────────────────
+        {
+            "city": "Atlanta GA", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://data.atlantaga.gov/resource/bxwm-n5d7.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": (
+                    f"issue_date >= '{cutoff_iso}' AND ("
+                    "UPPER(description) LIKE '%ROOF%' OR "
+                    "UPPER(description) LIKE '%DRYWALL%')"
+                ),
+            },
+            "field_map": {
+                "id": "permit_number", "address": "address",
+                "permit_type": "permit_type", "description": "description",
+                "status": "status", "issued_date": "issue_date",
+                "contractor": "contractor_name",
+                "owner": "owner_name", "value": "declared_value",
+                "url_tpl": "https://www.atlantaga.gov/government/departments/city-planning/office-of-buildings",
+            },
+        },
+
+        # ── Miami-Dade FL ───────────────────────────────────────────
+        {
+            "city": "Miami FL", "engine": "socrata", "_skip_if_no_data": True,
+            "url": "https://opendata.miamidade.gov/resource/ybxr-8n3e.json",
+            "timeout": SOURCE_TIMEOUT,
+            "params": {
+                "$limit": 200, "$order": "issue_date DESC",
+                "$where": (
+                    f"issue_date >= '{cutoff_iso}' AND ("
+                    "UPPER(scope_of_work) LIKE '%ROOF%' OR "
+                    "UPPER(scope_of_work) LIKE '%DRYWALL%')"
+                ),
+            },
+            "field_map": {
+                "id": "permit_no", "address": "address",
+                "permit_type": "permit_type", "description": "scope_of_work",
+                "status": "status", "issued_date": "issue_date",
+                "contractor": "contractor_name",
+                "owner": "owner_name", "value": "job_value",
+                "url_tpl": "https://www.miamidade.gov/permits/",
+            },
+        },
     ]
 
 

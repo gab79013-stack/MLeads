@@ -1,7 +1,7 @@
 """
 utils/ai_classifier.py
 ━━━━━━━━━━━━━━━━━━━━━━
-IA #1 — Clasificador de Trade con Claude (Haiku)
+IA #1 — Clasificador de Trade con Qwen (Alibaba)
 
 Analiza la descripción de un permiso y extrae:
   - trade:         qué sub-contractor se necesita
@@ -10,10 +10,11 @@ Analiza la descripción de un permiso y extrae:
   - services:      lista específica de servicios
   - summary:       pitch listo para el sub-contractor
 
-Usa claude-haiku (rápido y económico) con prompt caching.
-Costo estimado: ~$0.0003 por lead clasificado.
+Usa qwen-turbo (rápido y económico) via DashScope International.
+Endpoint: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+Compatible con la API de OpenAI.
 
-Graceful degradation: si no hay API key, retorna clasificación
+Graceful degradation: si la API falla, retorna clasificación
 rule-based local (sin coste, sin red).
 """
 
@@ -21,18 +22,18 @@ import os
 import json
 import logging
 import hashlib
-from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-AI_ENABLED        = os.getenv("AI_ENABLED", "true").lower() not in ("false", "0", "no")
-MODEL             = os.getenv("AI_CLASSIFIER_MODEL", "claude-haiku-4-5-20251001")
+QWEN_API_KEY  = os.getenv("QWEN_API_KEY", "sk-4b89a10350b44e1a91157b12929e4c15")
+QWEN_BASE_URL = os.getenv("QWEN_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1")
+MODEL         = os.getenv("AI_CLASSIFIER_MODEL", "qwen-turbo")
+AI_ENABLED    = os.getenv("AI_ENABLED", "true").lower() not in ("false", "0", "no")
 
 # Cache en memoria: evita re-clasificar el mismo texto
 _cache: dict[str, dict] = {}
 
-# ── Prompt del sistema (cacheado — solo se envía una vez por sesión) ──
+# ── System prompt ─────────────────────────────────────────────────────────────
 _SYSTEM_PROMPT = """You are a lead classifier for a construction subcontractor platform.
 Given a building permit description, extract structured data in JSON.
 
@@ -60,7 +61,7 @@ Rules:
 - summary: max 100 chars, actionable for the sub to contact owner"""
 
 
-# ── Fallback rule-based (sin red) ────────────────────────────────────
+# ── Fallback rule-based (sin red) ─────────────────────────────────────────────
 
 _RULES = [
     ("DEMOLITION",  ["demolition", "demolish", "raze", "tear down", "wrecking", "abatement", "full demo", "partial demo", "hazmat", "asbestos", "selective demo"]),
@@ -91,7 +92,6 @@ def _rule_classify(text: str, value: float = 0) -> dict:
             break
 
     urgency = "HIGH" if value >= 100000 else "MEDIUM" if value >= 30000 else "LOW"
-
     budget_min = int(value * 0.05) if value else None
     budget_max = int(value * 0.20) if value else None
 
@@ -109,9 +109,17 @@ def _rule_classify(text: str, value: float = 0) -> dict:
     }
 
 
+def _get_client():
+    """Retorna cliente OpenAI apuntando a DashScope."""
+    from openai import OpenAI
+    return OpenAI(api_key=QWEN_API_KEY, base_url=QWEN_BASE_URL)
+
+
+# ── Clasificación principal ───────────────────────────────────────────────────
+
 def classify_lead(lead: dict) -> dict:
     """
-    Clasifica un lead con Claude Haiku (o fallback rules).
+    Clasifica un lead con Qwen-turbo (o fallback rules).
 
     Args:
         lead: dict del lead con description, permit_type, value_float, city, etc.
@@ -121,9 +129,11 @@ def classify_lead(lead: dict) -> dict:
     """
     desc = " ".join(filter(None, [
         lead.get("description", ""),
+        lead.get("title", ""),
         lead.get("permit_type", ""),
         lead.get("desc", ""),
         lead.get("work_type", ""),
+        lead.get("primary_service_type", ""),
     ])).strip()
 
     value = float(lead.get("value_float", 0) or 0)
@@ -137,49 +147,92 @@ def classify_lead(lead: dict) -> dict:
     if cache_key in _cache:
         return _cache[cache_key]
 
-    # Sin API key → fallback
-    if not ANTHROPIC_API_KEY or not AI_ENABLED:
+    # Sin API key o IA desactivada → fallback
+    if not QWEN_API_KEY or not AI_ENABLED:
         result = _rule_classify(desc, value)
         _cache[cache_key] = result
         return result
 
-    # ── Claude Haiku ─────────────────────────────────────────────
+    # ── Qwen via DashScope ───────────────────────────────────────────
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = _get_client()
 
-        user_content = f"""Permit description: {desc[:500]}
-Project value: ${value:,.0f}
-City: {city}
-Owner: {lead.get('owner', '')}
-Contractor: {lead.get('contractor', '')}"""
-
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=300,
-            system=[
-                {
-                    "type": "text",
-                    "text": _SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},  # prompt caching
-                }
-            ],
-            messages=[{"role": "user", "content": user_content}],
+        user_content = (
+            f"Permit description: {desc[:500]}\n"
+            f"Project value: ${value:,.0f}\n"
+            f"City: {city}\n"
+            f"Owner: {lead.get('owner', '')}\n"
+            f"Contractor: {lead.get('contractor', '')}"
         )
 
-        raw = response.content[0].text.strip()
-        result = json.loads(raw)
-        result["_source"] = "claude"
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user",   "content": user_content},
+            ],
+            max_tokens=300,
+            temperature=0.1,   # respuestas deterministas
+        )
 
+        raw = response.choices[0].message.content.strip()
+
+        # Limpiar markdown si Qwen lo añade
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+
+        result = json.loads(raw)
+        result["_source"] = "qwen"
+        result["_model"]  = response.model
+
+        _cache[cache_key] = result
+        return result
+
+    except json.JSONDecodeError as e:
+        logger.warning(f"[AI Classifier] Qwen JSON inválido ({e}), usando reglas")
+        result = _rule_classify(desc, value)
         _cache[cache_key] = result
         return result
 
     except Exception as e:
-        logger.warning(f"[AI Classifier] Claude falló ({e}), usando reglas")
+        logger.warning(f"[AI Classifier] Qwen falló ({e}), usando reglas")
         result = _rule_classify(desc, value)
         _cache[cache_key] = result
         return result
 
+
+# ── Batch classifier ─────────────────────────────────────────────────────────
+
+def classify_leads_batch(leads: list[dict], max_workers: int = 8) -> list[dict]:
+    """
+    Clasifica una lista de leads en paralelo.
+    Retorna los leads con campos _trade, _urgency, etc. añadidos.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    results = [None] * len(leads)
+
+    def _classify_one(idx_lead):
+        idx, lead = idx_lead
+        return idx, enrich_lead_with_classification(lead)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {ex.submit(_classify_one, (i, l)): i for i, l in enumerate(leads)}
+        for fut in as_completed(futures):
+            try:
+                idx, enriched = fut.result()
+                results[idx] = enriched
+            except Exception as e:
+                logger.warning(f"[AI Classifier] batch error: {e}")
+                results[futures[fut]] = leads[futures[fut]]
+
+    return results
+
+
+# ── Enriquecimiento de lead ───────────────────────────────────────────────────
 
 def enrich_lead_with_classification(lead: dict) -> dict:
     """
@@ -187,16 +240,16 @@ def enrich_lead_with_classification(lead: dict) -> dict:
     Modifica el lead in-place y retorna el lead enriquecido.
     """
     classification = classify_lead(lead)
-    lead["_trade"]       = classification.get("trade", "GENERAL")
-    lead["_urgency"]     = classification.get("urgency", "MEDIUM")
-    lead["_budget_min"]  = classification.get("budget_min")
-    lead["_budget_max"]  = classification.get("budget_max")
-    lead["_services"]    = classification.get("services", [])
-    lead["_ai_summary"]  = classification.get("summary", "")
-    lead["_is_residential"] = classification.get("is_residential", False)
-    lead["_is_commercial"]  = classification.get("is_commercial", False)
-    lead["_owner_type"]     = classification.get("owner_type", "UNKNOWN")
-    lead["_classifier_source"] = classification.get("_source", "rules")
+    lead["_trade"]            = classification.get("trade", "GENERAL")
+    lead["_urgency"]          = classification.get("urgency", "MEDIUM")
+    lead["_budget_min"]       = classification.get("budget_min")
+    lead["_budget_max"]       = classification.get("budget_max")
+    lead["_services"]         = classification.get("services", [])
+    lead["_ai_summary"]       = classification.get("summary", "")
+    lead["_is_residential"]   = classification.get("is_residential", False)
+    lead["_is_commercial"]    = classification.get("is_commercial", False)
+    lead["_owner_type"]       = classification.get("owner_type", "UNKNOWN")
+    lead["_classifier_source"]= classification.get("_source", "rules")
 
     # Ajustar scoring según urgencia de IA
     if lead.get("_scoring"):
@@ -207,12 +260,19 @@ def enrich_lead_with_classification(lead: dict) -> dict:
             lead["_scoring"]["score"] + urgency_boost, 100
         )
         if urgency_boost > 0:
+            trade = classification.get("trade", "")
+            urgency = classification.get("urgency", "")
             lead["_scoring"]["reasons"].append(
-                f"AI: {classification.get('trade')} urgencia {classification.get('urgency')}"
+                f"🤖 {trade} — urgencia {urgency} (Qwen)"
             )
 
     return lead
 
 
 def get_cache_stats() -> dict:
-    return {"cached_classifications": len(_cache), "model": MODEL}
+    return {
+        "cached_classifications": len(_cache),
+        "model": MODEL,
+        "provider": "Qwen / Alibaba DashScope",
+        "base_url": QWEN_BASE_URL,
+    }

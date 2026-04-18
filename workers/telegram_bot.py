@@ -470,6 +470,7 @@ def start_bot_worker() -> bool:
     """
     Start the Telegram bot worker in a daemon thread.
     Safe to call multiple times — returns False if not started.
+    Uses a file lock so only one gunicorn worker runs the bot.
     """
     global _worker_thread
 
@@ -481,6 +482,18 @@ def start_bot_worker() -> bool:
         return False
     if _worker_thread and _worker_thread.is_alive():
         return True
+
+    # Ensure only one worker (across gunicorn forks) runs the bot
+    import fcntl
+    _lock_path = "/tmp/mleads_telegram_bot.lock"
+    try:
+        _fd = open(_lock_path, "w")
+        fcntl.flock(_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # Keep fd open to hold lock for the lifetime of this process
+        start_bot_worker._lock_fd = _fd
+    except (IOError, OSError):
+        logger.info("[bot] another worker already holds the bot lock — skipping")
+        return False
 
     _worker_thread = threading.Thread(target=_poll_loop, name="telegram-bot", daemon=True)
     _worker_thread.start()

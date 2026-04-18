@@ -458,51 +458,6 @@ REALESTATE_SOURCES = [
         },
     },
 
-    # ── Edmonton Canada — Tasaciones de Propiedad ─────────────────
-    {
-        "city":    "Edmonton CA",
-        "engine":  "socrata",
-        "url":     "https://data.edmonton.ca/resource/qi6a-xu2d.json",
-        "timeout": SOURCE_TIMEOUT,
-        "_skip_if_no_data": True,
-        "params": {
-            "$limit": 100,
-            "$order": "assessment_year DESC",
-            "$where": "assessed_value > 300000",
-        },
-        "field_map": {
-            "id":       "account_number",
-            "address":  "house_number",
-            "date":     "assessment_year",
-            "price":    "assessed_value",
-            "buyer":    "neighbourhood",
-            "seller":   "property_use",
-            "year_built": "construction_year",
-        },
-    },
-
-    # ── Calgary Canada — Tasaciones Actuales ──────────────────────
-    {
-        "city":    "Calgary CA",
-        "engine":  "socrata",
-        "url":     "https://data.calgary.ca/resource/4bsw-nn7w.json",
-        "timeout": SOURCE_TIMEOUT,
-        "_skip_if_no_data": True,
-        "params": {
-            "$limit": 100,
-            "$order": "assessed_value DESC",
-            "$where": "assessed_value > 300000",
-        },
-        "field_map": {
-            "id":       "roll_number",
-            "address":  "address",
-            "date":     "tax_year",
-            "price":    "assessed_value",
-            "buyer":    "community_name",
-            "seller":   "property_use",
-            "year_built": "year_of_construction",
-        },
-    },
 ]
 
 

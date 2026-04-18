@@ -63,6 +63,8 @@ from agents.construction_agent     import ConstructionAgent
 from agents.deconstruction_agent   import DeconstuctionAgent
 from agents.weather_agent          import WeatherAgent
 from agents.federal_contracts_agent import FederalContractsAgent
+from agents.crossdata_agent         import CrossDataAgent
+from agents.tdlr_agent              import TDLRAgent
 
 # ── Registro de agentes ────────────────────────────────────────────
 AGENT_REGISTRY = {
@@ -79,6 +81,10 @@ AGENT_REGISTRY = {
     # ── Nuevos agentes (APIs gratuitas) ─────────────────────────────
     "weather":           {"class": WeatherAgent,          "env_key": "AGENT_WEATHER",           "interval_key": "INTERVAL_WEATHER",           "default_interval": 120},
     "federal_contracts": {"class": FederalContractsAgent, "env_key": "AGENT_FEDERAL_CONTRACTS", "interval_key": "INTERVAL_FEDERAL_CONTRACTS", "default_interval": 360},
+    # ── Predicción cross-data (corre después de todos los demás) ────
+    "crossdata":         {"class": CrossDataAgent,         "env_key": "AGENT_CROSSDATA",         "interval_key": "INTERVAL_CROSSDATA",         "default_interval": 360},
+    # ── Licencias de contratistas activos Texas (TDLR) ──────────────
+    "tdlr":              {"class": TDLRAgent,               "env_key": "AGENT_TDLR",               "interval_key": "INTERVAL_TDLR",               "default_interval": 360},
 }
 
 # ⚡ Instancias singleton — creadas UNA sola vez

@@ -42,6 +42,12 @@ try:
 except Exception:
     _LICENSE_VALIDATOR_AVAILABLE = False
 
+try:
+    from utils.gc_detector import enrich_lead_with_gc_detection as _gc_detect
+    _GC_DETECTOR_AVAILABLE = True
+except Exception:
+    _GC_DETECTOR_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -166,6 +172,16 @@ class BaseAgent(ABC):
                     _ai_classify(lead)
                 except Exception as e:
                     logger.debug(f"[{self.agent_key}] AI classify error: {e}")
+
+        # Paso 3b-ii: Detectar GC self-pull ("lead muerto")
+        # Debe correr DESPUÉS de la clasificación AI para tener _trade disponible
+        if _GC_DETECTOR_AVAILABLE:
+            for lead in new_leads:
+                if lead.get("contractor") or lead.get("gc_name"):
+                    try:
+                        _gc_detect(lead)
+                    except Exception as e:
+                        logger.debug(f"[{self.agent_key}] GC detect error: {e}")
 
         # Paso 3c: Validate contractor licenses on leads that have them
         if _LICENSE_VALIDATOR_AVAILABLE:
