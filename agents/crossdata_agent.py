@@ -544,9 +544,12 @@ class CrossDataAgent(BaseAgent):
     Agente de predicción cross-data.
     Corre cada CROSSDATA_INTERVAL minutos (default: 360 = 6h).
     """
+    name      = "🔮 CrossData Prediction Agent"
+    emoji     = "🔮"
+    agent_key = "crossdata"
 
     def __init__(self):
-        super().__init__("crossdata")
+        super().__init__()
 
     def fetch_leads(self) -> list:
         stats = run_cross_prediction()
