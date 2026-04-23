@@ -780,6 +780,13 @@ def init_web_db():
     conn.commit()
     conn.close()
 
+    # ── Marketing tables (optional — graceful if module not present) ──
+    try:
+        from utils.marketing_db import init_marketing_db
+        init_marketing_db()
+    except ImportError:
+        pass
+
 
 def seed_cities_and_agents():
     """Populate cities and agents from current configuration."""

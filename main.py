@@ -51,6 +51,20 @@ try:
 except Exception:
     _HEALTH_CHECK_AVAILABLE = False
 
+# ── Marketing Agents (optional — controlled by AGENT_MKT_* flags) ────
+try:
+    from agents.marketing.seo_agent              import SEOAgent
+    from agents.marketing.social_media_agent     import SocialMediaAgent
+    from agents.marketing.content_marketing_agent import ContentMarketingAgent
+    from agents.marketing.email_campaign_agent   import EmailCampaignAgent
+    from agents.marketing.paid_ads_agent         import PaidAdsAgent
+    from agents.marketing.analytics_agent        import AnalyticsAgent
+    from agents.marketing.pr_reputation_agent    import PRReputationAgent
+    _MARKETING_AGENTS_AVAILABLE = True
+except Exception as _mkt_err:
+    _MARKETING_AGENTS_AVAILABLE = False
+    logger.warning(f"Marketing agents not loaded: {_mkt_err}")
+
 from agents.permits_agent          import PermitsAgent
 from agents.solar_agent            import SolarAgent
 from agents.rodents_agent          import RodentsAgent
@@ -85,6 +99,16 @@ AGENT_REGISTRY = {
     "crossdata":         {"class": CrossDataAgent,         "env_key": "AGENT_CROSSDATA",         "interval_key": "INTERVAL_CROSSDATA",         "default_interval": 360},
     # ── Licencias de contratistas activos Texas (TDLR) ──────────────
     "tdlr":              {"class": TDLRAgent,               "env_key": "AGENT_TDLR",               "interval_key": "INTERVAL_TDLR",               "default_interval": 360},
+    # ── Marketing Team (opt-in — disabled by default) ────────────────
+    **({
+        "mkt_seo":       {"class": SEOAgent,              "env_key": "AGENT_MKT_SEO",       "interval_key": "INTERVAL_MKT_SEO",       "default_interval": 10080},
+        "mkt_social":    {"class": SocialMediaAgent,      "env_key": "AGENT_MKT_SOCIAL",    "interval_key": "INTERVAL_MKT_SOCIAL",    "default_interval": 120},
+        "mkt_content":   {"class": ContentMarketingAgent, "env_key": "AGENT_MKT_CONTENT",   "interval_key": "INTERVAL_MKT_CONTENT",   "default_interval": 10080},
+        "mkt_email":     {"class": EmailCampaignAgent,    "env_key": "AGENT_MKT_EMAIL",     "interval_key": "INTERVAL_MKT_EMAIL",     "default_interval": 60},
+        "mkt_ads":       {"class": PaidAdsAgent,          "env_key": "AGENT_MKT_ADS",       "interval_key": "INTERVAL_MKT_ADS",       "default_interval": 360},
+        "mkt_analytics": {"class": AnalyticsAgent,        "env_key": "AGENT_MKT_ANALYTICS", "interval_key": "INTERVAL_MKT_ANALYTICS", "default_interval": 1440},
+        "mkt_pr":        {"class": PRReputationAgent,     "env_key": "AGENT_MKT_PR",        "interval_key": "INTERVAL_MKT_PR",        "default_interval": 10080},
+    } if _MARKETING_AGENTS_AVAILABLE else {}),
 }
 
 # ⚡ Instancias singleton — creadas UNA sola vez
@@ -93,7 +117,9 @@ _AGENT_INSTANCES_LOCK = __import__("threading").Lock()
 
 
 def _is_enabled(env_key: str) -> bool:
-    return os.getenv(env_key, "true").lower() not in ("false", "0", "no")
+    # Marketing agents default to disabled; all others default to enabled
+    default = "false" if env_key.startswith("AGENT_MKT_") else "true"
+    return os.getenv(env_key, default).lower() not in ("false", "0", "no")
 
 
 def _get_or_create_agent(key: str):

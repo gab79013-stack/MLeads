@@ -3572,6 +3572,14 @@ def create_app():
     from web.permits import bp as permits_bp
     app.register_blueprint(permits_bp)
 
+    # Marketing Dashboard blueprint (optional — graceful if not present)
+    try:
+        from web.marketing_routes import marketing_bp
+        app.register_blueprint(marketing_bp, url_prefix="/api/marketing")
+        logger.info("Marketing routes registered at /api/marketing/*")
+    except Exception as _mkt_bp_err:
+        logger.warning(f"Marketing routes not loaded: {_mkt_bp_err}")
+
     return app
 
 
