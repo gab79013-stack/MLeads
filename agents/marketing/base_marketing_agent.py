@@ -65,10 +65,12 @@ class BaseMarketingAgent(BaseAgent):
         return executed
 
     # ── Claude Haiku with ephemeral caching ──────────────────────────
-    def _generate_content(self, user_prompt: str, max_tokens: int = 1500) -> str | None:
+    def _generate_content(self, user_prompt: str, max_tokens: int = 1500,
+                          _raw: bool = False) -> str | None:
         """
         Call Claude Haiku with ephemeral-cached system prompt.
         Returns None on failure so caller can use fallback.
+        _raw=True skips humanize post-processing (used by _generate_json).
         """
         if not ANTHROPIC_API_KEY or not AI_ENABLED:
             return None
@@ -88,7 +90,14 @@ class BaseMarketingAgent(BaseAgent):
                 }],
                 messages=[{"role": "user", "content": user_prompt}],
             )
-            return response.content[0].text.strip()
+            raw = response.content[0].text.strip()
+            if _raw:
+                return raw
+            try:
+                from utils.humanize_text import humanize
+                return humanize(raw)
+            except Exception:
+                return raw
         except Exception as e:
             logger.warning(f"[{self.agent_key}] Claude error: {e}")
             return None
@@ -96,7 +105,7 @@ class BaseMarketingAgent(BaseAgent):
     def _generate_json(self, user_prompt: str, max_tokens: int = 1500) -> dict | None:
         """Generate content and parse as JSON. Returns None on failure."""
         import json
-        raw = self._generate_content(user_prompt, max_tokens=max_tokens)
+        raw = self._generate_content(user_prompt, max_tokens=max_tokens, _raw=True)
         if not raw:
             return None
         try:
