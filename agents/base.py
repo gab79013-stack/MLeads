@@ -218,6 +218,18 @@ class BaseAgent(ABC):
         except Exception as e:
             logger.debug(f"[{self.agent_key}] Lead routing error: {e}")
 
+        # Paso 3b-3: Push leads to Huly CRM
+        try:
+            from utils.huly_crm import push_lead_to_crm
+            for lead in new_leads:
+                tripartite = lead.get("_tripartite", {})
+                if tripartite:
+                    push_lead_to_crm(lead, tripartite)
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"[{self.agent_key}] Huly CRM push error: {e}")
+
         # Paso 3b-ii: Detectar GC self-pull ("lead muerto")
         # Debe correr DESPUÉS de la clasificación AI para tener _trade disponible
         if _GC_DETECTOR_AVAILABLE:

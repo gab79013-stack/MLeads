@@ -4081,3 +4081,61 @@ def batch_verify_cslb():
             logger.error(f"[CSLB] Batch verify error: {e}")
     threading.Thread(target=_batch, daemon=True).start()
     return jsonify({"status": "started", "count": len(licenses)}), 202
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Huly CRM Integration Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route('/api/crm/deals', methods=['GET'])
+@require_auth
+def get_crm_deals():
+    """Get deals from Huly CRM."""
+    stage = request.args.get('stage')
+    limit = min(int(request.args.get('limit', 50)), 200)
+    try:
+        from utils.huly_crm import get_huly_crm
+        crm = get_huly_crm()
+        deals = crm.get_deals(stage=stage, limit=limit)
+        return jsonify({"deals": deals, "count": len(deals)}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/crm/contacts', methods=['GET'])
+@require_auth
+def get_crm_contacts():
+    """Get contacts from Huly CRM."""
+    limit = min(int(request.args.get('limit', 50)), 200)
+    try:
+        from utils.huly_crm import get_huly_crm
+        crm = get_huly_crm()
+        contacts = crm.get_contacts(limit=limit)
+        return jsonify({"contacts": contacts, "count": len(contacts)}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/crm/push/<path:lead_id>', methods=['POST'])
+@require_auth
+def push_lead_to_crm(lead_id):
+    """Manually push a lead to Huly CRM."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT lead_data FROM consolidated_leads WHERE address_key = ?", (lead_id,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Lead not found"}), 404
+    ld = json.loads(row["lead_data"] or "{}") if row["lead_data"] else {}
+    ld["id"] = lead_id
+    try:
+        from utils.huly_crm import push_lead_to_crm
+        from utils.tripartite_scoring import calculate_tripartite_scores
+        scores = ld.get("_tripartite") or calculate_tripartite_scores(ld)
+        result = push_lead_to_crm(ld, scores)
+        if result:
+            return jsonify({"status": "pushed", **result}), 200
+        return jsonify({"status": "skipped", "reason": "below thresholds or not configured"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
