@@ -140,16 +140,21 @@ class BaseAgent(ABC):
         try:
             import psycopg2
         except ImportError:
-            return  # psycopg2 not available, skip
+            logger.debug(f"[{self.agent_key}] PG sync skipped: psycopg2 not installed")
+            return
         
         db_url = os.getenv("DATABASE_URL", "")
         if not db_url:
-            return  # No PG configured
+            logger.debug(f"[{self.agent_key}] PG sync skipped: no DATABASE_URL")
+            return
         
         try:
             conn = psycopg2.connect(db_url)
-        except Exception:
-            return  # Can't connect, skip
+        except Exception as e:
+            logger.debug(f"[{self.agent_key}] PG sync skipped: can't connect: {e}")
+            return
+        
+        logger.info(f"[{self.agent_key}] PG sync: attempting {len(leads)} leads")
         synced = 0
         try:
             with conn.cursor() as cur:
