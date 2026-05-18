@@ -4008,3 +4008,76 @@ def get_assigned_leads():
         })
     conn.close()
     return jsonify({"leads": leads, "count": len(leads), "role": role}), 200
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CSLB License Verification Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route('/api/cslb/verify/<license_number>', methods=['GET'])
+@require_auth
+def verify_cslb_license(license_number):
+    """Verify a CSLB license by number."""
+    try:
+        from utils.cslb_verifier import verify_license
+        result = verify_license(license_number)
+        if result:
+            return jsonify(result), 200
+        return jsonify({"error": "License not found", "license_number": license_number}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/cslb/search', methods=['GET'])
+@require_auth
+def search_cslb_license():
+    """Search CSLB by business name."""
+    business_name = request.args.get('name', '')
+    city = request.args.get('city', '')
+    if not business_name or len(business_name) < 3:
+        return jsonify({"error": "Name must be at least 3 characters"}), 400
+    try:
+        from utils.cslb_verifier import search_by_name
+        results = search_by_name(business_name, city)
+        return jsonify({"results": results, "count": len(results)}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/cslb/verify-sub', methods=['POST'])
+@require_auth
+def verify_subcontractor_cslb():
+    """Verify a subcontractor's license against claimed specialties."""
+    data = request.get_json() or {}
+    license_number = data.get('license_number', '')
+    specialties = data.get('specialties', [])
+    if not license_number:
+        return jsonify({"error": "license_number required"}), 400
+    try:
+        from utils.cslb_verifier import verify_subcontractor_profile
+        result = verify_subcontractor_profile(license_number, specialties)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/cslb/batch', methods=['POST'])
+@require_auth
+@limiter.limit("5 per minute")
+def batch_verify_cslb():
+    """Batch verify multiple CSLB licenses."""
+    data = request.get_json() or {}
+    licenses = data.get('licenses', [])
+    if not licenses or len(licenses) > 20:
+        return jsonify({"error": "Provide 1-20 license numbers"}), 400
+    import threading
+    def _batch():
+        try:
+            from utils.cslb_verifier import batch_verify
+            results = batch_verify(licenses)
+            verified = sum(1 for v in results.values() if v and v.get("is_active"))
+            logger.info(f"[CSLB] Batch verified {verified}/{len(licenses)} licenses")
+        except Exception as e:
+            logger.error(f"[CSLB] Batch verify error: {e}")
+    threading.Thread(target=_batch, daemon=True).start()
+    return jsonify({"status": "started", "count": len(licenses)}), 202
