@@ -3755,3 +3755,256 @@ def crossdata_stats():
 if __name__ == '__main__':
     app = create_app()
     app.run(debug=True, host='0.0.0.0', port=5000)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Disaster Intelligence Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route('/api/disasters/active', methods=['GET'])
+@require_auth
+def get_active_disasters():
+    """Get currently active disaster events (requires PostgreSQL)."""
+    use_pg = os.getenv("USE_POSTGRES", "").lower() in ("1", "true")
+    if not use_pg:
+        return jsonify({"error": "Disaster Intelligence requires PostgreSQL (USE_POSTGRES=1)"}), 501
+    try:
+        from db_postgres import get_conn, put_conn
+        conn = get_conn()
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, event_type, source, severity, description,
+                       affected_cities, started_at, ended_at
+                FROM disaster_events
+                WHERE ended_at IS NULL OR ended_at > NOW()
+                ORDER BY started_at DESC LIMIT 50
+            """)
+            disasters = []
+            for row in cur.fetchall():
+                r = dict(row)
+                r['started_at'] = str(r.get('started_at', ''))
+                r['ended_at'] = str(r.get('ended_at', ''))
+                disasters.append(r)
+        put_conn(conn)
+        return jsonify({"disasters": disasters, "count": len(disasters)}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/disasters/run', methods=['POST'])
+@require_auth
+def run_disaster_check():
+    """Manually trigger disaster intelligence scan."""
+    import threading
+    def _run():
+        try:
+            from agents.disaster_agent import DisasterAgent
+            agent = DisasterAgent()
+            leads = agent.fetch_leads()
+            if leads:
+                agent.send_batch(leads)
+        except Exception as e:
+            logger.error(f"Disaster manual run error: {e}")
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started"}), 202
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Property DNA Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route('/api/property-dna/<path:lead_id>', methods=['GET'])
+@require_auth
+def get_property_dna(lead_id):
+    """Get Property DNA data for a specific lead."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT lead_data FROM consolidated_leads WHERE address_key = ?", (lead_id,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Lead not found"}), 404
+    ld = json.loads(row["lead_data"] or "{}") if row["lead_data"] else {}
+    return jsonify({
+        "lead_id": lead_id,
+        "property_year_built": ld.get("property_year_built"),
+        "property_roof_material": ld.get("property_roof_material"),
+        "property_value": ld.get("property_value"),
+        "property_sqft": ld.get("property_sqft"),
+        "flood_zone": ld.get("flood_zone"),
+        "source": ld.get("_property_dna_source"),
+    }), 200
+
+
+@app.route('/api/property-dna/enrich', methods=['POST'])
+@require_auth
+def enrich_property_dna():
+    """Batch enrich leads with Property DNA."""
+    data = request.get_json(silent=True) or {}
+    limit = min(int(data.get("limit", 20)), 100)
+    import threading
+    def _enrich():
+        try:
+            from utils.property_dna import get_property_dna
+            import sqlite3
+            dna = get_property_dna()
+            conn2 = sqlite3.connect(os.getenv("DB_PATH", "data/leads.db"))
+            conn2.row_factory = sqlite3.Row
+            rows = conn2.execute("""
+                SELECT address_key, address, city, lead_data FROM consolidated_leads
+                WHERE lead_data NOT LIKE '%property_year_built%' LIMIT ?
+            """, (limit,)).fetchall()
+            conn2.close()
+            enriched = 0
+            for row in rows:
+                try:
+                    lead = {"address": row["address"], "city": row["city"]}
+                    lead = dna.enrich_lead(lead)
+                    ld = json.loads(row["lead_data"] or "{}")
+                    for k in ["property_year_built", "property_roof_material",
+                              "property_value", "property_sqft", "flood_zone",
+                              "_property_dna_source"]:
+                        if k in lead:
+                            ld[k] = lead[k]
+                    db = sqlite3.connect(os.getenv("DB_PATH", "data/leads.db"))
+                    db.execute("UPDATE consolidated_leads SET lead_data=? WHERE address_key=?",
+                              (json.dumps(ld, default=str), row["address_key"]))
+                    db.commit()
+                    db.close()
+                    enriched += 1
+                except Exception as e:
+                    logger.debug(f"Property DNA enrich error: {e}")
+            logger.info(f"[PropertyDNA] Enriched {enriched}/{len(rows)} leads")
+        except Exception as e:
+            logger.error(f"Property DNA batch error: {e}")
+    threading.Thread(target=_enrich, daemon=True).start()
+    return jsonify({"status": "started", "limit": limit}), 202
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Tripartite Scoring Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route('/api/scoring/tripartite/<path:lead_id>', methods=['GET'])
+@require_auth
+def get_tripartite_score(lead_id):
+    """Get tripartite scores (sub/gc/insurance) for a lead."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT lead_data FROM consolidated_leads WHERE address_key = ?", (lead_id,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Lead not found"}), 404
+    ld = json.loads(row["lead_data"] or "{}") if row["lead_data"] else {}
+    if "_tripartite" in ld:
+        return jsonify({"lead_id": lead_id, **ld["_tripartite"]}), 200
+    try:
+        from utils.tripartite_scoring import calculate_tripartite_scores
+        scores = calculate_tripartite_scores(ld)
+        return jsonify({"lead_id": lead_id, **scores}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/scoring/tripartite-batch', methods=['POST'])
+@require_auth
+def batch_tripartite_scoring():
+    """Calculate tripartite scores for all leads missing them."""
+    data = request.get_json(silent=True) or {}
+    limit = min(int(data.get("limit", 50)), 500)
+    import threading
+    def _score():
+        try:
+            from utils.tripartite_scoring import calculate_tripartite_scores
+            import sqlite3
+            conn2 = sqlite3.connect(os.getenv("DB_PATH", "data/leads.db"))
+            conn2.row_factory = sqlite3.Row
+            rows = conn2.execute("""
+                SELECT address_key, lead_data FROM consolidated_leads
+                WHERE lead_data NOT LIKE '%_tripartite%' LIMIT ?
+            """, (limit,)).fetchall()
+            conn2.close()
+            scored = 0
+            for row in rows:
+                try:
+                    ld = json.loads(row["lead_data"] or "{}")
+                    scores = calculate_tripartite_scores(ld)
+                    ld["_tripartite"] = scores
+                    db = sqlite3.connect(os.getenv("DB_PATH", "data/leads.db"))
+                    db.execute("UPDATE consolidated_leads SET lead_data=? WHERE address_key=?",
+                              (json.dumps(ld, default=str), row["address_key"]))
+                    db.commit()
+                    db.close()
+                    scored += 1
+                except Exception as e:
+                    logger.debug(f"Tripartite score error: {e}")
+            logger.info(f"[Tripartite] Scored {scored}/{len(rows)} leads")
+        except Exception as e:
+            logger.error(f"Tripartite batch error: {e}")
+    threading.Thread(target=_score, daemon=True).start()
+    return jsonify({"status": "started", "limit": limit}), 202
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Multi-Tenant Lead Assignment Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route('/api/leads/<path:lead_id>/assign', methods=['POST'])
+@require_auth
+def assign_lead_to_user(lead_id):
+    """Manually assign a lead to a GC or Sub."""
+    data = request.get_json() or {}
+    gc_id = data.get('gc_id')
+    sub_id = data.get('sub_id')
+    if not gc_id and not sub_id:
+        return jsonify({"error": "Provide gc_id or sub_id"}), 400
+    try:
+        from utils.lead_router import get_lead_router
+        router = get_lead_router()
+        router.assign_lead(lead_id, gc_id=gc_id, sub_id=sub_id)
+        return jsonify({"status": "assigned", "lead_id": lead_id}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/leads/assigned', methods=['GET'])
+@require_auth
+def get_assigned_leads():
+    """Get leads assigned to the current user (GC or Sub)."""
+    user_id = g.user_id
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+    user_row = c.fetchone()
+    if not user_row:
+        conn.close()
+        return jsonify({"error": "User not found"}), 404
+    role = user_row[0] if isinstance(user_row[0], str) else 'user'
+    if role == 'subcontractor':
+        c.execute("""
+            SELECT address_key, address, city, agent_sources, lead_data, assigned_at
+            FROM consolidated_leads WHERE assigned_to_sub = ? AND is_dead_lead = 0
+            ORDER BY assigned_at DESC
+        """, (user_id,))
+    elif role == 'gc':
+        c.execute("""
+            SELECT address_key, address, city, agent_sources, lead_data, assigned_at
+            FROM consolidated_leads WHERE assigned_to_gc = ? AND is_dead_lead = 0
+            ORDER BY assigned_at DESC
+        """, (user_id,))
+    else:
+        conn.close()
+        return jsonify({"leads": [], "count": 0}), 200
+    leads = []
+    for row in c.fetchall():
+        rd = dict(row)
+        ld = json.loads(rd.get("lead_data", "{}") or "{}") if rd.get("lead_data") else {}
+        leads.append({
+            "id": rd["address_key"], "address": rd["address"],
+            "city": rd["city"], "source": rd["agent_sources"],
+            "assigned_at": rd.get("assigned_at"),
+            "description": (ld.get("description") or "")[:200],
+        })
+    conn.close()
+    return jsonify({"leads": leads, "count": len(leads), "role": role}), 200
