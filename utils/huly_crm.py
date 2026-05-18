@@ -3,23 +3,21 @@ utils/huly_crm.py
 🔗 MLeads → Huly CRM Integration
 
 Pushes leads from MLeads to Huly CRM as contacts + deals.
-When a lead is scored (tripartite), it automatically creates:
-  - A Contact in Huly (if not exists)
-  - A Deal/Opportunity linked to that contact
-  - Tags based on disaster type and scoring
 
-Huly API: REST via the transactor service
-  - Base URL: http://localhost:8080 (or configured HULY_URL)
-  - Auth: Account token from Huly
+Huly uses its own protocol via the transactor service:
+  - Endpoint: /_transactor
+  - Protocol: JSON-RPC style with model operations
+  - Auth: JWT token (account + workspace encoded)
 
-Flow:
-  1. Lead detected by MLeads agents
-  2. Tripartite scoring calculated
-  3. If gc_score >= 50 or sub_score >= 50:
-     a. Check if contact exists in Huly (by email/phone)
-     b. Create contact if new
-     c. Create deal with lead details + scoring
-     d. Tag with disaster type if applicable
+The integration creates:
+  1. contact:Person in Huly (contractor/property owner)
+  2. chunter:Channel for lead tracking
+  3. Tags based on disaster type and scoring
+
+When a lead is pushed:
+  - If contact exists (by email/phone): update it
+  - Create deal as a tracker:Tracker with stages
+  - Attach scoring + Property DNA as description
 """
 
 import os
@@ -33,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 HULY_URL = os.getenv("HULY_URL", "http://localhost:8080")
 HULY_TOKEN = os.getenv("HULY_TOKEN", "")
-HULY_WORKSPACE = os.getenv("HULY_WORKSPACE", "mleads")
+HULY_WORKSPACE = os.getenv("HULY_WORKSPACE", "")
 
 # Minimum scores to push to CRM
 MIN_GC_SCORE = int(os.getenv("HULY_MIN_GC_SCORE", "50"))
@@ -42,36 +40,72 @@ MIN_INS_SCORE = int(os.getenv("HULY_MIN_INS_SCORE", "40"))
 
 
 class HulyCRM:
-    """Integration with Huly CRM for lead management."""
+    """Integration with Huly CRM via transactor protocol."""
 
     def __init__(self):
         self.base_url = HULY_URL
         self.token = HULY_TOKEN
         self.workspace = HULY_WORKSPACE
         self.session = requests.Session()
-        if self.token:
-            self.session.headers["Authorization"] = f"Bearer {self.token}"
-        self.session.headers["Content-Type"] = "application/json"
 
     @property
     def is_configured(self) -> bool:
         """Check if Huly integration is configured."""
-        return bool(self.token)
+        return bool(self.token and self.workspace)
+
+    def _transactor_request(self, operations: list) -> Optional[dict]:
+        """Send operations to Huly transactor.
+        
+        Huly transactor accepts model operations in the format:
+        {
+            "transactions": [
+                {
+                    "objectId": "...",
+                    "objectClass": "contact:Person",
+                    "operations": [
+                        { "operation": "create", "attributes": {...} },
+                        { "operation": "update", "attributes": {...} },
+                    ]
+                }
+            ]
+        }
+        """
+        if not self.is_configured:
+            return None
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json",
+            }
+
+            payload = {
+                "workspace": self.workspace,
+                "transactions": operations,
+            }
+
+            resp = self.session.post(
+                f"{self.base_url}/_transactor",
+                json=payload,
+                headers=headers,
+                timeout=15,
+            )
+
+            if resp.status_code in (200, 201):
+                return resp.json()
+            else:
+                logger.debug(f"[Huly] Transactor error: {resp.status_code} {resp.text[:200]}")
+                return None
+
+        except Exception as e:
+            logger.debug(f"[Huly] Transactor request error: {e}")
+            return None
 
     def push_lead(self, lead: dict, scores: dict = None) -> Optional[Dict]:
         """
         Push a lead to Huly CRM.
         
-        Creates:
-          1. Contact (contractor/property owner)
-          2. Deal linked to the contact
-        
-        Args:
-            lead: MLeads lead dict
-            scores: Tripartite scores dict (optional)
-        
-        Returns:
-            Dict with huly_contact_id and huly_deal_id, or None on failure
+        Creates a contact and a tracker (deal) in Huly.
         """
         if not self.is_configured:
             logger.debug("[Huly] Not configured — skipping push")
@@ -88,156 +122,131 @@ class HulyCRM:
             logger.debug(f"[Huly] Lead {lead.get('id')} below score thresholds — skipping")
             return None
 
-        result = {"huly_contact_id": None, "huly_deal_id": None}
+        # Build operations
+        import uuid
+        contact_id = uuid.uuid4().hex[:24]
+        tracker_id = uuid.uuid4().hex[:24]
 
-        # Step 1: Create or find contact
-        contact = self._upsert_contact(lead)
-        if contact:
-            result["huly_contact_id"] = contact.get("id")
+        # Create contact
+        contact_ops = self._build_contact_operations(lead, contact_id)
+        # Create tracker (deal)
+        tracker_ops = self._build_tracker_operations(lead, scores, tracker_id, contact_id)
 
-        # Step 2: Create deal
-        deal = self._create_deal(lead, scores, contact)
-        if deal:
-            result["huly_deal_id"] = deal.get("id")
+        operations = contact_ops + tracker_ops
 
-        if result["huly_contact_id"] or result["huly_deal_id"]:
+        result = self._transactor_request(operations)
+
+        if result:
             logger.info(
                 f"[Huly] Pushed lead {lead.get('id')} — "
-                f"contact={result['huly_contact_id']}, deal={result['huly_deal_id']}"
+                f"contact={contact_id[:8]}..., deal={tracker_id[:8]}..."
             )
+            return {
+                "huly_contact_id": contact_id,
+                "huly_deal_id": tracker_id,
+                "status": "pushed",
+            }
 
-        return result
+        return result  # None
 
-    def _upsert_contact(self, lead: dict) -> Optional[Dict]:
-        """Create or update a contact in Huly."""
-        contact_data = {
-            "firstName": lead.get("contractor", lead.get("owner", "")).split()[0] if lead.get("contractor", lead.get("owner")) else "Unknown",
-            "lastName": " ".join(lead.get("contractor", lead.get("owner", "")).split()[1:]) if lead.get("contractor", lead.get("owner")) else "Contractor",
-            "emails": [],
-            "phones": [],
-            "location": f"{lead.get('city', '')}, CA",
-            "company": lead.get("contractor", ""),
-            "tags": self._get_lead_tags(lead),
-        }
+    def _build_contact_operations(self, lead: dict, contact_id: str) -> list:
+        """Build Huly contact:Person operations."""
+        name = lead.get("contractor", lead.get("owner", "Unknown Contractor"))
+        name_parts = name.split(None, 1)
+        first_name = name_parts[0] if name_parts else "Unknown"
+        last_name = name_parts[1] if len(name_parts) > 1 else ""
 
-        # Add contact info
         email = lead.get("contact_email", "")
         phone = lead.get("contact_phone", "")
+        city = lead.get("city", "")
+
+        attributes = {
+            "_id": contact_id,
+            "firstName": first_name,
+            "lastName": last_name,
+            "company": name if name != "Unknown Contractor" else "",
+            "city": city,
+            "state": "CA",
+        }
+
+        # Add contact channels
+        channels = []
         if email:
-            contact_data["emails"].append(email)
+            channels.append({"channel": "email", "value": email})
         if phone:
-            contact_data["phones"].append(phone)
+            channels.append({"channel": "phone", "value": phone})
+        if channels:
+            attributes["channels"] = channels
 
-        # Check if contact exists
-        existing = self._find_contact(email, phone)
-        if existing:
-            return existing
+        # Add tags
+        tags = self._get_lead_tags(lead)
+        if tags:
+            attributes["tags"] = tags
 
-        # Create new contact
-        try:
-            resp = self.session.post(
-                f"{self.base_url}/api/v1/{self.workspace}/contacts",
-                json=contact_data,
-                timeout=15,
-            )
-            if resp.status_code in (200, 201):
-                return resp.json()
-            else:
-                logger.debug(f"[Huly] Contact creation failed: {resp.status_code} {resp.text[:200]}")
-        except Exception as e:
-            logger.debug(f"[Huly] Contact creation error: {e}")
+        return [
+            {
+                "objectId": contact_id,
+                "objectClass": "contact:Person",
+                "operations": [
+                    {"operation": "create", "attributes": attributes}
+                ]
+            }
+        ]
 
-        return None
-
-    def _find_contact(self, email: str, phone: str) -> Optional[Dict]:
-        """Find existing contact by email or phone."""
-        if not email and not phone:
-            return None
-
-        try:
-            # Search by email
-            if email:
-                resp = self.session.get(
-                    f"{self.base_url}/api/v1/{self.workspace}/contacts",
-                    params={"email": email},
-                    timeout=10,
-                )
-                if resp.status_code == 200:
-                    results = resp.json().get("items", resp.json()) if isinstance(resp.json(), dict) else resp.json()
-                    if results and len(results) > 0:
-                        return results[0] if isinstance(results, list) else results
-
-            # Search by phone
-            if phone:
-                resp = self.session.get(
-                    f"{self.base_url}/api/v1/{self.workspace}/contacts",
-                    params={"phone": phone},
-                    timeout=10,
-                )
-                if resp.status_code == 200:
-                    results = resp.json().get("items", resp.json()) if isinstance(resp.json(), dict) else resp.json()
-                    if results and len(results) > 0:
-                        return results[0] if isinstance(results, list) else results
-        except Exception as e:
-            logger.debug(f"[Huly] Contact search error: {e}")
-
-        return None
-
-    def _create_deal(self, lead: dict, scores: dict, contact: Optional[Dict]) -> Optional[Dict]:
-        """Create a deal/opportunity in Huly CRM."""
+    def _build_tracker_operations(self, lead: dict, scores: dict,
+                                   tracker_id: str, contact_id: str) -> list:
+        """Build Huly tracker:Tracker (deal) operations."""
         gc_score = scores.get("gc_score", 0)
         sub_score = scores.get("subcontractor_score", 0)
         ins_score = scores.get("insurance_score", 0)
 
-        # Determine deal stage based on scores
         max_score = max(gc_score, sub_score, ins_score)
         if max_score >= 90:
             stage = "hot"
+            color = 0xFF0000  # red
         elif max_score >= 70:
             stage = "warm"
+            color = 0xFF8800  # orange
         elif max_score >= 50:
             stage = "qualified"
+            color = 0xFFCC00  # yellow
         else:
             stage = "new"
+            color = 0x0088FF  # blue
 
-        deal_data = {
-            "title": f"{lead.get('address', 'Lead')} — {lead.get('city', '')}",
-            "description": self._build_deal_description(lead, scores),
-            "stage": stage,
-            "value": lead.get("value_float", 0) or 0,
-            "contactId": contact.get("id") if contact else None,
+        title = f"🏗️ {lead.get('address', 'Lead')} — {lead.get('city', '')}"
+        description = self._build_deal_description(lead, scores)
+
+        attributes = {
+            "_id": tracker_id,
+            "title": title,
+            "description": description,
+            "status": stage,
+            "priority": "medium" if max_score < 70 else "high" if max_score < 90 else "urgent",
+            "assignee": contact_id,
+            "color": color,
             "tags": self._get_lead_tags(lead),
-            "customFields": {
-                "mleads_id": lead.get("id", ""),
-                "gc_score": gc_score,
-                "sub_score": sub_score,
-                "ins_score": ins_score,
-                "source": lead.get("agent_sources", lead.get("_agent_key", "")),
-                "disaster_type": lead.get("_disaster_type", ""),
-                "trade": lead.get("_trade", ""),
-            },
         }
 
-        try:
-            resp = self.session.post(
-                f"{self.base_url}/api/v1/{self.workspace}/deals",
-                json=deal_data,
-                timeout=15,
-            )
-            if resp.status_code in (200, 201):
-                return resp.json()
-            else:
-                logger.debug(f"[Huly] Deal creation failed: {resp.status_code} {resp.text[:200]}")
-        except Exception as e:
-            logger.debug(f"[Huly] Deal creation error: {e}")
+        # Add custom fields as label/value pairs in description
+        value = lead.get("value_float", 0)
+        if value:
+            attributes["estimate"] = value
 
-        return None
+        return [
+            {
+                "objectId": tracker_id,
+                "objectClass": "tracker:Issue",
+                "operations": [
+                    {"operation": "create", "attributes": attributes}
+                ]
+            }
+        ]
 
     def _build_deal_description(self, lead: dict, scores: dict) -> str:
         """Build a rich deal description for Huly."""
         lines = []
 
-        # Lead summary
         desc = lead.get("description", "")
         if desc:
             lines.append(desc)
@@ -247,7 +256,11 @@ class HulyCRM:
         try:
             lines.append(format_tripartite_summary(scores))
         except:
-            lines.append(f"Sub: {scores.get('subcontractor_score', 0)} | GC: {scores.get('gc_score', 0)} | Ins: {scores.get('insurance_score', 0)}")
+            lines.append(
+                f"👷 Sub: {scores.get('subcontractor_score', 0)} | "
+                f"🏗️ GC: {scores.get('gc_score', 0)} | "
+                f"🏢 Ins: {scores.get('insurance_score', 0)}"
+            )
 
         # Property DNA
         year = lead.get("property_year_built")
@@ -276,23 +289,23 @@ class HulyCRM:
         if source:
             lines.append(f"📡 Source: {source}")
 
+        # MLeads ID
+        lines.append(f"🆔 MLeads ID: {lead.get('id', 'unknown')}")
+
         return "\n".join(lines)
 
     def _get_lead_tags(self, lead: dict) -> list:
         """Generate tags for a lead."""
         tags = []
 
-        # Trade tags
         trade = lead.get("_trade", "").lower()
         if trade:
             tags.append(trade)
 
-        # Disaster tags
         disaster = lead.get("_disaster_type", "")
         if disaster:
             tags.append(f"disaster-{disaster}")
 
-        # Score tags
         scores = lead.get("_tripartite", {})
         max_score = max(
             scores.get("gc_score", 0),
@@ -304,59 +317,48 @@ class HulyCRM:
         elif max_score >= 70:
             tags.append("warm-lead")
 
-        # Source tag
         source = lead.get("_agent_key", "")
         if source:
             tags.append(f"source-{source}")
 
-        # City tag
         city = lead.get("city", "").lower().replace(" ", "-")
         if city:
             tags.append(city)
 
         return tags
 
-    def get_deals(self, stage: str = None, limit: int = 50) -> list:
-        """Get deals from Huly CRM."""
+    def test_connection(self) -> Dict:
+        """Test the Huly connection and return status info."""
         if not self.is_configured:
-            return []
+            return {"connected": False, "error": "Not configured (missing HULY_TOKEN or HULY_WORKSPACE)"}
 
         try:
-            params = {"limit": limit}
-            if stage:
-                params["stage"] = stage
-
-            resp = self.session.get(
-                f"{self.base_url}/api/v1/{self.workspace}/deals",
-                params=params,
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json",
+            }
+            # Try to reach the transactor
+            resp = self.session.post(
+                f"{self.base_url}/_transactor",
+                json={"workspace": self.workspace, "transactions": []},
+                headers=headers,
                 timeout=10,
             )
-            if resp.status_code == 200:
-                data = resp.json()
-                return data.get("items", data) if isinstance(data, dict) else data
+
+            if resp.status_code in (200, 201, 204):
+                return {
+                    "connected": True,
+                    "url": self.base_url,
+                    "workspace": self.workspace[:8] + "...",
+                }
+            else:
+                return {
+                    "connected": False,
+                    "error": f"HTTP {resp.status_code}",
+                    "detail": resp.text[:200],
+                }
         except Exception as e:
-            logger.debug(f"[Huly] Get deals error: {e}")
-
-        return []
-
-    def get_contacts(self, limit: int = 50) -> list:
-        """Get contacts from Huly CRM."""
-        if not self.is_configured:
-            return []
-
-        try:
-            resp = self.session.get(
-                f"{self.base_url}/api/v1/{self.workspace}/contacts",
-                params={"limit": limit},
-                timeout=10,
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                return data.get("items", data) if isinstance(data, dict) else data
-        except Exception as e:
-            logger.debug(f"[Huly] Get contacts error: {e}")
-
-        return []
+            return {"connected": False, "error": str(e)}
 
 
 # Singleton
