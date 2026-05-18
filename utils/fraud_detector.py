@@ -100,12 +100,26 @@ def validate_contractor_license(
         result.risk_level = "HIGH"
         return result
 
-    # Look up via CSLB
+    # Look up via CSLB (prefer new cslb_verifier, fallback to lead_enrichment)
+    cslb_data = None
     try:
-        from utils.lead_enrichment import _cslb_lookup
-        cslb_data = _cslb_lookup(license_num, contractor_name)
+        from utils.cslb_verifier import cslb_lookup
+        cslb_data = cslb_lookup(license_num, contractor_name)
+    except ImportError:
+        try:
+            from utils.lead_enrichment import _cslb_lookup
+            cslb_data = _cslb_lookup(license_num, contractor_name)
+        except Exception as e:
+            logger.debug(f"[LicenseValidator] CSLB lookup failed: {e}")
     except Exception as e:
-        logger.debug(f"[LicenseValidator] CSLB lookup failed: {e}")
+        logger.debug(f"[LicenseValidator] CSLB verifier failed: {e}")
+        try:
+            from utils.lead_enrichment import _cslb_lookup
+            cslb_data = _cslb_lookup(license_num, contractor_name)
+        except Exception:
+            pass
+
+    if not cslb_data:
         result.warnings.append("CSLB lookup failed — cannot validate")
         result.risk_level = "MEDIUM"
         return result

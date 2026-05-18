@@ -15,6 +15,23 @@ from pathlib import Path
 
 DB_PATH = os.getenv("DB_PATH", "data/leads.db")
 
+# PostgreSQL support: when USE_POSTGRES=1, delegate to db_postgres module
+USE_POSTGRES = os.getenv("USE_POSTGRES", "").lower() in ("1", "true", "yes")
+
+if USE_POSTGRES:
+    try:
+        from db_postgres import (
+            init_postgres_db,
+            get_db_connection_compat as get_db_connection,
+            init_pool,
+            migrate_from_sqlite,
+        )
+    except ImportError:
+        raise ImportError(
+            "USE_POSTGRES is set but psycopg2-binary is not installed. "
+            "Run: pip install psycopg2-binary"
+        )
+
 
 def _recover_wal_corruption(db_path: str) -> None:
     """Remove stale WAL/SHM files that cause 'database disk image is malformed'."""

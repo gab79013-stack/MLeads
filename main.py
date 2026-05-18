@@ -80,6 +80,14 @@ from agents.federal_contracts_agent import FederalContractsAgent
 from agents.crossdata_agent         import CrossDataAgent
 from agents.tdlr_agent              import TDLRAgent
 
+# ── Disaster Intelligence Agent ────────────────────────────────────
+try:
+    from agents.disaster_agent import DisasterAgent
+    _DISASTER_AGENT_AVAILABLE = True
+except Exception:
+    _DISASTER_AGENT_AVAILABLE = False
+    logger.warning("Disaster agent not loaded")
+
 # ── Registro de agentes ────────────────────────────────────────────
 AGENT_REGISTRY = {
     "permits":           {"class": PermitsAgent,          "env_key": "AGENT_PERMITS",           "interval_key": "INTERVAL_PERMITS",           "default_interval": 60},
@@ -99,6 +107,8 @@ AGENT_REGISTRY = {
     "crossdata":         {"class": CrossDataAgent,         "env_key": "AGENT_CROSSDATA",         "interval_key": "INTERVAL_CROSSDATA",         "default_interval": 360},
     # ── Licencias de contratistas activos Texas (TDLR) ──────────────
     "tdlr":              {"class": TDLRAgent,               "env_key": "AGENT_TDLR",               "interval_key": "INTERVAL_TDLR",               "default_interval": 360},
+    # ── Disaster Intelligence (NOAA + FEMA + NASA FIRMS) ───────────
+    **({"disaster":       {"class": DisasterAgent,          "env_key": "AGENT_DISASTER",           "interval_key": "INTERVAL_DISASTER",           "default_interval": 30}} if _DISASTER_AGENT_AVAILABLE else {}),
     # ── Marketing Team (opt-in — disabled by default) ────────────────
     **({
         "mkt_seo":       {"class": SEOAgent,              "env_key": "AGENT_MKT_SEO",       "interval_key": "INTERVAL_MKT_SEO",       "default_interval": 10080},

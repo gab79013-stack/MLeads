@@ -173,6 +173,51 @@ class BaseAgent(ABC):
                 except Exception as e:
                     logger.debug(f"[{self.agent_key}] AI classify error: {e}")
 
+        # Paso 3b-0: Enriquecer con Property DNA (year built, roof, value, flood zone)
+        try:
+            from utils.property_dna import get_property_dna
+            dna = get_property_dna()
+            dna.enrich_batch(new_leads)
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"[{self.agent_key}] Property DNA error: {e}")
+
+        # Paso 3b-1: Calcular tripartite scores (sub, gc, insurance)
+        try:
+            from utils.tripartite_scoring import calculate_tripartite_scores
+            for lead in new_leads:
+                tripartite = calculate_tripartite_scores(lead)
+                lead["_tripartite"] = tripartite
+                lead["subcontractor_score"] = tripartite["subcontractor_score"]
+                lead["gc_score"] = tripartite["gc_score"]
+                lead["insurance_score"] = tripartite["insurance_score"]
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"[{self.agent_key}] Tripartite scoring error: {e}")
+
+        # Paso 3b-2: Route leads to GCs and Subs
+        try:
+            from utils.lead_router import get_lead_router
+            router = get_lead_router()
+            for lead in new_leads:
+                tripartite = lead.get("_tripartite", {})
+                if tripartite:
+                    routing = router.route_lead(lead, tripartite)
+                    lead["_routing"] = routing
+                    if routing.get("assigned_gc") or routing.get("assigned_sub"):
+                        router.assign_lead(
+                            lead.get("id"),
+                            gc_id=routing.get("assigned_gc"),
+                            sub_id=routing.get("assigned_sub"),
+                            scores=tripartite,
+                        )
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"[{self.agent_key}] Lead routing error: {e}")
+
         # Paso 3b-ii: Detectar GC self-pull ("lead muerto")
         # Debe correr DESPUÉS de la clasificación AI para tener _trade disponible
         if _GC_DETECTOR_AVAILABLE:
