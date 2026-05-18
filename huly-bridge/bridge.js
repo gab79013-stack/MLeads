@@ -94,7 +94,7 @@ async function pushLeadToHuly(lead, scores) {
     const contactHash = computeHash(contactData);
 
     await db.query(`
-      INSERT INTO contact (workspaceId, _id, _class, space, modifiedBy, createdBy, modifiedOn, createdOn, "%hash%", "attachedTo", data)
+      INSERT INTO contact ("workspaceId", _id, _class, space, "modifiedBy", "createdBy", "modifiedOn", "createdOn", "%hash%", "attachedTo", data)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, $10)
     `, [
       HULY_WORKSPACE,
@@ -125,7 +125,7 @@ async function pushLeadToHuly(lead, scores) {
     const trackerHash = computeHash(trackerData);
 
     await db.query(`
-      INSERT INTO tracker (workspaceId, _id, _class, space, modifiedBy, createdBy, modifiedOn, createdOn, "%hash%", "attachedTo", data)
+      INSERT INTO tracker ("workspaceId", _id, _class, space, "modifiedBy", "createdBy", "modifiedOn", "createdOn", "%hash%", "attachedTo", data)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, $10)
     `, [
       HULY_WORKSPACE,
