@@ -1,227 +1,132 @@
 #!/usr/bin/env node
 /**
  * mleads-huly-bridge.js
- * Bridge REST API between MLeads (Python) and Huly CRM
+ * Bridge between MLeads and Huly CRM
  * 
- * Uses Huly's transactor WebSocket protocol correctly:
- * 1. Connect to ws://host/_transactor
- * 2. Send "authentication" message with the session token
- * 3. Send "modelOper" to create/update documents
+ * Inserts leads directly into Huly's CockroachDB.
+ * This is the most reliable approach since Huly's transactor
+ * WebSocket protocol is undocumented and complex.
  * 
- * The session token is obtained from the browser's localStorage
- * or generated via the account service.
+ * Huly stores all data in a document-based schema:
+ *   - contact table: people/organizations
+ *   - tracker table: issues/deals/tasks
+ *   - All content in JSONB `data` column
+ *   - Uses _id, _class, space, workspaceId as identifiers
  */
 
 const express = require('express');
-const WebSocket = require('ws');
+const { Client } = require('pg');
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 
-const HULY_URL = process.env.HULY_URL || 'http://localhost:8080';
-const HULY_TOKEN = process.env.HULY_TOKEN || '';
+const DB_URL = process.env.HULY_DB_URL || 'postgresql://selfhost:cr_mleads2024@localhost:26257/defaultdb?sslmode=disable';
 const HULY_WORKSPACE = process.env.HULY_WORKSPACE || '';
 const BRIDGE_PORT = parseInt(process.env.BRIDGE_PORT || '5010');
-const SERVER_SECRET = process.env.SERVER_SECRET || '';
 
-const WS_URL = HULY_URL.replace(/^http/, 'ws') + '/_transactor';
+let pgClient = null;
 
-let ws = null;
-let connected = false;
-let seqId = 0;
+// ── Database Connection ────────────────────────────────────────────
 
-// ── WebSocket Connection ────────────────────────────────────────────
-
-function connectWS() {
-  return new Promise((resolve, reject) => {
-    if (!HULY_TOKEN) {
-      reject(new Error('HULY_TOKEN required'));
-      return;
-    }
-
-    console.log(`[Bridge] Connecting to ${WS_URL}...`);
-    
-    ws = new WebSocket(WS_URL);
-
-    const connectTimeout = setTimeout(() => {
-      reject(new Error('Connection timeout'));
-      ws.terminate();
-    }, 10000);
-
-    ws.on('open', () => {
-      console.log('[Bridge] WS open, sending authenticate...');
-      
-      // Huly protocol: first send authenticate with the token
-      // The token format: the JWT from browser session
-      ws.send(JSON.stringify({
-        method: 'authenticate',
-        params: { token: HULY_TOKEN },
-        id: ++seqId
-      }));
-    });
-
-    ws.on('message', (raw) => {
-      const data = raw.toString();
-      try {
-        const msg = JSON.parse(data);
-        console.log(`[Bridge] Received: method=${msg.method || 'none'} id=${msg.id || 'none'} error=${msg.error?.code || 'none'}`);
-        
-        if (msg.method === 'connected' || (msg.id === 1 && !msg.error)) {
-          clearTimeout(connectTimeout);
-          connected = true;
-          console.log('[Bridge] Authenticated and connected to Huly');
-          resolve();
-        }
-        
-        if (msg.error && msg.id === 1) {
-          clearTimeout(connectTimeout);
-          // Try alternative auth format
-          console.log('[Bridge] First auth failed, trying workspace join...');
-          ws.send(JSON.stringify({
-            method: 'workspace.join',
-            params: { 
-              workspace: HULY_WORKSPACE,
-              token: HULY_TOKEN 
-            },
-            id: ++seqId
-          }));
-          // Give it another chance
-          setTimeout(() => {
-            if (!connected) {
-              clearTimeout(connectTimeout);
-              // Last resort: try the token as the full session
-              connected = true; // Assume connected for now
-              console.log('[Bridge] Assuming connected (fallback)');
-              resolve();
-            }
-          }, 3000);
-        }
-      } catch (e) {
-        // Non-JSON message (binary frame), ignore
-      }
-    });
-
-    ws.on('error', (err) => {
-      clearTimeout(connectTimeout);
-      console.error(`[Bridge] WS error: ${err.message}`);
-      reject(err);
-    });
-
-    ws.on('close', (code, reason) => {
-      clearTimeout(connectTimeout);
-      connected = false;
-      ws = null;
-      console.log(`[Bridge] WS closed: ${code} ${reason.toString()}`);
-      // Reconnect after 10s
-      setTimeout(() => connectWS().catch(() => {}), 10000);
-    });
-  });
+async function connectDB() {
+  pgClient = new Client({ connectionString: DB_URL });
+  await pgClient.connect();
+  console.log('[Bridge] Connected to Huly CockroachDB');
+  return pgClient;
 }
 
-function sendOperation(method, params) {
-  return new Promise((resolve, reject) => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      reject(new Error('Not connected'));
-      return;
-    }
-
-    const id = ++seqId;
-    const msg = { method, params, id };
-    
-    const timeout = setTimeout(() => {
-      reject(new Error('Operation timeout'));
-    }, 15000);
-
-    const handler = (raw) => {
-      try {
-        const data = JSON.parse(raw.toString());
-        if (data.id === id) {
-          clearTimeout(timeout);
-          ws.off('message', handler);
-          if (data.error) {
-            console.error(`[Bridge] Operation error: ${JSON.stringify(data.error).substring(0, 300)}`);
-            reject(new Error(data.error.message || data.error.code || 'Unknown error'));
-          } else {
-            resolve(data.result);
-          }
-        }
-      } catch (e) {}
-    };
-
-    ws.on('message', handler);
-    ws.send(JSON.stringify(msg));
-  });
+async function ensureConnected() {
+  if (!pgClient) {
+    await connectDB();
+  }
+  return pgClient;
 }
 
 // ── Lead Push ──────────────────────────────────────────────────────
 
 async function pushLeadToHuly(lead, scores) {
-  // Ensure connection
-  if (!connected || !ws || ws.readyState !== WebSocket.OPEN) {
-    try {
-      await connectWS();
-    } catch (e) {
-      console.error(`[Bridge] Cannot connect: ${e.message}`);
-      return { status: 'error', error: `Connection failed: ${e.message}` };
-    }
-  }
+  const db = await ensureConnected();
 
   const contactId = generateId();
   const trackerId = generateId();
+  const now = Date.now();
+  const space = 'contact:space:Contacts';
+  const trackerSpace = 'tracker:space:Issues';
 
   const name = lead.contractor || lead.owner || 'Unknown';
-  const nameParts = name.split(' ');
+  const gcScore = scores?.gc_score || 0;
+  const subScore = scores?.subcontractor_score || 0;
+  const insScore = scores?.insurance_score || 0;
+  const maxScore = Math.max(gcScore, subScore, insScore);
 
   try {
-    // Use Huly's modelOper to create objects
-    // Format based on Huly transactor protocol
-    const operations = [];
-
-    // Contact (Person)
-    operations.push({
-      _id: contactId,
-      _class: 'contact:Person',
-      space: HULY_WORKSPACE,
-      modifiedOn: Date.now(),
-      modifiedBy: HULY_TOKEN,  // Will be resolved server-side
-      createdOn: Date.now(),
-      firstName: nameParts[0] || 'Unknown',
-      lastName: nameParts.slice(1).join(' ') || '',
-      company: name !== 'Unknown' ? name : '',
+    // 1. Insert contact
+    const contactData = {
+      avatarProps: { color: getScoreColor(maxScore) },
+      avatarType: 'color',
       city: lead.city || '',
-      state: 'CA',
-      channels: buildChannels(lead),
-    });
+      name: name,
+      socialIds: [],
+    };
 
-    // Tracker (Issue/Deal)
-    const maxScore = Math.max(
-      scores?.gc_score || 0,
-      scores?.subcontractor_score || 0,
-      scores?.insurance_score || 0
-    );
+    if (lead.contact_email) {
+      contactData.socialIds.push({
+        _id: generateId(),
+        _class: 'contact:SocialId',
+        value: lead.contact_email,
+        type: 'email',
+      });
+    }
+    if (lead.contact_phone) {
+      contactData.socialIds.push({
+        _id: generateId(),
+        _class: 'contact:SocialId',
+        value: lead.contact_phone,
+        type: 'phone',
+      });
+    }
 
-    operations.push({
-      _id: trackerId,
-      _class: 'tracker:Issue',
-      space: HULY_WORKSPACE,
-      modifiedOn: Date.now(),
-      createdOn: Date.now(),
+    await db.query(`
+      INSERT INTO contact (workspaceId, _id, _class, space, modifiedBy, createdBy, modifiedOn, createdOn, "data")
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [
+      HULY_WORKSPACE,
+      contactId,
+      'contact:class:Person',
+      space,
+      'core:account:ConfigUser',
+      'core:account:ConfigUser',
+      now,
+      now,
+      JSON.stringify(contactData),
+    ]);
+
+    // 2. Insert tracker (deal/issue)
+    const trackerData = {
       title: `${lead.address || 'Lead'} — ${lead.city || ''}`,
       description: buildDescription(lead, scores),
+      status: maxScore >= 90 ? 'hot' : maxScore >= 70 ? 'warm' : 'qualified',
       priority: maxScore >= 90 ? 'urgent' : maxScore >= 70 ? 'high' : 'medium',
+      number: await getNextTrackerNumber(db),
       assignee: contactId,
-      estimate: lead.value_float || 0,
-    });
+      estimation: lead.value_float || 0,
+    };
 
-    // Try modelOper method
-    const result = await sendOperation('modelOper', {
-      workspace: HULY_WORKSPACE,
-      operations: operations.map(op => ({
-        _id: op._id,
-        _class: op._class,
-        _op: 'create',
-        ...op,
-      })),
-    });
+    await db.query(`
+      INSERT INTO tracker (workspaceId, _id, _class, space, modifiedBy, createdBy, modifiedOn, createdOn, "data")
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [
+      HULY_WORKSPACE,
+      trackerId,
+      'tracker:class:Issue',
+      trackerSpace,
+      'core:account:ConfigUser',
+      'core:account:ConfigUser',
+      now,
+      now,
+      JSON.stringify(trackerData),
+    ]);
+
+    console.log(`[Bridge] Pushed lead: contact=${contactId} tracker=${trackerId}`);
 
     return {
       status: 'pushed',
@@ -230,25 +135,34 @@ async function pushLeadToHuly(lead, scores) {
     };
 
   } catch (err) {
-    console.error(`[Bridge] Push failed: ${err.message}`);
+    console.error(`[Bridge] Push error: ${err.message}`);
     return { status: 'error', error: err.message };
   }
 }
 
+async function getNextTrackerNumber(db) {
+  try {
+    const res = await db.query(`SELECT COUNT(*) FROM tracker WHERE "workspaceId" = $1`, [HULY_WORKSPACE]);
+    return parseInt(res.rows[0].count) + 1;
+  } catch {
+    return 1;
+  }
+}
+
+function getScoreColor(score) {
+  if (score >= 90) return '#ff4444';  // Red for hot
+  if (score >= 70) return '#ff8800';  // Orange for warm
+  if (score >= 50) return '#ffcc00';  // Yellow for qualified
+  return '#4488ff';                   // Blue for new
+}
+
 function generateId() {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const chars = '0123456789abcdef';
   let id = '';
   for (let i = 0; i < 24; i++) {
     id += chars[Math.floor(Math.random() * chars.length)];
   }
   return id;
-}
-
-function buildChannels(lead) {
-  const channels = [];
-  if (lead.contact_email) channels.push({ channel: 'email', value: lead.contact_email });
-  if (lead.contact_phone) channels.push({ channel: 'phone', value: lead.contact_phone });
-  return channels;
 }
 
 function buildDescription(lead, scores) {
@@ -257,30 +171,41 @@ function buildDescription(lead, scores) {
   const gc = scores?.gc_score || 0;
   const sub = scores?.subcontractor_score || 0;
   const ins = scores?.insurance_score || 0;
-  lines.push(`Sub: ${sub} | GC: ${gc} | Ins: ${ins}`);
-  if (lead._disaster_type) lines.push(`Disaster: ${lead._disaster_type.toUpperCase()}`);
-  if (lead.contractor) lines.push(`GC: ${lead.contractor}`);
-  if (lead.contact_phone) lines.push(`Phone: ${lead.contact_phone}`);
-  if (lead.contact_email) lines.push(`Email: ${lead.contact_email}`);
-  lines.push(`MLeads ID: ${lead.id || 'unknown'}`);
-  return lines.join('\\n');
+  lines.push(`📊 Scoring: Sub=${sub} GC=${gc} Ins=${ins}`);
+  if (lead.property_year_built || lead.property_roof_material) {
+    lines.push(`🏠 Property: Year ${lead.property_year_built || '?'} | Roof: ${lead.property_roof_material || 'unknown'}`);
+  }
+  if (lead._disaster_type) lines.push(`🚨 Disaster: ${lead._disaster_type.toUpperCase()}`);
+  if (lead.contractor) lines.push(`👷 Contractor: ${lead.contractor}`);
+  if (lead.contact_phone) lines.push(`📞 ${lead.contact_phone}`);
+  if (lead.contact_email) lines.push(`✉️ ${lead.contact_email}`);
+  if (lead.agent_sources) lines.push(`📡 Source: ${lead.agent_sources}`);
+  lines.push(`🆔 MLeads: ${lead.id || 'unknown'}`);
+  return lines.join('\n');
 }
 
 // ── REST Endpoints ─────────────────────────────────────────────────
 
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    huly_connected: connected,
-    huly_url: HULY_URL,
-    workspace: HULY_WORKSPACE ? HULY_WORKSPACE.slice(0, 8) + '...' : '',
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    const db = await ensureConnected();
+    const r = await db.query('SELECT 1');
+    res.json({ status: 'ok', db_connected: true, workspace: HULY_WORKSPACE ? HULY_WORKSPACE.slice(0, 8) + '...' : '' });
+  } catch (e) {
+    res.json({ status: 'ok', db_connected: false, error: e.message });
+  }
 });
 
 app.get('/api/test', async (req, res) => {
   try {
-    if (!connected) await connectWS();
-    res.json({ connected, url: HULY_URL });
+    const db = await ensureConnected();
+    const contacts = await db.query('SELECT COUNT(*) FROM contact WHERE "workspaceId" = $1', [HULY_WORKSPACE]);
+    const trackers = await db.query('SELECT COUNT(*) FROM tracker WHERE "workspaceId" = $1', [HULY_WORKSPACE]);
+    res.json({
+      connected: true,
+      contacts: parseInt(contacts.rows[0].count),
+      trackers: parseInt(trackers.rows[0].count),
+    });
   } catch (e) {
     res.json({ connected: false, error: e.message });
   }
@@ -295,14 +220,12 @@ app.post('/api/push-lead', async (req, res) => {
 
 // ── Start ──────────────────────────────────────────────────────────
 
-app.listen(BRIDGE_PORT, '0.0.0.0', () => {
+app.listen(BRIDGE_PORT, '0.0.0.0', async () => {
   console.log(`[Bridge] Running on port ${BRIDGE_PORT}`);
-  if (HULY_TOKEN) {
-    connectWS().then(() => {
-      console.log('[Bridge] Ready to push leads');
-    }).catch((e) => {
-      console.log(`[Bridge] Initial connect failed: ${e.message}`);
-      console.log('[Bridge] Will retry on first push');
-    });
+  try {
+    await connectDB();
+    console.log('[Bridge] Ready to push leads to Huly');
+  } catch (e) {
+    console.error(`[Bridge] DB connection failed: ${e.message}`);
   }
 });
