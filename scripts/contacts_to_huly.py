@@ -188,6 +188,7 @@ def main():
     parser.add_argument("--csv", help="Specific CSV file", default=None)
     parser.add_argument("--limit", type=int, default=0, help="Max contacts to push")
     parser.add_argument("--dry-run", action="store_true", help="Don't push, just count")
+    parser.add_argument("--json", action="store_true", help="Output JSON to stdout for batch_insert.js")
     args = parser.parse_args()
     
     logger.info("=" * 60)
@@ -227,6 +228,11 @@ def main():
     
     if args.dry_run:
         logger.info("Dry run — not pushing")
+        return
+    
+    if args.json:
+        # Output JSON for batch_insert.js
+        print(json.dumps(all_contacts))
         return
     
     logger.info(f"\n📤 Pushing to Huly CRM...\n")
