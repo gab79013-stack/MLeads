@@ -134,6 +134,98 @@ class BaseAgent(ABC):
             logger.error(f"[{self.agent_key}] Error al notificar {lead_id}: {e}")
             return False
 
+    def _sync_to_postgres(self, leads: list):
+        """Sync new leads to PostgreSQL (when USE_POSTGRES=1)."""
+        import json as _json
+        try:
+            from db_postgres import get_conn, put_conn
+        except ImportError:
+            return
+        
+        conn = get_conn()
+        synced = 0
+        try:
+            with conn.cursor() as cur:
+                for lead in leads:
+                    try:
+                        lead_id = lead.get('id', '')
+                        if not lead_id:
+                            continue
+                        
+                        address = lead.get('address', '')
+                        city = lead.get('city', '')
+                        agent_sources = lead.get('agent_sources', lead.get('_agent_key', self.agent_key))
+                        
+                        # Extract score
+                        tripartite = lead.get('_tripartite', {})
+                        sub_score = tripartite.get('subcontractor_score', 0)
+                        gc_score = tripartite.get('gc_score', 0)
+                        ins_score = tripartite.get('insurance_score', 0)
+                        
+                        # Property DNA
+                        year_built = lead.get('property_year_built')
+                        try:
+                            year_built = int(year_built) if year_built else None
+                        except:
+                            year_built = None
+                        
+                        lat = lead.get('lat')
+                        lon = lead.get('lon')
+                        try:
+                            lat = float(lat) if lat else None
+                            lon = float(lon) if lon else None
+                        except:
+                            lat = lon = None
+                        
+                        cur.execute("""
+                            INSERT INTO consolidated_leads (
+                                address_key, address, city, agent_sources,
+                                first_seen, last_updated, lead_data,
+                                primary_service_type, has_contact, has_phone,
+                                is_dead_lead, notified,
+                                subcontractor_score, gc_score, insurance_score,
+                                property_year_built, property_roof_material,
+                                property_value, property_sqft,
+                                lat, lon
+                            ) VALUES (
+                                %s, %s, %s, %s,
+                                NOW(), NOW(), %s,
+                                %s, %s, %s,
+                                FALSE, FALSE,
+                                %s, %s, %s,
+                                %s, %s,
+                                %s, %s,
+                                %s, %s
+                            )
+                            ON CONFLICT (address_key) DO UPDATE SET
+                                last_updated = NOW(),
+                                lead_data = EXCLUDED.lead_data,
+                                gc_score = EXCLUDED.gc_score,
+                                subcontractor_score = EXCLUDED.subcontractor_score,
+                                insurance_score = EXCLUDED.insurance_score
+                        """, (
+                            str(lead_id), address, city, agent_sources,
+                            _json.dumps(lead, default=str),
+                            lead.get('primary_service_type', lead.get('_trade', '')),
+                            bool(lead.get('contact_phone') or lead.get('contact_email')),
+                            bool(lead.get('contact_phone')),
+                            sub_score, gc_score, ins_score,
+                            year_built, lead.get('property_roof_material'),
+                            lead.get('property_value'), lead.get('property_sqft'),
+                            lat, lon,
+                        ))
+                        synced += 1
+                    except Exception as e:
+                        logger.debug(f"PG sync row error: {e}")
+            conn.commit()
+            if synced:
+                logger.info(f"[{self.agent_key}] Synced {synced} leads to PostgreSQL")
+        except Exception as e:
+            conn.rollback()
+            logger.debug(f"PG sync error: {e}")
+        finally:
+            put_conn(conn)
+
     def send_batch(self, leads: list) -> int:
         """
         Envía una lista de leads nuevos con:
@@ -229,6 +321,13 @@ class BaseAgent(ABC):
             pass
         except Exception as e:
             logger.debug(f"[{self.agent_key}] Huly CRM push error: {e}")
+
+        # Paso 3b-4: Sync leads to PostgreSQL
+        if os.getenv("USE_POSTGRES", "").lower() in ("1", "true"):
+            try:
+                self._sync_to_postgres(new_leads)
+            except Exception as e:
+                logger.debug(f"[{self.agent_key}] PG sync error: {e}")
 
         # Paso 3b-ii: Detectar GC self-pull ("lead muerto")
         # Debe correr DESPUÉS de la clasificación AI para tener _trade disponible
