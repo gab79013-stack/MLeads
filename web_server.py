@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-web_server.py — Production web server entry point for MLeads dashboard
+web_server.py — Production web server entry point for 0brix dashboard
 
 Initializes Flask app from web.app module.
 Routes are defined in web/app.py.

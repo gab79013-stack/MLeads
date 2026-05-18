@@ -3227,7 +3227,7 @@ def _verify_facebook_token(access_token: str) -> dict | None:
 def oauth_google_login():
     """
     Exchange a Google ID token (from the JS Identity Services client)
-    for an MLeads JWT.
+    for an 0brix JWT.
 
     Body: {"credential": "<google-id-token>"}
     """
@@ -3263,7 +3263,7 @@ def oauth_google_login():
 def oauth_facebook_login():
     """
     Exchange a Facebook user access token (from the JS SDK) for an
-    MLeads JWT.
+    0brix JWT.
 
     Body: {"access_token": "<fb-access-token>"}
     """
