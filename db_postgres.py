@@ -706,10 +706,10 @@ def migrate_from_sqlite(sqlite_path: str = "data/leads.db", batch_size: int = 50
                     """, (
                         r.get('id'), r.get('username'), r.get('email'),
                         r.get('password_hash'), r.get('full_name'),
-                        r.get('is_active', True), r.get('expires_at'),
-                        r.get('oauth_provider'), r.get('oauth_sub'), r.get('avatar_url'),
-                        r.get('is_paid', False), r.get('paid_since'),
-                        r.get('last_login'), r.get('created_at'), r.get('updated_at'),
+                        bool(r.get('is_active', 1)), r.get('expires_at') or None,
+                        r.get('oauth_provider') or None, r.get('oauth_sub') or None, r.get('avatar_url') or None,
+                        bool(r.get('is_paid', 0)), r.get('paid_since') or None,
+                        r.get('last_login') or None, r.get('created_at'), r.get('updated_at'),
                     ))
                 migrated_tables.append(f"users ({len(rows)} rows)")
             except Exception as e:
@@ -859,7 +859,7 @@ def migrate_from_sqlite(sqlite_path: str = "data/leads.db", batch_size: int = 50
                         r.get('trial_started_at'), r.get('trial_ends_at'), r.get('paid_until'),
                         r.get('stripe_customer_id'), r.get('stripe_subscription_id'),
                         r.get('joined_channel_at'),
-                        r.get('is_active', True), r.get('leads_sent_count', 0),
+                        bool(r.get('is_active', 1)), r.get('leads_sent_count', 0),
                         r.get('last_lead_at'), r.get('created_at'), r.get('updated_at'),
                     ))
                 migrated_tables.append(f"bot_users ({len(rows)} rows)")
