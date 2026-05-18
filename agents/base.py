@@ -135,14 +135,21 @@ class BaseAgent(ABC):
             return False
 
     def _sync_to_postgres(self, leads: list):
-        """Sync new leads to PostgreSQL (when USE_POSTGRES=1)."""
+        """Sync new leads to PostgreSQL."""
         import json as _json
         try:
-            from db_postgres import get_conn, put_conn
+            import psycopg2
         except ImportError:
-            return
+            return  # psycopg2 not available, skip
         
-        conn = get_conn()
+        db_url = os.getenv("DATABASE_URL", "")
+        if not db_url:
+            return  # No PG configured
+        
+        try:
+            conn = psycopg2.connect(db_url)
+        except Exception:
+            return  # Can't connect, skip
         synced = 0
         try:
             with conn.cursor() as cur:
@@ -224,7 +231,7 @@ class BaseAgent(ABC):
             conn.rollback()
             logger.debug(f"PG sync error: {e}")
         finally:
-            put_conn(conn)
+            conn.close()
 
     def send_batch(self, leads: list) -> int:
         """
@@ -323,11 +330,10 @@ class BaseAgent(ABC):
             logger.debug(f"[{self.agent_key}] Huly CRM push error: {e}")
 
         # Paso 3b-4: Sync leads to PostgreSQL
-        if os.getenv("USE_POSTGRES", "").lower() in ("1", "true"):
-            try:
-                self._sync_to_postgres(new_leads)
-            except Exception as e:
-                logger.debug(f"[{self.agent_key}] PG sync error: {e}")
+        try:
+            self._sync_to_postgres(new_leads)
+        except Exception as e:
+            logger.debug(f"[{self.agent_key}] PG sync error: {e}")
 
         # Paso 3b-ii: Detectar GC self-pull ("lead muerto")
         # Debe correr DESPUÉS de la clasificación AI para tener _trade disponible
