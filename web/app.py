@@ -4139,3 +4139,33 @@ def push_lead_to_crm(lead_id):
         return jsonify({"status": "skipped", "reason": "below thresholds or not configured"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CSLB Batch Verification Endpoint
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route('/api/cslb/batch-verify', methods=['POST'])
+@require_auth
+@limiter.limit("2 per minute")
+def trigger_cslb_batch():
+    """Trigger batch CSLB verification of all contractor CSVs."""
+    data = request.get_json(silent=True) or {}
+    limit = min(int(data.get("limit", 20)), 100)
+    push_huly = data.get("push_huly", False)
+    import threading
+    def _batch():
+        try:
+            cmd = [sys.executable, "scripts/cslb_batch_verify.py", "--limit", str(limit), "--delay", "2.5"]
+            if push_huly:
+                cmd.append("--push-huly")
+            import subprocess
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd="/opt/MLeads", timeout=600)
+            logger.info(f"[CSLB Batch] exit={result.returncode}")
+            if result.stderr:
+                logger.warning(f"[CSLB Batch] stderr: {result.stderr[:500]}")
+        except Exception as e:
+            logger.error(f"[CSLB Batch] error: {e}")
+    import sys
+    threading.Thread(target=_batch, daemon=True).start()
+    return jsonify({"status": "started", "limit": limit, "push_huly": push_huly}), 202
