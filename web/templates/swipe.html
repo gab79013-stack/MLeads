@@ -317,6 +317,7 @@
         <div class="counter" id="counter">
             <strong id="swipesCount">0</strong> / <span id="swipesLimit">10</span>
         </div>
+        <a href="/pipeline" style="color:var(--text);text-decoration:none;font-size:20px;padding:0 6px" title="Pipeline">📊</a>
         <button class="icon-btn" id="filterBtn" aria-label="Filtros">
             <div class="fdot" id="filterDot"></div>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -351,7 +352,7 @@
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
     </button>
-    <button class="abtn like" id="btnLike" aria-label="Me interesa">
+        <button class="abtn like" id="btnLike" aria-label="Me interesa">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="1" x2="12" y2="23"/>
             <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
@@ -616,7 +617,7 @@ function getAnonId() {
     return id;
 }
 const getToken = () => localStorage.getItem('access_token') || '';
-const authHdrs = () => { const h = {'Content-Type':'application/json'}; const t = getToken(); if (t) h.Authorization = `Bearer ${t}`; return h; };
+const authHdrs = () => { const h = {'Content-Type':'application/json'}; const t = getToken(); if (t) h.Authorization = `Bearer ${t}`; else { const a = localStorage.getItem('mleads_anon_id'); if (a) h['X-Anon-Id'] = a; } return h; };
 
 // ── Filter state ──────────────────────────────────────────────────────────────
 const F = {
@@ -898,7 +899,7 @@ async function fetchFeed() {
         const _dynScore = _getDynamicMinScore();
         if (_dynScore > 0) url.searchParams.set('min_score', _dynScore);
 
-        url.searchParams.set('min_value', Math.max(50000, F.minVal));
+        if (F.minVal > 0) url.searchParams.set('min_value', F.minVal);
         if (F.maxVal > 0) url.searchParams.set('max_value', F.maxVal);
         if (F.city) {
             url.searchParams.set('city', F.city);
@@ -912,13 +913,20 @@ async function fetchFeed() {
         const res  = await fetch(url, { headers: authHdrs() });
         const data = await res.json();
 
-        if (data.auth_required) { showPaywall(data.auth_mode || 'register'); return; }
+        // No paywall on swipe - registration only needed for estimates
 
+        // Save server-assigned anon_id if we don't have one
+        if (data.anon_id && !localStorage.getItem("mleads_anon_id")) {
+            localStorage.setItem("mleads_anon_id", data.anon_id);
+        }
         S.limit  = data.anon_limit || 10;
         S.swipes = data.swipes_count || 0;
         if (data.is_paid !== undefined) S.isPaid = !!data.is_paid;
         updateCounter();
-        S.queue  = data.leads || [];
+        // Append new leads, dedup by id
+        const existing = new Set(S.queue.map(l => l.id));
+        const newLeads = (data.leads || []).filter(l => !existing.has(l.id));
+        S.queue = S.queue.concat(newLeads);
         renderDeck();
     } catch (e) {
         console.error(e);
@@ -935,7 +943,7 @@ async function postSwipe(leadId, action) {
         const res  = await fetch('/api/swipe/action', { method:'POST', headers:authHdrs(), body:JSON.stringify(body) });
         const data = await res.json();
         if (data.swipes_count !== undefined) { S.swipes = data.swipes_count; updateCounter(); }
-        if (data.auth_required) showPaywall(data.auth_mode || 'register');
+        // No paywall on swipe
     } catch (e) { console.error(e); }
 }
 
@@ -948,10 +956,9 @@ function updateCounter() {
         cnt.innerHTML = '<strong style="color:var(--like)">Pro</strong> ✨';
         return;
     }
-    const limit = S.authed ? 40 : (S.limit || 10);
-    const remaining = Math.max(0, limit - S.swipes);
-    const label = CURRENT_LANG === 'en' ? 'left' : 'restantes';
-    cnt.innerHTML = `<strong id="swipesCount">${remaining}</strong><span id="swipesLimit" style="color:var(--fg2)"> / ${limit} ${label}</span>`;
+    // Show leads liked (pipeline count) — no more limit display
+    const liked = S.swipes || 0;
+    cnt.innerHTML = `<strong style="color:var(--like)">❤️ ${liked}</strong>`;
 }
 
 let _uid = 0;
@@ -1050,6 +1057,12 @@ function buildCard(lead, idx) {
         lead.ai_urgency ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Urgency':'Urgencia'}:</span><span class="det-v" style="color:${urgencyColor};font-weight:700">${esc(lead.ai_urgency)}</span></div>` : '',
         budgetStr ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Est. Budget':'Presupuesto'}:</span><span class="det-v">${budgetStr}</span></div>` : '',
         lead.ai_summary ? `<div class="det-row"><span class="det-k">▸ ${isEN?'AI Pitch':'Resumen AI'}:</span><span class="det-v wrap" style="font-style:italic">${esc(lead.ai_summary)}</span></div>` : '',
+        lead.ai_project_scope && lead.ai_project_scope !== 'PARTIAL' ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Scope':'Alcance'}:</span><span class="det-v" style="font-weight:600;color:${lead.ai_project_scope==='EMERGENCY'?'#ef4444':'inherit'}">${esc(lead.ai_project_scope)}</span></div>` : '',
+        lead.ai_key_pain_point ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Pain Point':'Problema'}:</span><span class="det-v wrap" style="color:#b91c1c">${esc(lead.ai_key_pain_point)}</span></div>` : '',
+        lead.ai_sub_trades && lead.ai_sub_trades.length ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Also needs':'Tambien necesita'}:</span><span class="det-v">${esc(lead.ai_sub_trades.join(', '))}</span></div>` : '',
+        lead.ai_upsell_opportunity ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Upsell':'Oportunidad'}:</span><span class="det-v" style="color:#15803d">${esc(lead.ai_upsell_opportunity)}</span></div>` : '',
+        lead.ai_decision_maker ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Decision maker':'Decisor'}:</span><span class="det-v">${esc(lead.ai_decision_maker)}</span></div>` : '',
+        lead.ai_best_contact_time && lead.ai_best_contact_time !== 'ANY' ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Best time':'Mejor hora'}:</span><span class="det-v">${esc(lead.ai_best_contact_time)}</span></div>` : '',
     ].filter(Boolean).join('') : '';
 
     // ── Contractor section ─────────────────────────────────────────────────────
@@ -1364,7 +1377,7 @@ function commit(card, action) {
     if (action === 'like') _advanceScoreStep();
     setTimeout(() => {
         card.remove(); S.queue.shift(); restack();
-        if (S.queue.length <= 2) fetchFeed();
+        if (S.queue.length <= 3 && !S.loading) fetchFeed();
     }, 260);
 }
 
@@ -2107,6 +2120,29 @@ fetchFeed();
     _pulse(); // baseline
     _pollInterval = setInterval(_pulse, 30000); // poll every 30s
 })();
+
+
+async function saveToCRM(leadId) {
+    try {
+        const res = await fetch('/api/swipe/save-to-crm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHdrs() },
+            body: JSON.stringify({ lead_id: leadId })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            // Open Huly CRM in new tab with lead info
+            const hulyUrl = data.huly_url;
+            window.open(hulyUrl, '_blank');
+            toast('📋 Lead guardado en CRM');
+        } else {
+            toast('Error: ' + (data.error || 'Unknown'));
+        }
+    } catch(e) {
+        toast('Error al guardar en CRM');
+    }
+}
 </script>
+<button id="crm-btn" onclick="saveToCRM(S.queue[0]?.id)" style="display:none;position:fixed;bottom:80px;right:20px;z-index:9999;padding:12px 20px;background:#22c55e;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.2)">📋 Guardar en CRM</button>
 </body>
 </html>

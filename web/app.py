@@ -12,7 +12,7 @@ import os
 import json
 import logging
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, g, send_file
+from flask import Flask, request, jsonify, g, send_file, render_template
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -2366,7 +2366,7 @@ def _handle_web_user_stripe_event(event: dict, web_user_id: str) -> bool:
 
 # Anonymous visitors can view up to this many leads before being asked
 # to log in with Google or Facebook.
-ANON_LEAD_LIMIT = int(os.getenv("SWIPE_ANON_LIMIT", "10"))
+ANON_LEAD_LIMIT = int(os.getenv("SWIPE_ANON_LIMIT", "9999"))
 FREE_USER_LEAD_LIMIT = int(os.getenv("SWIPE_FREE_LIMIT", "40"))
 REQUIRE_CONTACT = os.getenv("SWIPE_REQUIRE_CONTACT", "false").lower() in ("true", "1", "yes")
 PRO_LEAD_LIMIT = int(os.getenv("SWIPE_PRO_LIMIT", "200"))   # $29/mo tier
@@ -2526,6 +2526,35 @@ def _city_coords(city_name: str) -> tuple[float, float] | None:
     """Return (lat, lon) for a city name, or None if unknown."""
     return _CITY_COORDS.get((city_name or "").strip().lower())
 
+def _geo_locate_ip(ip: str) -> tuple[float, float] | None:
+    """Geolocate an IP address using ip-api.com (free, no key, 45 req/min)."""
+    if not ip or ip in ("127.0.0.1", "localhost", "::1") or ip.startswith("10.") or ip.startswith("192.168."):
+        return None
+    try:
+        import urllib.request
+        resp = urllib.request.urlopen(f"http://ip-api.com/json/{ip}?fields=status,lat,lon", timeout=3)
+        data = json.loads(resp.read())
+        if data.get("status") == "success":
+            return (float(data["lat"]), float(data["lon"]))
+    except Exception:
+        pass
+    return None
+
+# Cache IP geolocations to avoid repeated API calls
+_IP_GEO_CACHE: dict[str, tuple[float, float] | None] = {}
+
+def _get_ip_geo(ip: str) -> tuple[float, float] | None:
+    """Get IP geolocation with caching."""
+    if ip in _IP_GEO_CACHE:
+        return _IP_GEO_CACHE[ip]
+    result = _geo_locate_ip(ip)
+    _IP_GEO_CACHE[ip] = result
+    # Evict cache if too large
+    if len(_IP_GEO_CACHE) > 500:
+        _IP_GEO_CACHE.pop(next(iter(_IP_GEO_CACHE)))
+    return result
+
+
 
 # ── Service category keyword mapping ──────────────────────────────────────────
 _SERVICE_CAT_KEYWORDS: dict[str, list[str]] = {
@@ -2544,7 +2573,16 @@ _SERVICE_CAT_KEYWORDS: dict[str, list[str]] = {
     "remodel":     ["remodel", "renovation", "kitchen remodel", "bathroom remodel", "addition", "adu", "accessory dwelling", "tenant improvement", "interior alteration", "room addition"],
 }
 # These map directly to primary_service_type column
-_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "energy", "rodents", "deconstruction", "remodel", "crossdata"}
+_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "energy", "rodents", "deconstruction", "remodel", "crossdata", "plumbing", "hvac", "paint", "flooring_concrete"}
+
+# AI Trade classification map (DeepSeek V3.2)
+_AI_TRADE_MAP = {
+    "ROOFING": "roofing", "ELECTRICAL": "electrical", "DRYWALL": "drywall",
+    "PAINTING": "paint", "LANDSCAPING": "landscaping", "HVAC": "hvac",
+    "PLUMBING": "plumbing", "INSULATION": "insulation", "FRAMING": "framing",
+    "CONCRETE": "concrete", "FLOORING": "flooring", "WINDOWS": "windows",
+    "DEMOLITION": "demolition", "GENERAL": "general", "UNKNOWN": "unknown",
+}
 
 
 @app.route('/api/swipe/feed', methods=['GET'])
@@ -2614,7 +2652,9 @@ def swipe_feed():
     remaining = None
     if not user_id:
         if not anon_id:
-            return jsonify({"error": "anon_id required for anonymous browsing"}), 400
+            # Auto-generate anon_id instead of rejecting
+            import uuid
+            anon_id = f"a_{uuid.uuid4().hex[:18]}"
 
         remaining = max(ANON_LEAD_LIMIT - swipes_count, 0)
         if remaining == 0:
@@ -2684,37 +2724,31 @@ def swipe_feed():
     # is_dead_lead is a pre-computed indexed column set by gc_detector.py via base.py.
     conditions.append("COALESCE(is_dead_lead, 0) = 0")
 
+    # ── AI-priority: show DeepSeek-classified leads FIRST ──────────────────────
+    # Only show unclassified leads when the user has already seen all AI leads.
+    # This ensures the swipe feed starts with rich, AI-enriched leads.
+    ai_only = request.args.get("ai_only", "1")
+    if ai_only == "1":
+        conditions.append("json_extract(lead_data, '$._classifier_source') = 'qwen'")
+
     # City filter: without radius → simple LIKE; with radius → post-process
     if city_filter and not do_radius:
         conditions.append("LOWER(city) LIKE LOWER(?)")
         params.append(f"%{city_filter}%")
 
     # ── Service category filter ────────────────────────────────────────────────
-    # Subcontractor types are matched against specific JSON fields only:
-    #   $.description  — permit work description
-    #   $.permit_type  — permit type name
-    #   $._trade       — Qwen AI trade classification
-    # This avoids false positives from searching the entire JSON blob
-    # (e.g. "floor" matching floor drain plumbing leads, "tile" matching
-    # tile-roof leads when user filters for flooring, etc.)
+    # AI _trade (PRIMARY) + primary_service_type (SECONDARY)
     if selected_cats:
-        cat_parts: list[str] = []
+        cat_or_parts = []
         for cat in selected_cats:
-            if cat in _SERVICE_CAT_KEYWORDS:
-                kws = _SERVICE_CAT_KEYWORDS[cat]
-                field_parts = []
-                for field in ("$.description", "$.permit_type", "$._trade"):
-                    fld_sql = " OR ".join(
-                        [f"LOWER(COALESCE(json_extract(lead_data, '{field}'), '')) LIKE ?" for _ in kws]
-                    )
-                    field_parts.append(f"({fld_sql})")
-                    params.extend(f"%{k}%" for k in kws)
-                cat_parts.append("(" + " OR ".join(field_parts) + ")")
-            elif cat in _SERVICE_TYPE_CATS:
-                cat_parts.append("primary_service_type = ?")
-                params.append(cat)
-        if cat_parts:
-            conditions.append("(" + " OR ".join(cat_parts) + ")")
+            ai_trades = [t for t, c in _AI_TRADE_MAP.items() if c == cat]
+            if ai_trades:
+                ph = ",".join("?" * len(ai_trades))
+                cat_or_parts.append(f"UPPER(json_extract(lead_data, '$._trade')) IN ({ph})")
+                params.extend(ai_trades)
+            cat_or_parts.append("primary_service_type = ?")
+            params.append(cat)
+        conditions.append("(" + " OR ".join(cat_or_parts) + ")")
 
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
@@ -2914,9 +2948,14 @@ def swipe_feed():
         if len(leads) >= limit:
             break
 
-    # Smart sort: leads with imminent inspections get priority over raw score
+    # Smart sort: location-based priority + score + inspection urgency
     from datetime import date as _date
     _today = _date.today()
+
+    # Detect user location from IP
+    _user_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    _user_geo = _get_ip_geo(_user_ip) if _user_ip else None
+
     def _sort_key(ld):
         insp = ld.get("inspection_date", "")
         urgency = 0
@@ -2928,7 +2967,19 @@ def swipe_feed():
                 elif days <= 7:      urgency = 100
             except Exception:
                 pass
-        return -(int(ld.get("score", 0)) + urgency)
+        # Distance bonus: LOCAL leads always shown first
+        dist_bonus = 0
+        if _user_geo:
+            lead_city = ld.get("city", "")
+            lead_coords = _city_coords(lead_city)
+            if lead_coords:
+                dist = _haversine_miles(_user_geo[0], _user_geo[1], lead_coords[0], lead_coords[1])
+                if dist <= 25:    dist_bonus = 1000  # Same city - ALWAYS first
+                elif dist <= 50:  dist_bonus = 700
+                elif dist <= 100: dist_bonus = 400
+                elif dist <= 250: dist_bonus = 200
+                elif dist <= 500: dist_bonus = 100
+        return -(int(ld.get("score", 0)) + urgency + dist_bonus)
     leads.sort(key=_sort_key)
 
     response = {
@@ -2938,6 +2989,7 @@ def swipe_feed():
         "free_limit":    FREE_USER_LEAD_LIMIT,
         "swipes_count":  swipes_count,
         "is_paid":       locals().get('is_paid', False) if user_id else None,
+        "anon_id":       anon_id if not user_id else None,
     }
     if remaining is not None:
         response["remaining"] = remaining
@@ -2966,17 +3018,8 @@ def swipe_action():
     if not user_id and not anon_id:
         return jsonify({"error": "anon_id or auth required"}), 400
 
-    if not user_id:
-        current = _count_swipes(None, anon_id)
-        if current >= ANON_LEAD_LIMIT:
-            return jsonify({
-                "ok": False,
-                "auth_required": True,
-                "auth_mode":    "register",
-                "anon_limit": ANON_LEAD_LIMIT,
-                "swipes_count": current,
-                "remaining": 0,
-            }), 200
+    # Anonymous users can swipe freely - registration only needed to send estimates
+    # (removed auth_required gate for anonymous users)
     else:
         # Check free-tier quota for authenticated non-paid users
         _conn = get_db_connection()
@@ -2985,16 +3028,8 @@ def swipe_action():
         _row = _c.fetchone()
         _conn.close()
         _is_paid = bool(_row and _row[0])
-        _current = _count_swipes(user_id, None)
-        if not _is_paid and _current >= FREE_USER_LEAD_LIMIT:
-            return jsonify({
-                "ok": False,
-                "auth_required": True,
-                "auth_mode":    "upgrade",
-                "free_limit":   FREE_USER_LEAD_LIMIT,
-                "swipes_count": _current,
-                "remaining":    0,
-            }), 200
+        # Free users can swipe freely - payment only needed for premium features
+        # (removed auth_required gate for free users)
 
     conn = get_db_connection()
     c = conn.cursor()
@@ -3012,6 +3047,17 @@ def swipe_action():
                 """, (user_id, lead_id))
             except Exception as log_err:
                 logger.debug(f"lead_contacts log failed: {log_err}")
+        # Auto-add to pipeline on like
+        if action == 'like':
+            _uid = user_id or anon_id
+            if _uid:
+                try:
+                    c.execute(
+                        "INSERT OR IGNORE INTO lead_pipeline (lead_id, user_id, status) VALUES (?, ?, 'Nuevo')",
+                        (lead_id, _uid)
+                    )
+                except Exception as pl_err:
+                    logger.debug(f"pipeline insert failed: {pl_err}")
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -3393,6 +3439,408 @@ def swipe_feedback():
         return jsonify({"error": "failed to save feedback"}), 500
     conn.close()
     return jsonify({"ok": True}), 200
+
+
+
+@app.route('/api/swipe/save-to-crm', methods=['POST'])
+@limiter.limit("30 per minute")
+def save_to_crm():
+    """Save a lead to Huly CRM for follow-up tracking."""
+    data = request.get_json() or {}
+    lead_id = data.get("lead_id") or data.get("address_key")
+    
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    
+    user_id, anon_id = _resolve_swipe_identity()
+    
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT lead_data, address, city, primary_service_type FROM consolidated_leads WHERE address_key = ?", (lead_id,))
+    row = c.fetchone()
+    conn.close()
+    
+    if not row:
+        return jsonify({"error": "Lead not found"}), 404
+    
+    lead_data = json.loads(row["lead_data"] or "{}")
+    lead = {
+        "id": lead_id,
+        "address": row["address"],
+        "city": row["city"],
+        "contractor": lead_data.get("contractor", ""),
+        "contact_phone": lead_data.get("contact_phone", ""),
+        "value_float": lead_data.get("value_float", 0),
+        "description": lead_data.get("description", ""),
+        "ai_trade": lead_data.get("_trade", ""),
+        "ai_urgency": lead_data.get("_urgency", "MEDIUM"),
+        "ai_summary": lead_data.get("_ai_summary", ""),
+        "ai_key_pain_point": lead_data.get("_key_pain_point", ""),
+        "ai_upsell_opportunity": lead_data.get("_upsell_opportunity", ""),
+        "ai_best_contact_time": lead_data.get("_best_contact_time", ""),
+        "ai_project_scope": lead_data.get("_project_scope", ""),
+        "ai_decision_maker": lead_data.get("_decision_maker", ""),
+        "is_gc_self_pull": lead_data.get("_is_gc_self_pull", False),
+        "original_trade": lead_data.get("_original_trade", ""),
+        "score": lead_data.get("_scoring", {}).get("score", 0) if isinstance(lead_data.get("_scoring"), dict) else 0,
+    }
+    
+    # Format for Huly CRM
+    trade = lead.get("ai_trade") or "GENERAL"
+    score = lead.get("score", 0)
+    urgency = lead.get("ai_urgency", "MEDIUM")
+    address = lead.get("address", "")
+    city = lead.get("city", "")
+    contractor = lead.get("contractor", "")
+    phone = lead.get("contact_phone", "")
+    value = lead.get("value_float", 0)
+    desc = (lead.get("description") or "")[:200]
+    ai_summary = lead.get("ai_summary", "")
+    pain = lead.get("ai_key_pain_point", "")
+    upsell = lead.get("ai_upsell_opportunity", "")
+    best_time = lead.get("ai_best_contact_time", "")
+    
+    prefix = "🔥" if score >= 90 else "🌡️" if score >= 70 else ""
+    project_name = f"{prefix} [{trade}] {address[:50]}"
+    
+    project_desc = f"Source: MLeads Swipe\nScore: {score}/100 | {urgency}"
+    if contractor: project_desc += f"\nGC: {contractor}"
+    if phone: project_desc += f"\nPhone: {phone}"
+    if value: project_desc += f"\nValue: ${value:,.0f}"
+    if desc: project_desc += f"\n{desc}"
+    if ai_summary: project_desc += f"\nAI: {ai_summary}"
+    if pain: project_desc += f"\nPain: {pain}"
+    if upsell: project_desc += f"\nUpsell: {upsell}"
+    
+    # Return the formatted data for the frontend to open in Huly
+    return jsonify({
+        "ok": True,
+        "project_name": project_name,
+        "project_description": project_desc,
+        "huly_url": "http://45.32.89.38:8080",
+        "lead": lead,
+    })
+
+# ── Pipeline API ───────────────────────────────────────────────────────────────
+
+PIPELINE_STATUSES = ["Nuevo", "Contactado", "Propuesta", "Negociación", "Ganado", "Perdido"]
+
+@app.route('/api/pipeline', methods=['GET'])
+def api_pipeline():
+    """Get user's pipeline leads grouped by status."""
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = user_id or anon_id
+    if not uid:
+        return jsonify({s: [] for s in PIPELINE_STATUSES})
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT p.lead_id, p.status, p.notes, p.created_at, p.updated_at,
+               l.address, l.city, l.primary_service_type, l.lead_data
+        FROM lead_pipeline p
+        LEFT JOIN consolidated_leads l ON l.address_key = p.lead_id
+        WHERE p.user_id = ?
+        ORDER BY p.updated_at DESC
+    """, (uid,))
+
+    columns = {s: [] for s in PIPELINE_STATUSES}
+    for row in c.fetchall():
+        ld = json.loads(row["lead_data"] or "{}")
+        lead = {
+            "id": row["lead_id"],
+            "address": row["address"] or "",
+            "city": row["city"] or "",
+            
+            "status": row["status"],
+            "notes": row["notes"] or "",
+            "created_at": row["created_at"] or "",
+            "updated_at": row["updated_at"] or "",
+            "service_type": row["primary_service_type"] or "",
+            "trade": ld.get("_trade", ""),
+            "contractor": ld.get("contractor", ""),
+            "phone": ld.get("contact_phone", ""),
+            "value": ld.get("value_float", 0),
+            "score": ld.get("_scoring", {}).get("score", 0) if isinstance(ld.get("_scoring"), dict) else 0,
+            "urgency": ld.get("_urgency", ""),
+            "pain_point": ld.get("_key_pain_point", ""),
+            "upsell": ld.get("_upsell_opportunity", ""),
+            "best_time": ld.get("_best_contact_time", ""),
+            "project_scope": ld.get("_project_scope", ""),
+            "decision_maker": ld.get("_decision_maker", ""),
+            "ai_summary": ld.get("_ai_summary", ""),
+        }
+        status = row["status"] if row["status"] in columns else "Nuevo"
+        columns[status].append(lead)
+
+    conn.close()
+    return jsonify(columns)
+
+
+@app.route('/api/pipeline/move', methods=['POST'])
+@limiter.limit("60 per minute")
+def api_pipeline_move():
+    """Move a lead to a different pipeline status."""
+    data = request.get_json() or {}
+    lead_id = data.get("lead_id")
+    new_status = data.get("status")
+
+    if not lead_id or not new_status:
+        return jsonify({"error": "lead_id and status required"}), 400
+    if new_status not in PIPELINE_STATUSES:
+        return jsonify({"error": f"Invalid status. Must be one of: {', '.join(PIPELINE_STATUSES)}"}), 400
+
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = user_id or anon_id
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE lead_pipeline SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE lead_id = ? AND user_id = ?",
+        (new_status, lead_id, uid)
+    )
+    conn.commit()
+    ok = c.rowcount > 0
+    conn.close()
+    return jsonify({"ok": ok})
+
+
+@app.route('/api/pipeline/notes', methods=['POST'])
+@limiter.limit("30 per minute")
+def api_pipeline_notes():
+    """Update notes on a pipeline lead."""
+    data = request.get_json() or {}
+    lead_id = data.get("lead_id")
+    notes = data.get("notes", "")
+
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = user_id or anon_id
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE lead_pipeline SET notes = ?, updated_at = CURRENT_TIMESTAMP WHERE lead_id = ? AND user_id = ?",
+        (notes, lead_id, uid)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route('/api/pipeline/remove', methods=['POST'])
+@limiter.limit("30 per minute")
+def api_pipeline_remove():
+    """Remove a lead from pipeline."""
+    data = request.get_json() or {}
+    lead_id = data.get("lead_id")
+
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = user_id or anon_id
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM lead_pipeline WHERE lead_id = ? AND user_id = ?", (lead_id, uid))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+
+
+# ── Pipeline v2 API — Contact Log, Follow-ups, Estimates ──────────────────────
+
+@app.route('/api/pipeline/contact', methods=['POST'])
+@limiter.limit("30 per minute")
+def api_pipeline_contact():
+    """Log a contact attempt (call, sms, email, in-person)."""
+    data = request.get_json() or {}
+    lead_id = data.get("lead_id")
+    contact_type = data.get("contact_type", "call")
+    outcome = data.get("outcome", "")
+    notes = data.get("notes", "")
+    if not lead_id or contact_type not in ("call", "sms", "email", "visit", "other"):
+        return jsonify({"error": "lead_id and valid contact_type required"}), 400
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = user_id or anon_id
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("INSERT INTO lead_contacts_log (lead_id, user_id, contact_type, outcome, notes) VALUES (?, ?, ?, ?, ?)",
+              (lead_id, uid, contact_type, outcome, notes))
+    # Auto-advance to "Contactado" if still "Nuevo"
+    c.execute("UPDATE lead_pipeline SET status='Contactado', updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=? AND status='Nuevo'",
+              (lead_id, uid))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route('/api/pipeline/followup', methods=['POST'])
+@limiter.limit("30 per minute")
+def api_pipeline_followup():
+    """Schedule a follow-up reminder."""
+    data = request.get_json() or {}
+    lead_id = data.get("lead_id")
+    due_at = data.get("due_at")  # ISO timestamp
+    followup_type = data.get("followup_type", "call")
+    notes = data.get("notes", "")
+    if not lead_id or not due_at:
+        return jsonify({"error": "lead_id and due_at required"}), 400
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = user_id or anon_id
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("INSERT INTO lead_followups (lead_id, user_id, due_at, followup_type, notes) VALUES (?, ?, ?, ?, ?)",
+              (lead_id, uid, due_at, followup_type, notes))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route('/api/pipeline/followups', methods=['GET'])
+def api_pipeline_followups():
+    """Get pending follow-ups for user."""
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = user_id or anon_id
+    if not uid:
+        return jsonify([])
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT f.id, f.lead_id, f.due_at, f.followup_type, f.notes, f.completed,
+               l.address, l.city
+        FROM lead_followups f
+        LEFT JOIN consolidated_leads l ON l.address_key = f.lead_id
+        WHERE f.user_id = ? AND f.completed = 0
+        ORDER BY f.due_at ASC
+    """, (uid,))
+    results = []
+    for row in c.fetchall():
+        results.append({
+            "id": row[0], "lead_id": row[1], "due_at": row[2],
+            "followup_type": row[3], "notes": row[4], "completed": row[5],
+            "address": row[6], "city": row[7],
+        })
+    conn.close()
+    return jsonify(results)
+
+
+@app.route('/api/pipeline/followup/<int:fid>/complete', methods=['POST'])
+@limiter.limit("30 per minute")
+def api_pipeline_followup_complete(fid):
+    """Mark a follow-up as completed."""
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = user_id or anon_id
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("UPDATE lead_followups SET completed=1, completed_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?",
+              (fid, uid))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route('/api/pipeline/estimate', methods=['POST'])
+@limiter.limit("15 per minute")
+def api_pipeline_estimate():
+    """Create an estimate for a lead."""
+    data = request.get_json() or {}
+    lead_id = data.get("lead_id")
+    amount = data.get("amount", 0)
+    description = data.get("description", "")
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = user_id or anon_id
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    # Registration required to send estimates
+    if not user_id:
+        return jsonify({"error": "registration_required", "message": "Regístrate para enviar estimados"}), 401
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("INSERT INTO lead_estimates (lead_id, user_id, amount, description) VALUES (?, ?, ?, ?)",
+              (lead_id, uid, float(amount), description))
+    # Auto-advance to "Propuesta"
+    c.execute("UPDATE lead_pipeline SET status='Propuesta', updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=? AND status IN ('Nuevo','Contactado')",
+              (lead_id, uid))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "amount": float(amount)})
+
+
+@app.route('/api/pipeline/close', methods=['POST'])
+@limiter.limit("30 per minute")
+def api_pipeline_close():
+    """Close a lead as won or lost with a reason."""
+    data = request.get_json() or {}
+    lead_id = data.get("lead_id")
+    won = data.get("won", False)
+    reason = data.get("reason", "")
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = user_id or anon_id
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    status = "Ganado" if won else "Perdido"
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("UPDATE lead_pipeline SET status=?, close_reason=?, closed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=?",
+              (status, reason, lead_id, uid))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "status": status})
+
+
+@app.route('/api/pipeline/activity/<lead_id>', methods=['GET'])
+def api_pipeline_activity(lead_id):
+    """Get full activity timeline for a lead."""
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = user_id or anon_id
+    if not uid:
+        return jsonify([])
+    conn = get_db_connection()
+    c = conn.cursor()
+    timeline = []
+    # Contact logs
+    c.execute("SELECT contact_type, outcome, notes, created_at FROM lead_contacts_log WHERE lead_id=? AND user_id=? ORDER BY created_at DESC", (lead_id, uid))
+    for row in c.fetchall():
+        timeline.append({"type": "contact", "contact_type": row[0], "outcome": row[1], "notes": row[2], "date": row[3]})
+    # Follow-ups
+    c.execute("SELECT followup_type, notes, due_at, completed FROM lead_followups WHERE lead_id=? AND user_id=? ORDER BY due_at DESC", (lead_id, uid))
+    for row in c.fetchall():
+        timeline.append({"type": "followup", "followup_type": row[0], "notes": row[1], "due_at": row[2], "completed": row[3]})
+    # Estimates
+    c.execute("SELECT amount, description, status, created_at FROM lead_estimates WHERE lead_id=? AND user_id=? ORDER BY created_at DESC", (lead_id, uid))
+    for row in c.fetchall():
+        timeline.append({"type": "estimate", "amount": row[0], "description": row[1], "estimate_status": row[2], "date": row[3]})
+    # Sort by date
+    timeline.sort(key=lambda x: x.get("date") or x.get("due_at") or "", reverse=True)
+    conn.close()
+    return jsonify(timeline)
+
+
+@app.route('/pipeline')
+def pipeline_page():
+    """Pipeline Kanban page."""
+    return render_template("pipeline.html")
+
 
 
 @app.route('/api/swipe/my-contacts', methods=['GET'])

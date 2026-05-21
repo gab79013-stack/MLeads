@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>0brix Pipeline</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0f172a;--sf:#1e293b;--sf2:#334155;--tx:#f1f5f9;--tx2:#94a3b8;--ac:#3b82f6;--gn:#22c55e;--yl:#eab308;--or:#f97316;--rd:#ef4444;--pp:#a855f7;--bd:#475569}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:auto}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;background:var(--sf);border-bottom:1px solid var(--bd)}
+.topbar h1{font-size:18px;font-weight:700}.topbar h1 span{color:var(--ac)}
+.topbar nav a{color:var(--tx2);text-decoration:none;font-size:13px;margin-left:14px}
+.stats{display:flex;gap:14px;padding:10px 20px;background:var(--sf);border-bottom:1px solid var(--bd);flex-wrap:wrap}
+.stat{font-size:12px;color:var(--tx2)}.stat .n{font-weight:700;font-size:15px}
+.fu-bar{padding:8px 20px;background:#1a1a2e;border-bottom:1px solid var(--bd);display:none}
+.fu-bar.show{display:block}.fu-bar h3{font-size:12px;color:var(--or);margin-bottom:4px}
+.fu-i{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:11px;color:var(--tx2)}
+.fu-i .a{color:var(--tx);font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fu-i button{background:var(--sf2);border:1px solid var(--bd);color:var(--gn);font-size:10px;padding:1px 5px;border-radius:3px;cursor:pointer}
+.board{display:flex;gap:10px;padding:12px;min-height:calc(100vh - 120px);overflow-x:auto;align-items:flex-start}
+.col{min-width:240px;max-width:280px;flex:1;background:var(--sf);border-radius:10px;display:flex;flex-direction:column;max-height:calc(100vh - 140px)}
+.col-h{padding:10px 12px;font-weight:700;font-size:12px;border-bottom:2px solid var(--bd);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--sf);border-radius:10px 10px 0 0;z-index:1}
+.col-h .bg{background:var(--sf2);color:var(--tx2);font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600}
+.col-h .vl{font-size:10px;color:var(--yl);font-weight:400}
+.col-b{padding:5px;overflow-y:auto;flex:1;min-height:30px}
+.col-b.dov{background:rgba(59,130,246,.06)}
+.col[data-s="Nuevo"] .col-h{border-bottom-color:var(--ac)}
+.col[data-s="Contactado"] .col-h{border-bottom-color:var(--yl)}
+.col[data-s="Propuesta"] .col-h{border-bottom-color:var(--or)}
+.col[data-s="Negociacion"] .col-h{border-bottom-color:var(--pp)}
+.col[data-s="Ganado"] .col-h{border-bottom-color:var(--gn)}
+.col[data-s="Perdido"] .col-h{border-bottom-color:var(--rd)}
+.cd{background:var(--sf2);border-radius:8px;padding:9px;margin-bottom:5px;cursor:grab;transition:transform .12s;border:1px solid transparent}
+.cd:hover{transform:translateY(-1px);border-color:var(--bd)}
+.cd.drg{opacity:.4}
+.cd .ad{font-weight:600;font-size:11px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cd .mt{display:flex;gap:4px;align-items:center;margin-bottom:3px;flex-wrap:wrap}
+.cd .tr{font-size:9px;background:rgba(59,130,246,.2);color:#93c5fd;padding:1px 4px;border-radius:3px;font-weight:600}
+.cd .sc{font-size:9px;font-weight:700}.cd .sc.hi{color:var(--gn)}.cd .sc.md{color:var(--yl)}.cd .sc.lo{color:var(--tx2)}
+.cd .ug{font-size:8px;font-weight:600;padding:0 3px;border-radius:2px}
+.cd .ug.HIGH{background:rgba(239,68,68,.2);color:#fca5a5}.cd .ug.MEDIUM{background:rgba(234,179,8,.2);color:#fde047}.cd .ug.LOW{background:rgba(34,197,94,.2);color:#86efac}
+.cd .inf{font-size:10px;color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px}
+.cd .inf a{color:var(--gn);text-decoration:none}
+.cd .ax{display:flex;gap:2px;margin-top:5px;padding-top:4px;border-top:1px solid rgba(71,85,105,.4);flex-wrap:wrap}
+.cd .ax button{background:none;border:1px solid var(--bd);color:var(--tx2);font-size:9px;padding:1px 4px;border-radius:3px;cursor:pointer;white-space:nowrap}
+.cd .ax button:hover{background:var(--sf);color:var(--tx)}
+.cd .ax button.cl{color:var(--gn);border-color:rgba(34,197,94,.3)}
+.cd .ax button.es{color:var(--ac);border-color:rgba(59,130,246,.3)}
+.cd .ax button.dl{color:var(--rd);border-color:rgba(239,68,68,.3)}
+.empty{text-align:center;padding:14px;color:var(--tx2);font-size:11px;opacity:.5}
+.mb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}
+.mb.show{display:flex}
+.ml{background:var(--sf);border-radius:12px;padding:18px;max-width:420px;width:92%;max-height:85vh;overflow-y:auto}
+.ml h2{font-size:15px;margin-bottom:8px}
+.ml label{display:block;font-size:11px;color:var(--tx2);margin:8px 0 2px}
+.ml input,.ml textarea,.ml select{width:100%;background:var(--sf2);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:6px 9px;font-size:12px}
+.ml textarea{min-height:50px;resize:vertical}
+.ml .bs{display:flex;gap:5px;margin-top:12px;justify-content:flex-end}
+.ml .bs button{padding:6px 12px;border-radius:6px;border:none;cursor:pointer;font-weight:600;font-size:12px}
+.bp{background:var(--ac);color:#fff}.bc{background:var(--sf2);color:var(--tx2)}.bg{background:var(--gn);color:#fff}.br{background:var(--rd);color:#fff}
+.ot{display:flex;gap:3px;flex-wrap:wrap;margin-top:3px}
+.ot button{background:var(--sf2);border:1px solid var(--bd);color:var(--tx2);font-size:10px;padding:1px 6px;border-radius:10px;cursor:pointer}
+.ot button:hover,.ot button.sl{background:var(--ac);color:#fff;border-color:var(--ac)}
+.tl{margin-top:10px}.tl .ti{display:flex;gap:6px;padding:4px 0;border-bottom:1px solid rgba(71,85,105,.3);font-size:11px}
+.tl .ti .ic{font-size:12px;flex-shrink:0}
+@media(max-width:768px){.board{padding:6px;gap:6px}.col{min-width:220px}}
+</style></head><body>
+<div class="topbar"><h1>&#128202; <span>Pipeline</span> 0brix</h1><nav><a href="/swipe">&#128293; Swipe</a></nav></div>
+<div class="stats" id="stats"></div>
+<div class="fu-bar" id="fuBar"></div>
+<div class="board" id="board"></div>
+<div class="mb" id="cModal"><div class="ml"><h2>&#128222; Registrar Contacto</h2><div id="cmL" style="font-size:11px;color:var(--tx2);margin-bottom:4px"></div><label>Tipo</label><select id="cmT"><option value="call">&#128222; Llamada</option><option value="sms">&#128172; SMS</option><option value="email">&#128231; Email</option><option value="visit">&#127968; Visita</option></select><label>Resultado</label><div class="ot" id="cmO"><button onclick="sO(this,'contesto')">&#9989; Contesto</button><button onclick="sO(this,'buzon')">&#128233; Buzon</button><button onclick="sO(this,'callback')">&#128260; Callback</button><button onclick="sO(this,'interesado')">&#128077; Interesado</button><button onclick="sO(this,'rechazo')">&#10060; Rechazo</button></div><input type="hidden" id="cmV"><label>Notas</label><textarea id="cmN" placeholder="Que se dijo?"></textarea><div class="bs"><button class="bc" onclick="cM('cModal')">Cancelar</button><button class="bp" onclick="sC()">Guardar</button></div></div></div>
+<div class="mb" id="fModal"><div class="ml"><h2>&9200; Programar Seguimiento</h2><label>Cuando?</label><input type="datetime-local" id="fD"><label>Tipo</label><select id="fT"><option value="call">&#128222; Llamar</option><option value="sms">&#128172; SMS</option><option value="email">&#128231; Email</option></select><label>Notas</label><textarea id="fN"></textarea><div class="bs"><button class="bc" onclick="cM('fModal')">Cancelar</button><button class="bp" onclick="sF()">Programar</button></div></div></div>
+<div class="mb" id="eModal"><div class="ml"><h2>&128176; Crear Estimado</h2><label>Monto ($)</label><input type="number" id="eA" placeholder="15000"><label>Descripcion</label><textarea id="eD" placeholder="Detalle del trabajo..."></textarea><div class="bs"><button class="bc" onclick="cM('eModal')">Cancelar</button><button class="bg" onclick="sE()">Enviar Estimado</button></div></div></div>
+<div class="mb" id="dModal"><div class="ml"><h2>&10060; Cerrar Lead</h2><div class="ot" id="dO" style="margin-top:6px"><button onclick="sD(this,'Ya tiene contratista')">Ya tiene contratista</button><button onclick="sD(this,'Fuera de presupuesto')">Fuera de presupuesto</button><button onclick="sD(this,'No contesta')">No contesta</button><button onclick="sD(this,'Proyecto cancelado')">Proyecto cancelado</button></div><input type="hidden" id="dV"><div class="bs"><button class="bc" onclick="cM('dModal')">Cancelar</button><button class="br" onclick="sCl()">Perdido</button></div></div></div>
+<div class="mb" id="iModal"><div class="ml" style="max-width:480px"><h2 id="iT"></h2><div id="iB"></div><div id="iTl" class="tl"></div><div class="bs"><button class="bc" onclick="cM('iModal')">Cerrar</button></div></div></div>
+<script>
+const ST=["Nuevo","Contactado","Propuesta","Negociacion","Ganado","Perdido"];
+const SI={Nuevo:"\u{1F535}",Contactado:"\u{1F7E1}",Propuesta:"\u{1F7E0}",Negociacion:"\u{1F7E3}",Ganado:"\u2705",Perdido:"\u274C"};
+let P={},CL=null,DI=null,DS=null;
+function gA(){let i=localStorage.getItem("mleads_anon_id");if(!i){i="a_"+Math.random().toString(36).slice(2);localStorage.setItem("mleads_anon_id",i)}return i}
+function aH(){const h={"Content-Type":"application/json"};const t=localStorage.getItem("mleads_token");if(t)h["Authorization"]="Bearer "+t;else{const a=localStorage.getItem("mleads_anon_id");if(a)h["X-Anon-Id"]=a}return h}
+async function lP(){try{const r=await fetch("/api/pipeline?anon_id="+gA(),{headers:aH()});P=await r.json();rB();rS()}catch(e){console.error(e)}}
+async function lF(){try{const r=await fetch("/api/pipeline/followups?anon_id="+gA(),{headers:aH()});const f=await r.json();const b=document.getElementById("fuBar");if(!f.length){b.classList.remove("show");return}b.classList.add("show");const n=new Date();let h='<h3>\u23F0 Seguimientos pendientes</h3>';for(const i of f.slice(0,5)){const od=new Date(i.due_at)<n;h+=`<div class="fu-i"><span style="color:${od?"var(--or)":"var(--tx2)"}">${od?"\u26A0 Vencido":"\uD83D\uDCC5"}</span><span class="a">${i.address||i.lead_id}</span><span>${i.followup_type}</span><button onclick="cF(${i.id})">\u2713</button></div>`}b.innerHTML=h}catch(e){console.error(e)}}
+function rB(){const b=document.getElementById("board");b.innerHTML="";ST.forEach(s=>{const ls=P[s]||[];const tv=ls.reduce((a,l)=>a+(l.value||0),0);const c=document.createElement("div");c.className="col";c.dataset.s=s;c.innerHTML=`<div class="col-h"><span>${SI[s]||""} ${s}</span><span><span class="bg">${ls.length}</span>${tv>0?` <span class="vl">$${(tv/1e3).toFixed(0)}k</span>`:""}</span></div><div class="col-b" data-s="${s}" ondragover="dOv(event)" ondragleave="dOl(event)" ondrop="dOp(event,'${s}')">${ls.length?ls.map(rC).join(""):'<div class="empty">Sin leads</div>'}</div>`;b.appendChild(c)})}
+function rC(l){const s=l.score>=80?"hi":l.score>=50?"md":"lo";const e=l.score>=80?"\uD83D\uDD25":l.score>=50?"\uD83C\uDF21":"";const hp=l.phone&&l.phone.trim();return `<div class="cd" draggable="true" data-lid="${l.id}" data-ls="${l.status}" ondragstart="dS(event,'${l.id}','${l.status}')" ondragend="dE(event)"><div class="ad">${l.address||l.id}</div><div class="mt">${l.trade?`<span class="tr">${l.trade}</span>`:""}${l.score?`<span class="sc ${s}">${e} ${l.score}</span>`:""}${l.urgency?`<span class="ug ${l.urgency}">${l.urgency}</span>`:""}${l.value?`<span style="font-size:9px;color:var(--yl)">$${(l.value/1e3).toFixed(0)}k</span>`:""}</div>${l.contractor?`<div class="inf">\uD83C\uDFD7 ${l.contractor}</div>`:""}${hp?`<div class="inf">\uD83D\uDCDE <a href="tel:${l.phone}">${l.phone}</a></div>`:""}${l.pain_point?`<div class="inf" style="color:var(--or)">\uD83D\uDCA1 ${l.pain_point}</div>`:""}${l.upsell?`<div class="inf" style="color:var(--gn)">\uD83D\uDCB0 ${l.upsell}</div>`:""}${l.best_time&&l.best_time!=="ANY"?`<div class="inf">\uD83D\uDD50 ${l.best_time}</div>`:""}${l.decision_maker?`<div class="inf">\uD83D\uDC64 ${l.decision_maker}</div>`:""}<div class="ax">${hp?`<button class="cl" onclick="event.stopPropagation();location.href='tel:${l.phone}'">\uD83D\uDCDE</button>`:""}<button onclick="event.stopPropagation();oC('${l.id}')">\uD83D\uDCDD</button><button onclick="event.stopPropagation();oF('${l.id}')">\u23F0</button><button class="es" onclick="event.stopPropagation();oE('${l.id}')">\uD83D\uDCB0</button><button onclick="event.stopPropagation();oI('${l.id}')">\uD83D\uDCCB</button>${l.status!=="Ganado"&&l.status!=="Perdido"?`<button class="dl" onclick="event.stopPropagation();oCl('${l.id}')">\u2715</button>`:""}</div></div>`}
+function rS(){const t=ST.reduce((a,s)=>a+(P[s]||[]).length,0);const w=(P["Ganado"]||[]).length;const lo=(P["Perdido"]||[]).length;const tv=ST.reduce((a,s)=>a+(P[s]||[]).reduce((b,l)=>b+(l.value||0),0),0);const wv=(P["Ganado"]||[]).reduce((a,l)=>a+(l.value||0),0);const cv=t>0?((w/(t-lo))*100).toFixed(0):0;document.getElementById("stats").innerHTML=`<div class="stat">Pipeline <span class="n" style="color:var(--ac)">${t}</span></div><div class="stat">Ganados <span class="n" style="color:var(--gn)">${w}</span></div><div class="stat">Conversion <span class="n" style="color:var(--yl)">${cv}%</span></div><div class="stat">Valor <span class="n" style="color:var(--yl)">$${(tv/1e3).toFixed(0)}k</span></div><div class="stat">Ganado <span class="n" style="color:var(--gn)">$${(wv/1e3).toFixed(0)}k</span></div>`}
+function dS(e,id,from){DI=id;DS=from;e.target.classList.add("drg");e.dataTransfer.effectAllowed="move"}
+function dE(e){e.target.classList.remove("drg")}
+function dOv(e){e.preventDefault();e.currentTarget.classList.add("dov")}
+function dOl(e){e.currentTarget.classList.remove("dov")}
+async function dOp(e,ns){e.preventDefault();e.currentTarget.classList.remove("dov");if(!DI||DS===ns)return;await fetch("/api/pipeline/move",{method:"POST",headers:aH(),body:JSON.stringify({lead_id:DI,status:ns})});const ls=P[DS]||[];const i=ls.findIndex(l=>l.id===DI);if(i>=0){const[l]=ls.splice(i,1);l.status=ns;(P[ns]=P[ns]||[]).unshift(l);rB();rS()}DI=null;DS=null}
+function gL(id){const a=ST.flatMap(s=>P[s]||[]);const l=a.find(x=>x.id===id);return l?`${l.address||id} - ${l.contractor||"Sin GC"}`:id}
+function oC(id){CL=id;document.getElementById("cmV").value="";document.querySelectorAll("#cmO button").forEach(b=>b.classList.remove("sl"));document.getElementById("cmN").value="";document.getElementById("cmL").textContent=gL(id);document.getElementById("cModal").classList.add("show")}
+function sO(b,v){document.querySelectorAll("#cmO button").forEach(x=>x.classList.remove("sl"));b.classList.add("sl");document.getElementById("cmV").value=v}
+async function sC(){await fetch("/api/pipeline/contact",{method:"POST",headers:aH(),body:JSON.stringify({lead_id:CL,contact_type:document.getElementById("cmT").value,outcome:document.getElementById("cmV").value,notes:document.getElementById("cmN").value})});cM("cModal");lP();lF()}
+function oF(id){CL=id;const n=new Date();n.setDate(n.getDate()+1);document.getElementById("fD").value=n.toISOString().slice(0,16);document.getElementById("fN").value="";document.getElementById("fModal").classList.add("show")}
+async function sF(){const d=document.getElementById("fD").value;if(!d)return;await fetch("/api/pipeline/followup",{method:"POST",headers:aH(),body:JSON.stringify({lead_id:CL,due_at:new Date(d).toISOString(),followup_type:document.getElementById("fT").value,notes:document.getElementById("fN").value})});cM("fModal");lF()}
+async function cF(id){await fetch(`/api/pipeline/followup/${id}/complete`,{method:"POST",headers:aH()});lF()}
+function oE(id){CL=id;document.getElementById("eA").value="";document.getElementById("eD").value="";document.getElementById("eModal").classList.add("show")}
+async function sE(){const a=parseFloat(document.getElementById("eA").value)||0;const d=document.getElementById("eD").value;const r=await fetch("/api/pipeline/estimate",{method:"POST",headers:aH(),body:JSON.stringify({lead_id:CL,amount:a,description:d})});const dt=await r.json();if(dt.error==="registration_required"){alert("\u26A0 Registrate para enviar estimados");cM("eModal");return}cM("eModal");lP()}
+function oCl(id){CL=id;document.getElementById("dV").value="";document.querySelectorAll("#dO button").forEach(b=>b.classList.remove("sl"));document.getElementById("dModal").classList.add("show")}
+function sD(b,v){document.querySelectorAll("#dO button").forEach(x=>x.classList.remove("sl"));b.classList.add("sl");document.getElementById("dV").value=v}
+async function sCl(){await fetch("/api/pipeline/close",{method:"POST",headers:aH(),body:JSON.stringify({lead_id:CL,won:false,reason:document.getElementById("dV").value})});cM("dModal");lP();rS()}
+async function oI(id){CL=id;const a=ST.flatMap(s=>P[s]||[]);const l=a.find(x=>x.id===id);document.getElementById("iT").textContent=`\uD83D\uDCCB ${l?l.address||id:id}`;let b='<div style="font-size:11px;color:var(--tx2);line-height:1.5">';if(l){if(l.trade)b+=`<b>Trade:</b> ${l.trade}<br>`;if(l.score)b+=`<b>Score:</b> ${l.score}<br>`;if(l.phone)b+=`<b>Tel:</b> <a href="tel:${l.phone}" style="color:var(--gn)">${l.phone}</a><br>`;if(l.value)b+=`<b>Valor:</b> $${l.value.toLocaleString()}<br>`;if(l.pain_point)b+=`<b>Pain:</b> <span style="color:var(--or)">${l.pain_point}</span><br>`;if(l.upsell)b+=`<b>Upsell:</b> <span style="color:var(--gn)">${l.upsell}</span><br>`;if(l.best_time&&l.best_time!=="ANY")b+=`<b>Hora:</b> ${l.best_time}<br>`;if(l.decision_maker)b+=`<b>Decisor:</b> ${l.decision_maker}<br>`;if(l.ai_summary)b+=`<b>AI:</b> ${l.ai_summary}<br>`}b+="</div>";document.getElementById("iB").innerHTML=b;try{const r=await fetch(`/api/pipeline/activity/${id}?anon_id=`+gA(),{headers:aH()});const tl=await r.json();let th="";for(const t of tl.slice(0,8)){const ic=t.type==="contact"?"\uD83D\uDCDE":t.type==="followup"?"\u23F0":"\uD83D\uDCB0";const tx=t.type==="contact"?`${t.contact_type} - ${t.outcome||""} ${t.notes||""}`:t.type==="followup"?`${t.followup_type} ${t.completed?"\u2705":"\u23F3"}`:`$${t.amount} - ${t.description}`;th+=`<div class="ti"><span class="ic">${ic}</span><span>${tx}</span></div>`}document.getElementById("iTl").innerHTML=th||""}catch(e){}document.getElementById("iModal").classList.add("show")}
+function cM(id){document.getElementById(id).classList.remove("show")}
+lP();lF();setInterval(()=>{lP();lF()},30000);
+</script></body></html>

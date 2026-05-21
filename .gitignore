@@ -25,4 +25,8 @@ logs/
 
 # OS
 .DS_Store
-Thumbs.db
+Thumbs.dbnode_modules/
+data/leads.db.corrupt*
+data/leads.db
+*.pyc
+__pycache__/

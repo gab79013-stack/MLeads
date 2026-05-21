@@ -79,6 +79,10 @@ from agents.weather_agent          import WeatherAgent
 from agents.federal_contracts_agent import FederalContractsAgent
 from agents.crossdata_agent         import CrossDataAgent
 from agents.tdlr_agent              import TDLRAgent
+from agents.plumbing_agent         import PlumbingAgent
+from agents.hvac_agent              import HVACAgent
+from agents.paint_agent             import PaintAgent
+from agents.flooring_concrete_agent  import FlooringConcreteAgent
 
 # ── Disaster Intelligence Agent ────────────────────────────────────
 try:
@@ -107,6 +111,10 @@ AGENT_REGISTRY = {
     "crossdata":         {"class": CrossDataAgent,         "env_key": "AGENT_CROSSDATA",         "interval_key": "INTERVAL_CROSSDATA",         "default_interval": 360},
     # ── Licencias de contratistas activos Texas (TDLR) ──────────────
     "tdlr":              {"class": TDLRAgent,               "env_key": "AGENT_TDLR",               "interval_key": "INTERVAL_TDLR",               "default_interval": 360},
+    "plumbing":          {"class": PlumbingAgent,         "env_key": "AGENT_PLUMBING",         "interval_key": "INTERVAL_PLUMBING",         "default_interval": 120},
+    "hvac":              {"class": HVACAgent,              "env_key": "AGENT_HVAC",              "interval_key": "INTERVAL_HVAC",              "default_interval": 120},
+    "paint":             {"class": PaintAgent,             "env_key": "AGENT_PAINT",             "interval_key": "INTERVAL_PAINT",             "default_interval": 240},
+    "flooring_concrete": {"class": FlooringConcreteAgent,  "env_key": "AGENT_FLOORING",          "interval_key": "INTERVAL_FLOORING",          "default_interval": 240},
     # ── Disaster Intelligence (NOAA + FEMA + NASA FIRMS) ───────────
     **({"disaster":       {"class": DisasterAgent,          "env_key": "AGENT_DISASTER",           "interval_key": "INTERVAL_DISASTER",           "default_interval": 30}} if _DISASTER_AGENT_AVAILABLE else {}),
     # ── Marketing Team (opt-in — disabled by default) ────────────────
