@@ -30,3 +30,7 @@ data/leads.db.corrupt*
 data/leads.db
 *.pyc
 __pycache__/
+
+# Archive dirs (keep in git for reference)
+contacts/archive/
+utils/archive/

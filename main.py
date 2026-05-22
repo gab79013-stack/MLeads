@@ -83,6 +83,7 @@ from agents.plumbing_agent         import PlumbingAgent
 from agents.hvac_agent              import HVACAgent
 from agents.paint_agent             import PaintAgent
 from agents.flooring_concrete_agent  import FlooringConcreteAgent
+from agents.contact_enrichment_agent import ContactEnrichmentAgent
 
 # ── Disaster Intelligence Agent ────────────────────────────────────
 try:

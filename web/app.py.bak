@@ -69,6 +69,24 @@ logger = logging.getLogger("web_api")
 # Utility Functions
 # ─────────────────────────────────────────────────────────
 
+def log_audit(user_id, action, resource_type, resource_id, details=""):
+    """Log an action to the audit log."""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, action, resource_type, resource_id, details))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"Failed to log audit: {e}")
+
+
+# ─────────────────────────────────────────────────────────
+# Error Handlers
+# ─────────────────────────────────────────────────────────
 
 @app.errorhandler(400)
 def bad_request(e):
@@ -3977,10 +3995,6 @@ def delete_feedback(fb_id):
 # App Initialization
 # ─────────────────────────────────────────────────────────
 
-
-from web.routes import leads, pipeline, swipe, admin, ai, auth
-from web.auth import require_auth
-
 def create_app():
     """Application factory."""
     # Validate required secrets before accepting traffic
@@ -4022,13 +4036,6 @@ def create_app():
         logger.info("Marketing routes registered at /api/marketing/*")
     except Exception as _mkt_bp_err:
         logger.warning(f"Marketing routes not loaded: {_mkt_bp_err}")
-
-    app.register_blueprint(leads.bp, url_prefix='/api/leads')
-    app.register_blueprint(swipe.bp, url_prefix='/api/swipe')
-    app.register_blueprint(pipeline.bp, url_prefix='/api/pipeline')
-    app.register_blueprint(admin.bp, url_prefix='/api/admin')
-    app.register_blueprint(ai.bp, url_prefix='/api')
-    app.register_blueprint(auth.bp, url_prefix='/api/auth')
 
     return app
 
