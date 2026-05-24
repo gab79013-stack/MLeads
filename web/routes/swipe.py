@@ -1,11 +1,29 @@
-"""
-swipe_routes.py — Swipe API routes
-Extracted from app.py by refactor_extract4.py
-"""
-from flask import Blueprint, request, jsonify
+import os
+import json
+from flask import Blueprint, request, jsonify, g
+from functools import wraps
+import logging
+from datetime import datetime, timedelta
+from decimal import Decimal
+logger = logging.getLogger('mleads')
+from web.auth import require_auth
+from utils.web_db import get_db_connection
+from web.helpers.geocode import _get_ip_geo, _geo_locate_ip
+from web.helpers.swipe import _resolve_swipe_identity, _already_swiped_ids, _count_swipes, ANON_LEAD_LIMIT
+from web.helpers.geocode import _haversine_miles, _city_coords, CITY_COORDS
+bp = Blueprint("swipe", __name__)
 
-bp = Blueprint('swipe_routes', __name__)
+# Lazy imports to avoid circular dependency with web.app
+def _get_app_const(name, default=None):
+    """Get a constant from web.app without circular import."""
+    try:
+        import web.app as _app_mod
+        return getattr(_app_mod, name, default)
+    except Exception:
+        return default
 
+
+@bp.route('/swipe/feed', methods=['GET'])
 def swipe_feed():
     """
     Public feed of leads for the Tinder-style swipe UI.
@@ -94,12 +112,12 @@ def swipe_feed():
         row2 = c2.fetchone()
         conn2.close()
         is_paid = bool(row2 and row2[0])
-        if not is_paid and swipes_count >= FREE_USER_LEAD_LIMIT:
+        if not is_paid and swipes_count >= _get_app_const("FREE_USER_LEAD_LIMIT", 40):
             return jsonify({
                 "leads":        [],
                 "auth_required": True,
                 "auth_mode":    "upgrade",
-                "free_limit":   FREE_USER_LEAD_LIMIT,
+                "free_limit":   _get_app_const("FREE_USER_LEAD_LIMIT", 40),
                 "swipes_count": swipes_count,
                 "remaining":    0,
             }), 200
@@ -160,16 +178,16 @@ def swipe_feed():
         cat_or_parts = []
         for cat in selected_cats:
             parts = []
-            ai_trades = [t for t, c in _AI_TRADE_MAP.items() if c == cat]
+            ai_trades = [t for t, c in _get_app_const("_AI_TRADE_MAP", {}).items() if c == cat]
             if ai_trades:
                 ph = ",".join("?" * len(ai_trades))
                 parts.append(f"UPPER(json_extract(lead_data, '$._trade')) IN ({ph})")
                 params.extend(ai_trades)
             parts.append("primary_service_type = ?")
             params.append(cat)
-            # Keyword fallback from _SERVICE_CAT_KEYWORDS
-            if cat in _SERVICE_CAT_KEYWORDS:
-                kws = _SERVICE_CAT_KEYWORDS[cat]
+            # Keyword fallback from _get_app_const("_SERVICE_CAT_KEYWORDS", {})
+            if cat in _get_app_const("_SERVICE_CAT_KEYWORDS", {}):
+                kws = _get_app_const("_SERVICE_CAT_KEYWORDS", {})[cat]
                 kw_parts = []
                 for kw in kws[:3]:  # Top 3 keywords only
                     kw_parts.append("LOWER(COALESCE(json_extract(lead_data, '$.description'), '')) LIKE ?")
@@ -189,8 +207,8 @@ def swipe_feed():
                primary_service_type, first_seen
         FROM consolidated_leads
         {where_sql}
-        ORDER BY CAST(json_extract(lead_data, '$._scoring.score') AS INTEGER) / 25 DESC,
-                 RANDOM()
+        ORDER BY first_seen DESC,
+                 CAST(json_extract(lead_data, '$._scoring.score') AS INTEGER) DESC
         LIMIT ?
     """
     params.append(fetch_limit)
@@ -414,7 +432,7 @@ def swipe_feed():
         "leads":         leads,
         "auth_required": False,
         "anon_limit":    ANON_LEAD_LIMIT,
-        "free_limit":    FREE_USER_LEAD_LIMIT,
+        "free_limit":    _get_app_const("FREE_USER_LEAD_LIMIT", 40),
         "swipes_count":  swipes_count,
         "is_paid":       locals().get('is_paid', False) if user_id else None,
         "anon_id":       anon_id if not user_id else None,
@@ -423,6 +441,10 @@ def swipe_feed():
         response["remaining"] = remaining
     return jsonify(response), 200
 
+
+
+
+@bp.route('/swipe/action', methods=['POST'])
 def swipe_action():
     """
     Record a like/dislike swipe.
@@ -494,7 +516,7 @@ def swipe_action():
     # ── Alert admin after 50 consecutive rejections ───────────────────────────
     if action == 'dislike':
         try:
-            _check_and_alert_rejections(user_id, anon_id)
+            _get_app_const("_check_and_alert_rejections", lambda *a: None)(user_id, anon_id)
         except Exception as _alert_err:
             logger.debug(f"rejection alert check failed: {_alert_err}")
 
@@ -513,6 +535,10 @@ def swipe_action():
         "remaining":     remaining,
     }), 200
 
+
+
+
+@bp.route('/swipe/upgrade-info', methods=['GET'])
 def swipe_upgrade_info():
     """Return current user's quota status."""
     user_id, _ = _resolve_swipe_identity()
@@ -528,15 +554,20 @@ def swipe_upgrade_info():
     return jsonify({
         "is_paid":     is_paid,
         "swipes":      swipes,
-        "free_limit":  FREE_USER_LEAD_LIMIT,
-        "pro_limit":   PRO_LEAD_LIMIT,
-        "remaining":   None if is_paid else max(FREE_USER_LEAD_LIMIT - swipes, 0),
+        "free_limit":  _get_app_const("FREE_USER_LEAD_LIMIT", 40),
+        "pro_limit":   _get_app_const("PRO_LEAD_LIMIT", 200),
+        "remaining":   None if is_paid else max(_get_app_const("FREE_USER_LEAD_LIMIT", 40) - swipes, 0),
         "tiers": [
-            {"id": "pro",     "price": 29,  "limit": PRO_LEAD_LIMIT, "label": "Pro"},
+            {"id": "pro",     "price": 29,  "limit": _get_app_const("PRO_LEAD_LIMIT", 200), "label": "Pro"},
             {"id": "premium", "price": 99,  "limit": None,           "label": "Premium"},
         ],
     }), 200
 
+
+
+
+@bp.route('/swipe/claim-anon', methods=['POST'])
+@require_auth
 def swipe_claim_anon():
     """
     After a successful OAuth login, migrate any anonymous swipes the
@@ -588,10 +619,14 @@ def swipe_claim_anon():
     conn.close()
     return jsonify({"ok": True, "migrated": migrated}), 200
 
+
+
+
+@bp.route('/swipe/cities', methods=['GET'])
 def swipe_cities():
     """Return a list of known city names for autocomplete (no auth required)."""
     q = (request.args.get('q') or '').strip().lower()
-    cities = sorted(_CITY_COORDS.keys())
+    cities = sorted(CITY_COORDS.keys())
     if q:
         # Prefix matches first, then contains matches
         prefix = [c for c in cities if c.startswith(q)]
@@ -601,6 +636,10 @@ def swipe_cities():
         cities = cities[:40]
     return jsonify([c.title() for c in cities]), 200
 
+
+
+
+@bp.route('/swipe/feedback', methods=['POST'])
 def swipe_feedback():
     """Store beta feedback from users (no auth required)."""
     data = request.get_json(silent=True) or {}
@@ -624,6 +663,11 @@ def swipe_feedback():
     conn.close()
     return jsonify({"ok": True}), 200
 
+
+
+
+
+@bp.route('/swipe/save-to-crm', methods=['POST'])
 def save_to_crm():
     """Save a lead to Huly CRM for follow-up tracking."""
     data = request.get_json() or {}
@@ -701,6 +745,9 @@ def save_to_crm():
         "lead": lead,
     })
 
+
+
+@bp.route('/swipe/my-contacts', methods=['GET'])
 def swipe_my_contacts():
     """Return leads the authenticated user has swiped right on (liked)."""
     user_id, _ = _resolve_swipe_identity()
@@ -743,6 +790,10 @@ def swipe_my_contacts():
         })
     return jsonify({'contacts': contacts}), 200
 
+
+
+
+@bp.route('/swipe/log-contact', methods=['POST'])
 def swipe_log_contact():
     """Log that an authenticated user clicked a phone/email contact on a lead."""
     user_id, _ = _resolve_swipe_identity()
@@ -768,6 +819,10 @@ def swipe_log_contact():
     conn.close()
     return jsonify({"ok": True}), 200
 
+
+
+
+@bp.route('/swipe/pulse', methods=['GET'])
 def swipe_pulse():
     """
     Lightweight polling endpoint for real-time sync.
@@ -797,3 +852,7 @@ def swipe_pulse():
         "latest_update": latest,
         "server_time": datetime.utcnow().isoformat(),
     }), 200
+
+
+
+

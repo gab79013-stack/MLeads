@@ -922,7 +922,7 @@ async function fetchFeed() {
     document.getElementById('loader').style.display = '';
     try {
         const url = new URL('/api/swipe/feed', location.origin);
-        if (!S.authed) url.searchParams.set('anon_id', getAnonId());
+        url.searchParams.set('anon_id', getAnonId());  // Always send as fallback
         url.searchParams.set('limit', '10');
 
         // has_contact is enforced as permanent policy on the backend
@@ -964,14 +964,21 @@ async function fetchFeed() {
 }
 
 async function postSwipe(leadId, action) {
+    const prevSwipes = S.swipes;
+    if (action === 'like') { S.swipes = prevSwipes + 1; updateCounter(); }
     try {
         const body = { lead_id: leadId, action };
-        if (!S.authed) body.anon_id = getAnonId();
+        body.anon_id = getAnonId();  // Always send as fallback
         const res  = await fetch('/api/swipe/action', { method:'POST', headers:authHdrs(), body:JSON.stringify(body) });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         if (data.swipes_count !== undefined) { S.swipes = data.swipes_count; updateCounter(); }
         if (data.auth_required) showPaywall(data.auth_mode || 'register');
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error('postSwipe failed:', e);
+        S.swipes = prevSwipes; updateCounter();
+        toast('Error guardando. Intenta de nuevo.');
+    }
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────

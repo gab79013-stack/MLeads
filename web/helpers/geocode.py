@@ -122,3 +122,35 @@ def get_ip_geo(ip: str) -> tuple[float, float] | None:
     if len(_IP_GEO_CACHE) > 500:
         _IP_GEO_CACHE.pop(next(iter(_IP_GEO_CACHE)))
     return result
+
+def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Return the great-circle distance in miles between two lat/lon points."""
+    R = 3958.8  # Earth radius in miles
+    dlat = _math.radians(lat2 - lat1)
+    dlon = _math.radians(lon2 - lon1)
+    a = (_math.sin(dlat / 2) ** 2
+         + _math.cos(_math.radians(lat1))
+         * _math.cos(_math.radians(lat2))
+         * _math.sin(dlon / 2) ** 2)
+    return R * 2 * _math.asin(_math.sqrt(a))
+
+
+
+def _city_coords(city_name: str) -> tuple[float, float] | None:
+    """Return (lat, lon) for a city name, or None if unknown."""
+    return CITY_COORDS.get((city_name or "").strip().lower())
+
+
+def _get_ip_geo(ip: str) -> tuple[float, float] | None:
+    """Get IP geolocation with caching."""
+    if ip in _IP_GEO_CACHE:
+        return _IP_GEO_CACHE[ip]
+    result = _geo_locate_ip(ip)
+    _IP_GEO_CACHE[ip] = result
+    # Evict cache if too large
+    if len(_IP_GEO_CACHE) > 500:
+        _IP_GEO_CACHE.pop(next(iter(_IP_GEO_CACHE)))
+    return result
+
+
+

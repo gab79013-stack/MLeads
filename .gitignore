@@ -34,3 +34,9 @@ __pycache__/
 # Archive dirs (keep in git for reference)
 contacts/archive/
 utils/archive/
+node_modules/
+contacts/
+huly-bridge/node_modules/
+*.bak
+data/backup_corrupted/
+data/backups/
