@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>0brix — Pipeline</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--text:#f1f5f9;--text2:#94a3b8;--accent:#3b82f6;--green:#22c55e;--yellow:#eab308;--orange:#f97316;--red:#ef4444;--purple:#a855f7;--border:#475569}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:auto}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border)}
+.topbar h1{font-size:20px;font-weight:700;display:flex;align-items:center;gap:8px}
+.topbar h1 span{color:var(--accent)}
+.topbar nav a{color:var(--text2);text-decoration:none;font-size:14px;margin-left:16px;transition:color .2s}
+.topbar nav a:hover{color:var(--text)}
+.stats{display:flex;gap:16px;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border)}
+.stat{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2)}
+.stat .num{font-weight:700;color:var(--text);font-size:16px}
+.board{display:flex;gap:12px;padding:16px 20px;min-height:calc(100vh - 100px);overflow-x:auto;align-items:flex-start}
+.column{min-width:240px;max-width:300px;flex:1;background:var(--surface);border-radius:12px;display:flex;flex-direction:column;max-height:calc(100vh - 120px)}
+@media(min-width:1200px){
+    .board{padding:20px 24px;gap:16px}
+    .column{min-width:260px;max-width:340px}
+}
+.col-header{padding:14px 16px;font-weight:700;font-size:14px;border-bottom:2px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);border-radius:12px 12px 0 0;z-index:1}
+.col-header .badge{background:var(--surface2);color:var(--text2);font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
+.col-header .value{font-size:12px;color:var(--text2);font-weight:400}
+.col-body{padding:8px;overflow-y:auto;flex:1;min-height:60px}
+.col-body.drag-over{background:rgba(59,130,246,.08);border-radius:0 0 12px 12px}
+.card{background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:8px;cursor:grab;transition:transform .15s,box-shadow .15s;border:1px solid transparent;position:relative}
+.card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.3);border-color:var(--border)}
+.card.dragging{opacity:.5;transform:rotate(2deg)}
+.card .addr{font-weight:600;font-size:13px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .meta{display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+.card .trade{font-size:11px;background:rgba(59,130,246,.2);color:#93c5fd;padding:1px 6px;border-radius:4px;font-weight:600}
+.card .score{font-size:11px;font-weight:700}
+.card .score.high{color:var(--green)}.card .score.mid{color:var(--yellow)}.card .score.low{color:var(--text2)}
+.card .urgency{font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px}
+.card .urgency.HIGH{background:rgba(239,68,68,.2);color:#fca5a5}
+.card .urgency.MEDIUM{background:rgba(234,179,8,.2);color:#fde047}
+.card .urgency.LOW{background:rgba(34,197,94,.2);color:#86efac}
+.card .contractor{font-size:12px;color:var(--text2);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .phone{font-size:12px;color:var(--green)}
+.card .val{font-size:12px;color:var(--yellow);font-weight:600}
+.card .pain{font-size:11px;color:var(--orange);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .notes-preview{font-size:11px;color:var(--text2);margin-top:4px;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .card-actions{display:flex;gap:4px;margin-top:8px;padding-top:6px;border-top:1px solid var(--border)}
+.card .card-actions button{background:none;border:1px solid var(--border);color:var(--text2);font-size:11px;padding:2px 6px;border-radius:4px;cursor:pointer}
+.card .card-actions button:hover{background:var(--surface);color:var(--text)}
+.empty-col{text-align:center;padding:20px;color:var(--text2);font-size:13px;opacity:.6}
+.drop-hint{text-align:center;padding:8px;color:var(--accent);font-size:12px;opacity:0;transition:opacity .2s}
+.col-body.drag-over .drop-hint{opacity:1}
+
+/* Status colors */
+.column[data-status="Nuevo"] .col-header{border-bottom-color:var(--accent)}
+.column[data-status="Contactado"] .col-header{border-bottom-color:var(--yellow)}
+.column[data-status="Propuesta"] .col-header{border-bottom-color:var(--orange)}
+.column[data-status="Negociación"] .col-header{border-bottom-color:var(--purple)}
+.column[data-status="Ganado"] .col-header{border-bottom-color:var(--green)}
+.column[data-status="Perdido"] .col-header{border-bottom-color:var(--red)}
+
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}
+.modal-bg.show{display:flex}
+.modal{background:var(--surface);border-radius:16px;padding:24px;max-width:480px;width:90%;max-height:80vh;overflow-y:auto}
+.modal h2{font-size:18px;margin-bottom:12px}
+.modal label{display:block;font-size:13px;color:var(--text2);margin-bottom:4px;margin-top:12px}
+.modal input,.modal textarea{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:14px}
+.modal textarea{min-height:80px;resize:vertical}
+.modal .actions{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+.modal button{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-weight:600;font-size:14px}
+.modal .btn-save{background:var(--accent);color:#fff}
+.modal .btn-cancel{background:var(--surface2);color:var(--text2)}
+
+@media(max-width:768px){
+  .board{padding:12px;gap:12px}
+  .column{min-width:260px}
+  .stats{flex-wrap:wrap;gap:8px}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>📊 <span>Pipeline</span> 0brix</h1>
+  <nav>
+    <a href="/swipe">🔥 Swipe</a>
+    <a href="/pipeline">📊 Pipeline</a>
+  </nav>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<div class="board" id="board"></div>
+
+<!-- Note modal -->
+<div class="modal-bg" id="noteModal">
+  <div class="modal">
+    <h2>📝 Notas del Lead</h2>
+    <div id="modalLeadInfo" style="font-size:13px;color:var(--text2);margin-bottom:8px"></div>
+    <label>Notas</label>
+    <textarea id="modalNotes" placeholder="Agregar notas de seguimiento..."></textarea>
+    <div class="actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      <button class="btn-save" onclick="saveNotes()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STATUSES = ["Nuevo", "Contactado", "Propuesta", "Negociación", "Ganado", "Perdido"];
+const STATUS_ICONS = {Nuevo:"🔵", Contactado:"🟡", Propuesta:"🟠", Negociación:"🟣", Ganado:"✅", Perdido:"❌"};
+let pipeline = {};
+let currentLeadId = null;
+let dragLeadId = null;
+let dragFromStatus = null;
+
+function authHdrs() {
+  const h = {"Content-Type":"application/json"};
+  const tk = localStorage.getItem("mleads_token");
+  if (tk) h["Authorization"] = "Bearer " + tk;
+  return h;
+}
+
+async function loadPipeline() {
+  try {
+    const res = await fetch("/api/pipeline", {headers: authHdrs()});
+    pipeline = await res.json();
+    renderBoard();
+    renderStats();
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function renderBoard() {
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+  STATUSES.forEach(status => {
+    const leads = pipeline[status] || [];
+    const totalValue = leads.reduce((s, l) => s + (l.value || 0), 0);
+    const col = document.createElement("div");
+    col.className = "column";
+    col.dataset.status = status;
+    col.innerHTML = `
+      <div class="col-header">
+        <span>${STATUS_ICONS[status]||""} ${status}</span>
+        <span>
+          <span class="badge">${leads.length}</span>
+          ${totalValue > 0 ? `<span class="value"> $${(totalValue/1000).toFixed(0)}k</span>` : ""}
+        </span>
+      </div>
+      <div class="col-body" data-status="${status}" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'${status}')">
+        <div class="drop-hint">Soltar aquí</div>
+        ${leads.length ? leads.map(l => renderCard(l)).join("") : '<div class="empty-col">Sin leads</div>'}
+      </div>`;
+    board.appendChild(col);
+  });
+}
+
+function renderCard(l) {
+  const scoreClass = l.score >= 80 ? "high" : l.score >= 50 ? "mid" : "low";
+  const scoreEmoji = l.score >= 80 ? "🔥" : l.score >= 50 ? "🌡️" : "";
+  return `
+    <div class="card" draggable="true" data-lead-id="${l.id}" data-status="${l.status}"
+         ondragstart="onDragStart(event,'${l.id}','${l.status}')"
+         ondragend="onDragEnd(event)">
+      <div class="addr">${l.address || l.id}</div>
+      <div class="meta">
+        ${l.trade ? `<span class="trade">${l.trade}</span>` : ""}
+        ${l.score ? `<span class="score ${scoreClass}">${scoreEmoji} ${l.score}</span>` : ""}
+        ${l.urgency ? `<span class="urgency ${l.urgency}">${l.urgency}</span>` : ""}
+        ${l.value ? `<span class="val">$${(l.value/1000).toFixed(0)}k</span>` : ""}
+      </div>
+      ${l.contractor ? `<div class="contractor">🏗️ ${l.contractor}</div>` : ""}
+      ${l.phone ? `<div class="phone">📞 <a href="tel:${l.phone}" style="color:var(--green);text-decoration:none">${l.phone}</a></div>` : ""}
+      ${l.pain_point ? `<div class="pain">💡 ${l.pain_point}</div>` : ""}
+      ${l.notes ? `<div class="notes-preview">📝 ${l.notes}</div>` : ""}
+      <div class="card-actions">
+        ${l.phone ? `<button onclick="window.location.href='tel:${l.phone}'">📞 Llamar</button>` : ""}
+        <button onclick="openNotes('${l.id}')">📝 Notas</button>
+        <button onclick="removeLead('${l.id}')" style="color:var(--red)">✕</button>
+      </div>
+    </div>`;
+}
+
+function renderStats() {
+  const total = STATUSES.reduce((s, st) => s + (pipeline[st]||[]).length, 0);
+  const won = (pipeline["Ganado"]||[]).length;
+  const lost = (pipeline["Perdido"]||[]).length;
+  const totalValue = STATUSES.reduce((s, st) => s + (pipeline[st]||[]).reduce((a, l) => a + (l.value||0), 0), 0);
+  const wonValue = (pipeline["Ganado"]||[]).reduce((a, l) => a + (l.value||0), 0);
+  const convRate = total > 0 ? ((won / (total - lost)) * 100).toFixed(0) : 0;
+  document.getElementById("stats").innerHTML = `
+    <div class="stat">Total <span class="num">${total}</span></div>
+    <div class="stat">Ganados <span class="num" style="color:var(--green)">${won}</span></div>
+    <div class="stat">Conversión <span class="num" style="color:var(--accent)">${convRate}%</span></div>
+    <div class="stat">Pipeline <span class="num" style="color:var(--yellow)">$${(totalValue/1000).toFixed(0)}k</span></div>
+    <div class="stat">Ganado <span class="num" style="color:var(--green)">$${(wonValue/1000).toFixed(0)}k</span></div>
+  `;
+}
+
+// Drag & Drop
+function onDragStart(e, leadId, fromStatus) {
+  dragLeadId = leadId;
+  dragFromStatus = fromStatus;
+  e.target.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+}
+function onDragEnd(e) { e.target.classList.remove("dragging"); }
+function onDragOver(e) { e.preventDefault(); e.currentTarget.classList.add("drag-over"); }
+function onDragLeave(e) { e.currentTarget.classList.remove("drag-over"); }
+async function onDrop(e, newStatus) {
+  e.preventDefault();
+  e.currentTarget.classList.remove("drag-over");
+  if (!dragLeadId || dragFromStatus === newStatus) return;
+  try {
+    await fetch("/api/pipeline/move", {method:"POST", headers:authHdrs(), body:JSON.stringify({lead_id:dragLeadId, status:newStatus})});
+    // Optimistic update
+    const leads = pipeline[dragFromStatus] || [];
+    const idx = leads.findIndex(l => l.id === dragLeadId);
+    if (idx >= 0) {
+      const [lead] = leads.splice(idx, 1);
+      lead.status = newStatus;
+      (pipeline[newStatus] = pipeline[newStatus] || []).unshift(lead);
+      renderBoard();
+      renderStats();
+    }
+  } catch(e) { console.error(e); }
+  dragLeadId = null;
+  dragFromStatus = null;
+}
+
+// Notes modal
+function openNotes(leadId) {
+  currentLeadId = leadId;
+  const allLeads = STATUSES.flatMap(s => pipeline[s] || []);
+  const lead = allLeads.find(l => l.id === leadId);
+  document.getElementById("modalLeadInfo").textContent = lead ? `${lead.address} — ${lead.contractor || ""}` : leadId;
+  document.getElementById("modalNotes").value = lead?.notes || "";
+  document.getElementById("noteModal").classList.add("show");
+}
+function closeModal() { document.getElementById("noteModal").classList.remove("show"); currentLeadId = null; }
+async function saveNotes() {
+  if (!currentLeadId) return;
+  const notes = document.getElementById("modalNotes").value;
+  await fetch("/api/pipeline/notes", {method:"POST", headers:authHdrs(), body:JSON.stringify({lead_id:currentLeadId, notes})});
+  closeModal();
+  loadPipeline();
+}
+async function removeLead(leadId) {
+  if (!confirm("¿Eliminar este lead del pipeline?")) return;
+  await fetch("/api/pipeline/remove", {method:"POST", headers:authHdrs(), body:JSON.stringify({lead_id:leadId})});
+  loadPipeline();
+}
+
+// Keyboard: R = refresh
+document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'r' || e.key === 'R') { e.preventDefault(); loadPipeline(); }
+    if (e.key === 'Escape') closeModal();
+});
+
+// Init
+loadPipeline();
+// Auto-refresh every 30s
+setInterval(loadPipeline, 30000);
+</script>
+</body>
+</html>

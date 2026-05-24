@@ -218,12 +218,14 @@ def import_permits(records: list[dict], batch_size: int = 500) -> dict:
 
                         has_contact = 1 if lead_data.get("contact_phone") else 0
 
+                        exists = False
                         existing_row = conn.execute(
                             "SELECT lead_data FROM consolidated_leads WHERE address_key = ?",
                             (addr_key,),
                         ).fetchone()
 
                         if existing_row:
+                            exists = True
                             # Merge: preserve AI classification fields from existing data
                             try:
                                 existing_ld = json.loads(existing_row["lead_data"] or "{}")

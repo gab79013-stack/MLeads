@@ -671,9 +671,21 @@
 
         /* ── Leads table: enriched cells ── */
         .table-leads { overflow-x: auto; }
-        .table-leads table { min-width: 1280px; }
+        .table-leads table { min-width: 1280px; border-collapse: separate; border-spacing: 0; }
         .table-leads th.col-right,
         .table-leads td.col-right { text-align: right; }
+        /* PC: sticky first column */
+        @media(min-width: 900px){
+            .table-leads th:first-child,
+            .table-leads td:first-child {
+                position: sticky; left: 0; z-index: 2;
+                background: var(--bg-surface);
+                box-shadow: 2px 0 8px rgba(0,0,0,.06);
+            }
+            .table-leads thead th:first-child { z-index: 3; }
+        }
+        .table-leads tbody tr:hover td:first-child { background: var(--bg-hover); }
+        .lead-row:hover td { background: var(--bg-subtle); }
 
         .cell-main {
             font-weight: 500;
@@ -1521,6 +1533,17 @@
                 <div class="panel-field"><div class="panel-label">Source</div><div class="panel-value" id="panelSource"></div></div>
                 <div class="panel-field"><div class="panel-label">Next Inspection</div><div class="panel-value" id="panelInspection"></div></div>
                 <div class="panel-field"><div class="panel-label">Inspection Source</div><div class="panel-value" id="panelInspectionSource"></div></div>
+                <div class="panel-field">
+                    <div class="panel-label">Maps</div>
+                    <div class="panel-value"><a id="panelMapLink" href="#" target="_blank" style="color:var(--accent);text-decoration:none;font-size:13px">📍 Ver en Google Maps →</a></div>
+                </div>
+            </div>
+            <div class="panel-section" id="panelAiFields" style="display:none">
+                <div class="panel-section-title">🤖 AI Analysis</div>
+                <div class="panel-field"><div class="panel-label">Trade</div><div class="panel-value" id="panelTrade" style="font-weight:700"></div></div>
+                <div class="panel-field"><div class="panel-label">Pain Point</div><div class="panel-value" id="panelPain" style="color:var(--orange)"></div></div>
+                <div class="panel-field"><div class="panel-label">Upsell</div><div class="panel-value" id="panelUpsell" style="color:var(--green)"></div></div>
+                <div class="panel-field"><div class="panel-label">Sub-trades</div><div class="panel-value" id="panelSubtrades" style="font-size:12px"></div></div>
             </div>
             <div class="panel-section">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -2033,6 +2056,25 @@
                 document.getElementById('markContactedBtn').onclick = () => markLeadAsContacted(addressKey);
                 loadLeadNotes(addressKey);
                 document.getElementById('addNoteBtn').onclick = () => addNote(addressKey);
+                // Show AI fields if available
+                const aiFields = document.getElementById('panelAiFields');
+                if (aiFields) {
+                    aiFields.style.display = (lead._trade || lead.pain_point || lead.upsell || lead.sub_trades) ? '' : 'none';
+                    if (lead._trade) document.getElementById('panelTrade').textContent = lead._trade;
+                    if (lead.pain_point) document.getElementById('panelPain').textContent = lead.pain_point;
+                    if (lead.upsell) document.getElementById('panelUpsell').textContent = lead.upsell;
+                    if (lead.sub_trades) document.getElementById('panelSubtrades').textContent = lead.sub_trades;
+                }
+                // Map link
+                const mapLink = document.getElementById('panelMapLink');
+                if (mapLink) {
+                    if (lead.latitude && lead.longitude) {
+                        mapLink.href = `https://www.google.com/maps?q=${lead.latitude},${lead.longitude}`;
+                        mapLink.style.display = '';
+                    } else {
+                        mapLink.style.display = 'none';
+                    }
+                }
                 document.getElementById('sidePanel').classList.add('open');
             } catch (e) { console.error('Error loading lead details:', e); }
         }

@@ -1,0 +1,6 @@
+source_file,business_name,license_number,phone,city,classification,verified_at,cslb_status,is_active,risk_level,classification_codes,bond_amount,workers_comp,disciplinary_actions
+C-16 – Fire Protection Contractor.csv,SETON PACIFIC COMPANY,,(408) 946 0858,,C-16,2026-05-18T07:21:12.673898,not_found_name_search,False,HIGH,[],0,False,0
+C-16 – Fire Protection Contractor.csv,PIERCE J R PLUMBING COMPANY,,(510) 483 5473,,C-16,2026-05-18T07:21:15.737558,not_found_name_search,False,HIGH,[],0,False,0
+C-16 – Fire Protection Contractor.csv,BETTI VAL PLUMBING & HEATING INC,,(510) 232 5593,,C-16,2026-05-18T07:21:18.796109,not_found_name_search,False,HIGH,[],0,False,0
+C-16 – Fire Protection Contractor.csv,K C PLUMB SERVICE INC,,(650) 888 1222,,C-16,2026-05-18T07:21:21.852677,not_found_name_search,False,HIGH,[],0,False,0
+C-16 – Fire Protection Contractor.csv,L P G FIRE PROTECTION INC,,(408) 661 8467,,C-16,2026-05-18T07:21:24.917638,not_found_name_search,False,HIGH,[],0,False,0

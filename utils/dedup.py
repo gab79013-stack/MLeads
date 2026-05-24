@@ -277,8 +277,19 @@ class DeduplicationEngine:
         import json
         try:
             with self._get_conn() as conn:
-                # Extract primary_service_type from the first agent (primary source)
-                primary_service_type = agents[0] if agents else None
+                # Use AI trade classification if available, otherwise fall back to agent name
+                _AI_TRADE_MAP = {
+                    "ROOFING": "roofing", "ELECTRICAL": "electrical", "DRYWALL": "drywall",
+                    "PAINTING": "paint", "LANDSCAPING": "landscaping", "HVAC": "hvac",
+                    "PLUMBING": "plumbing", "INSULATION": "insulation", "FRAMING": "framing",
+                    "CONCRETE": "concrete", "FLOORING": "flooring", "WINDOWS": "windows",
+                    "DEMOLITION": "demolition", "GENERAL": "general", "UNKNOWN": "unknown",
+                }
+                ai_trade = lead.get("_trade", "")
+                if ai_trade and ai_trade.upper() in _AI_TRADE_MAP:
+                    primary_service_type = _AI_TRADE_MAP[ai_trade.upper()]
+                else:
+                    primary_service_type = lead.get("service_type") or (agents[0] if agents else None)
 
                 # Compute has_contact / has_phone / is_dead_lead from lead data
                 has_contact = 1 if (
