@@ -2546,6 +2546,26 @@ _SERVICE_CAT_KEYWORDS: dict[str, list[str]] = {
 # These map directly to primary_service_type column
 _SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "energy", "rodents", "deconstruction", "remodel", "crossdata"}
 
+# Subcontractor categories must use the post-classification opportunity trade,
+# not raw permit keywords. Example: a REROOF permit pulled by a CCC roofer is
+# reclassified to DRYWALL/PAINT/INSULATION; it must not appear for roofing users
+# just because the description still says "REROOF".
+_TRADE_SERVICE_TO_AI = {
+    "roofing": "ROOFING",
+    "drywall": "DRYWALL",
+    "paint": "PAINTING",
+    "electrical": "ELECTRICAL",
+    "plumbing": "PLUMBING",
+    "hvac": "HVAC",
+    "flooring": "FLOORING",
+    "concrete": "CONCRETE",
+    "framing": "FRAMING",
+    "windows": "WINDOWS",
+    "landscaping": "LANDSCAPING",
+    "deconstruction": "DEMOLITION",
+    "insulation": "INSULATION",
+}
+
 
 @app.route('/api/swipe/feed', methods=['GET'])
 @limiter.limit("60 per minute")
@@ -2690,26 +2710,23 @@ def swipe_feed():
         params.append(f"%{city_filter}%")
 
     # ── Service category filter ────────────────────────────────────────────────
-    # Subcontractor types are matched against specific JSON fields only:
-    #   $.description  — permit work description
-    #   $.permit_type  — permit type name
-    #   $._trade       — Qwen AI trade classification
-    # This avoids false positives from searching the entire JSON blob
-    # (e.g. "floor" matching floor drain plumbing leads, "tile" matching
-    # tile-roof leads when user filters for flooring, etc.)
+    # For subcontractor trades, match the CURRENT opportunity trade only.
+    # Do not match raw description/permit_type here: a taken REROOF permit still
+    # says "roof" in the description, but after self-pull detection it is no
+    # longer a roofing opportunity.
     if selected_cats:
         cat_parts: list[str] = []
         for cat in selected_cats:
-            if cat in _SERVICE_CAT_KEYWORDS:
-                kws = _SERVICE_CAT_KEYWORDS[cat]
-                field_parts = []
-                for field in ("$.description", "$.permit_type", "$._trade"):
-                    fld_sql = " OR ".join(
-                        [f"LOWER(COALESCE(json_extract(lead_data, '{field}'), '')) LIKE ?" for _ in kws]
-                    )
-                    field_parts.append(f"({fld_sql})")
-                    params.extend(f"%{k}%" for k in kws)
-                cat_parts.append("(" + " OR ".join(field_parts) + ")")
+            if cat in _TRADE_SERVICE_TO_AI:
+                ai_trade = _TRADE_SERVICE_TO_AI[cat]
+                cat_parts.append(
+                    "("
+                    "primary_service_type = ? "
+                    "OR UPPER(COALESCE(json_extract(lead_data, '$._trade'), '')) = ? "
+                    "OR UPPER(COALESCE(json_extract(lead_data, '$._sub_trades'), '')) LIKE ?"
+                    ")"
+                )
+                params.extend([cat, ai_trade, f'%"{ai_trade}"%'])
             elif cat in _SERVICE_TYPE_CATS:
                 cat_parts.append("primary_service_type = ?")
                 params.append(cat)
