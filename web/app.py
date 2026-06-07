@@ -33,6 +33,7 @@ from workers.inspection_scheduler import (
 from workers.telegram_bot import start_bot_worker
 from utils import bot_users as bu
 from utils import billing
+from web.helpers.service_filter import build_service_category_filter
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -2715,23 +2716,12 @@ def swipe_feed():
     # says "roof" in the description, but after self-pull detection it is no
     # longer a roofing opportunity.
     if selected_cats:
-        cat_parts: list[str] = []
-        for cat in selected_cats:
-            if cat in _TRADE_SERVICE_TO_AI:
-                ai_trade = _TRADE_SERVICE_TO_AI[cat]
-                cat_parts.append(
-                    "("
-                    "primary_service_type = ? "
-                    "OR UPPER(COALESCE(json_extract(lead_data, '$._trade'), '')) = ? "
-                    "OR UPPER(COALESCE(json_extract(lead_data, '$._sub_trades'), '')) LIKE ?"
-                    ")"
-                )
-                params.extend([cat, ai_trade, f'%"{ai_trade}"%'])
-            elif cat in _SERVICE_TYPE_CATS:
-                cat_parts.append("primary_service_type = ?")
-                params.append(cat)
-        if cat_parts:
-            conditions.append("(" + " OR ".join(cat_parts) + ")")
+        service_sql, service_params = build_service_category_filter(
+            selected_cats, _TRADE_SERVICE_TO_AI, _SERVICE_TYPE_CATS
+        )
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
 
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 

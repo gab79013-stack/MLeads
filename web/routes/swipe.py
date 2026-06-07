@@ -11,6 +11,7 @@ from utils.web_db import get_db_connection
 from web.helpers.geocode import _get_ip_geo, _geo_locate_ip
 from web.helpers.swipe import _resolve_swipe_identity, _already_swiped_ids, _count_swipes, ANON_LEAD_LIMIT
 from web.helpers.geocode import _haversine_miles, _city_coords, CITY_COORDS
+from web.helpers.service_filter import build_service_category_filter, DEFAULT_TRADE_SERVICE_TO_AI
 bp = Blueprint("swipe", __name__)
 
 # Lazy imports to avoid circular dependency with web.app
@@ -175,29 +176,12 @@ def swipe_feed():
     # Do not fall back to raw description/permit_type: a taken REROOF permit still
     # says "roof", but after self-pull detection it may be a drywall/paint lead.
     if selected_cats:
-        cat_or_parts = []
-        trade_map = _get_app_const("_TRADE_SERVICE_TO_AI", {
-            "roofing": "ROOFING", "drywall": "DRYWALL", "paint": "PAINTING",
-            "electrical": "ELECTRICAL", "plumbing": "PLUMBING", "hvac": "HVAC",
-            "flooring": "FLOORING", "concrete": "CONCRETE", "framing": "FRAMING",
-            "windows": "WINDOWS", "landscaping": "LANDSCAPING", "deconstruction": "DEMOLITION",
-            "insulation": "INSULATION",
-        })
+        trade_map = _get_app_const("_TRADE_SERVICE_TO_AI", DEFAULT_TRADE_SERVICE_TO_AI)
         service_type_cats = _get_app_const("_SERVICE_TYPE_CATS", set())
-        for cat in selected_cats:
-            if cat in trade_map:
-                ai_trade = trade_map[cat]
-                cat_or_parts.append(
-                    "(primary_service_type = ? "
-                    "OR UPPER(COALESCE(json_extract(lead_data, '$._trade'), '')) = ? "
-                    "OR UPPER(COALESCE(json_extract(lead_data, '$._sub_trades'), '')) LIKE ?)"
-                )
-                params.extend([cat, ai_trade, f'%"{ai_trade}"%'])
-            elif cat in service_type_cats:
-                cat_or_parts.append("primary_service_type = ?")
-                params.append(cat)
-        if cat_or_parts:
-            conditions.append("(" + " OR ".join(cat_or_parts) + ")")
+        service_sql, service_params = build_service_category_filter(selected_cats, trade_map, service_type_cats)
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
 
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
