@@ -28,10 +28,17 @@ import re
 import logging
 
 try:
-    from utils.opportunity_rules import extract_contractor_name, infer_trade_from_license
+    from utils.opportunity_rules import (
+        extract_contractor_name,
+        infer_trade_from_license,
+        infer_trade_from_text,
+        normalize_trade,
+    )
 except Exception:  # pragma: no cover - keep detector safe during partial installs
     extract_contractor_name = None
     infer_trade_from_license = None
+    infer_trade_from_text = None
+    normalize_trade = None
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +152,13 @@ def detect_gc_self_pull(lead: dict) -> dict:
         )
     ).strip()
 
-    trade = (lead.get("_trade") or "GENERAL").upper()
+    detected_trade = (
+        lead.get("_trade")
+        or lead.get("trade")
+        or (infer_trade_from_text(lead) if infer_trade_from_text else None)
+        or "GENERAL"
+    )
+    trade = normalize_trade(detected_trade) if normalize_trade else str(detected_trade).upper()
     license_trade = infer_trade_from_license(lead) if infer_trade_from_license else None
 
     if not gc_raw and license_trade != trade:

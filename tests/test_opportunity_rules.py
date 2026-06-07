@@ -1,6 +1,6 @@
 from utils.bot_users import _lead_service_keys
 from utils.gc_detector import enrich_lead_with_gc_detection
-from utils.opportunity_rules import extract_contractor_name, infer_trade_from_license
+from utils.opportunity_rules import extract_contractor_name, infer_trade_from_license, infer_trade_from_text
 
 
 def test_florida_ccc_license_marks_roofing_self_pull_and_blocks_roofing_route():
@@ -80,4 +80,34 @@ def test_general_contractor_roof_scope_is_not_blocked_for_roofing():
     services = _lead_service_keys(lead, "permits")
 
     assert lead["_is_gc_self_pull"] is False
+    assert "roofing" in services
+
+
+def test_no_ai_trade_still_blocks_roofing_when_license_matches_roof_scope():
+    lead = {
+        "id": "miami-no-ai-ccc-roof",
+        "description": "REROOF asphalt shingle",
+        "contractor": "BIGFOOT CONSTRUCTION INC",
+        "contractor_number": "CCC1333168",
+    }
+
+    assert infer_trade_from_text(lead) == "ROOFING"
+    enrich_lead_with_gc_detection(lead)
+    services = _lead_service_keys(lead, "permits")
+
+    assert lead["_is_gc_self_pull"] is True
+    assert lead["_original_trade"] == "ROOFING"
+    assert "roofing" not in services
+    assert "drywall" in services
+
+
+def test_no_ai_trade_owner_roof_scope_still_routes_to_roofing():
+    lead = {
+        "id": "owner-roof-no-ai",
+        "description": "REROOF asphalt shingle",
+        "owner": "JOHN HOMEOWNER",
+    }
+
+    services = _lead_service_keys(lead, "permits")
+
     assert "roofing" in services

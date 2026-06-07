@@ -91,6 +91,75 @@ CONTRACTOR_FIELDS = (
 
 _NON_ALNUM = re.compile(r"[^A-Z0-9-]")
 
+# Conservative permit-text fallback used when AI classification is unavailable
+# or a source agent did not populate _trade/primary_service_type. Put specific
+# phrases before broad words so "tile roof" is roofing, not flooring.
+TEXT_TRADE_KEYWORDS: tuple[tuple[str, str], ...] = (
+    ("re-roof", "ROOFING"),
+    ("reroof", "ROOFING"),
+    ("roofing", "ROOFING"),
+    ("roof", "ROOFING"),
+    ("shingle", "ROOFING"),
+    ("torch down", "ROOFING"),
+    ("tpo", "ROOFING"),
+    ("electrical", "ELECTRICAL"),
+    ("electric", "ELECTRICAL"),
+    ("panel upgrade", "ELECTRICAL"),
+    ("service upgrade", "ELECTRICAL"),
+    ("rewire", "ELECTRICAL"),
+    ("wiring", "ELECTRICAL"),
+    ("ev charger", "ELECTRICAL"),
+    ("plumbing", "PLUMBING"),
+    ("plumb", "PLUMBING"),
+    ("repipe", "PLUMBING"),
+    ("sewer", "PLUMBING"),
+    ("water heater", "PLUMBING"),
+    ("drain", "PLUMBING"),
+    ("hvac", "HVAC"),
+    ("air conditioning", "HVAC"),
+    ("mechanical", "HVAC"),
+    ("ductwork", "HVAC"),
+    ("duct", "HVAC"),
+    ("furnace", "HVAC"),
+    ("stucco paint", "PAINTING"),
+    ("painting", "PAINTING"),
+    ("paint", "PAINTING"),
+    ("drywall", "DRYWALL"),
+    ("sheetrock", "DRYWALL"),
+    ("gypsum", "DRYWALL"),
+    ("concrete", "CONCRETE"),
+    ("slab", "CONCRETE"),
+    ("driveway", "CONCRETE"),
+    ("sidewalk", "CONCRETE"),
+    ("tile floor", "FLOORING"),
+    ("flooring", "FLOORING"),
+    ("floor", "FLOORING"),
+    ("hardwood", "FLOORING"),
+    ("carpet", "FLOORING"),
+    ("framing", "FRAMING"),
+    ("structural", "FRAMING"),
+    ("window", "WINDOWS"),
+    ("glazing", "WINDOWS"),
+    ("door", "WINDOWS"),
+    ("insulation", "INSULATION"),
+    ("insulate", "INSULATION"),
+    ("demolition", "DEMOLITION"),
+    ("demolish", "DEMOLITION"),
+    ("demo", "DEMOLITION"),
+    ("abatement", "DEMOLITION"),
+    ("landscaping", "LANDSCAPING"),
+    ("landscape", "LANDSCAPING"),
+    ("irrigation", "LANDSCAPING"),
+    ("solar", "SOLAR"),
+    ("photovoltaic", "SOLAR"),
+)
+
+TEXT_FIELDS = (
+    "description", "work_description", "permit_type", "permit_subtype",
+    "title", "scope", "job_description", "ProjectDescription",
+    "PermitType", "PermitSubtype", "WorkDescription",
+)
+
 
 def normalize_trade(value: str | None) -> str:
     text = (value or "").strip().upper().replace(" ", "_")
@@ -111,6 +180,33 @@ def trade_to_service(trade: str | None) -> str | None:
 
 def service_to_trade(service: str | None) -> str | None:
     return SERVICE_TO_TRADE.get((service or "").strip().lower())
+
+
+def infer_trade_from_text(lead: dict) -> str | None:
+    """Infer needed trade from permit text when AI classification is missing."""
+    parts: list[str] = []
+    for field in TEXT_FIELDS:
+        value = lead.get(field)
+        if value:
+            parts.append(str(value))
+
+    raw = lead.get("raw")
+    if isinstance(raw, dict):
+        lower_raw = {str(k).lower(): v for k, v in raw.items()}
+        for field in TEXT_FIELDS:
+            value = raw.get(field) or raw.get(field.upper()) or raw.get(field.title())
+            if value is None:
+                value = lower_raw.get(field.lower())
+            if value:
+                parts.append(str(value))
+
+    haystack = " ".join(parts).lower()
+    if not haystack:
+        return None
+    for keyword, trade in TEXT_TRADE_KEYWORDS:
+        if keyword in haystack:
+            return trade
+    return None
 
 
 def _iter_license_values(lead: dict):
@@ -171,7 +267,12 @@ def current_opportunity_services(lead: dict, agent_key: str = "") -> set[str]:
     """Return service keys that should receive this lead now."""
     keys: set[str] = set()
 
-    trade = normalize_trade(lead.get("_trade") or lead.get("trade") or "")
+    trade = normalize_trade(
+        lead.get("_trade")
+        or lead.get("trade")
+        or infer_trade_from_text(lead)
+        or ""
+    )
     service = trade_to_service(trade)
     if service:
         keys.add(service)
