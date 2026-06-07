@@ -1,3 +1,6 @@
+import json
+import sqlite3
+
 from utils.bot_users import _lead_service_keys
 from utils.gc_detector import enrich_lead_with_gc_detection
 from utils.opportunity_rules import extract_contractor_name, infer_trade_from_license, infer_trade_from_text
@@ -111,3 +114,41 @@ def test_no_ai_trade_owner_roof_scope_still_routes_to_roofing():
     services = _lead_service_keys(lead, "permits")
 
     assert "roofing" in services
+
+
+def test_dedup_refresh_persists_reclassified_opportunity_trade(tmp_path, monkeypatch):
+    import utils.dedup as dedup_mod
+
+    db_path = tmp_path / "leads.db"
+    monkeypatch.setattr(dedup_mod, "DB_PATH", str(db_path))
+    monkeypatch.setattr(dedup_mod, "_engine", None)
+
+    engine = dedup_mod.get_dedup_engine()
+    lead = {
+        "id": "miami-refresh-ccc-roof",
+        "address": "20300 SW 114 PL",
+        "city": "Miami",
+        "description": "REROOF asphalt shingle",
+        "contractor": "BIGFOOT CONSTRUCTION INC",
+        "contractor_number": "CCC1333168",
+        "contact_phone": "3053921012",
+        "_trade": "ROOFING",
+        "primary_service_type": "roofing",
+    }
+
+    engine.register_lead(lead, "permits")
+    enrich_lead_with_gc_detection(lead)
+    engine.refresh_consolidated_lead(lead, "permits")
+
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        "SELECT primary_service_type, is_dead_lead, lead_data FROM consolidated_leads"
+    ).fetchone()
+    conn.close()
+    stored = json.loads(row[2])
+
+    assert row[0] == "drywall"
+    assert row[1] == 0
+    assert stored["_is_gc_self_pull"] is True
+    assert stored["_original_trade"] == "ROOFING"
+    assert stored["_trade"] == "DRYWALL"

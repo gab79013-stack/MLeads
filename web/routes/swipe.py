@@ -171,30 +171,33 @@ def swipe_feed():
         params.append(f"%{city_filter}%")
 
     # ── Service category filter ────────────────────────────────────────────────
-    # 1. AI _trade match (most accurate)
-    # 2. primary_service_type match
-    # 3. Keyword in description/permit_type (fallback for unclassified leads)
+    # For subcontractor trades, match the CURRENT opportunity trade only.
+    # Do not fall back to raw description/permit_type: a taken REROOF permit still
+    # says "roof", but after self-pull detection it may be a drywall/paint lead.
     if selected_cats:
         cat_or_parts = []
+        trade_map = _get_app_const("_TRADE_SERVICE_TO_AI", {
+            "roofing": "ROOFING", "drywall": "DRYWALL", "paint": "PAINTING",
+            "electrical": "ELECTRICAL", "plumbing": "PLUMBING", "hvac": "HVAC",
+            "flooring": "FLOORING", "concrete": "CONCRETE", "framing": "FRAMING",
+            "windows": "WINDOWS", "landscaping": "LANDSCAPING", "deconstruction": "DEMOLITION",
+            "insulation": "INSULATION",
+        })
+        service_type_cats = _get_app_const("_SERVICE_TYPE_CATS", set())
         for cat in selected_cats:
-            parts = []
-            ai_trades = [t for t, c in _get_app_const("_AI_TRADE_MAP", {}).items() if c == cat]
-            if ai_trades:
-                ph = ",".join("?" * len(ai_trades))
-                parts.append(f"UPPER(json_extract(lead_data, '$._trade')) IN ({ph})")
-                params.extend(ai_trades)
-            parts.append("primary_service_type = ?")
-            params.append(cat)
-            # Keyword fallback from _get_app_const("_SERVICE_CAT_KEYWORDS", {})
-            if cat in _get_app_const("_SERVICE_CAT_KEYWORDS", {}):
-                kws = _get_app_const("_SERVICE_CAT_KEYWORDS", {})[cat]
-                kw_parts = []
-                for kw in kws[:3]:  # Top 3 keywords only
-                    kw_parts.append("LOWER(COALESCE(json_extract(lead_data, '$.description'), '')) LIKE ?")
-                    params.append(f"%{kw}%")
-                parts.append("(" + " OR ".join(kw_parts) + ")")
-            cat_or_parts.append("(" + " OR ".join(parts) + ")")
-        conditions.append("(" + " OR ".join(cat_or_parts) + ")")
+            if cat in trade_map:
+                ai_trade = trade_map[cat]
+                cat_or_parts.append(
+                    "(primary_service_type = ? "
+                    "OR UPPER(COALESCE(json_extract(lead_data, '$._trade'), '')) = ? "
+                    "OR UPPER(COALESCE(json_extract(lead_data, '$._sub_trades'), '')) LIKE ?)"
+                )
+                params.extend([cat, ai_trade, f'%"{ai_trade}"%'])
+            elif cat in service_type_cats:
+                cat_or_parts.append("primary_service_type = ?")
+                params.append(cat)
+        if cat_or_parts:
+            conditions.append("(" + " OR ".join(cat_or_parts) + ")")
 
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 

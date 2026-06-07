@@ -191,6 +191,14 @@ class BaseAgent(ABC):
                         except:
                             lat = lon = None
                         
+                        primary_service_type = lead.get('primary_service_type', lead.get('_trade', ''))
+                        try:
+                            from utils.opportunity_rules import current_opportunity_services
+                            opportunity_services = current_opportunity_services(lead, self.agent_key)
+                        except Exception:
+                            opportunity_services = {primary_service_type} if primary_service_type else set()
+                        is_dead_lead = bool(lead.get('_is_gc_self_pull') and not opportunity_services)
+
                         cur.execute("""
                             INSERT INTO consolidated_leads (
                                 address_key, address, city, agent_sources,
@@ -205,7 +213,7 @@ class BaseAgent(ABC):
                                 %s, %s, %s, %s,
                                 NOW(), NOW(), %s,
                                 %s, %s, %s,
-                                FALSE, FALSE,
+                                %s, FALSE,
                                 %s, %s, %s,
                                 %s, %s,
                                 %s, %s,
@@ -214,15 +222,20 @@ class BaseAgent(ABC):
                             ON CONFLICT (address_key) DO UPDATE SET
                                 last_updated = NOW(),
                                 lead_data = EXCLUDED.lead_data,
+                                primary_service_type = EXCLUDED.primary_service_type,
+                                has_contact = EXCLUDED.has_contact,
+                                has_phone = EXCLUDED.has_phone,
+                                is_dead_lead = EXCLUDED.is_dead_lead,
                                 gc_score = EXCLUDED.gc_score,
                                 subcontractor_score = EXCLUDED.subcontractor_score,
                                 insurance_score = EXCLUDED.insurance_score
                         """, (
                             str(lead_id), address, city, agent_sources,
                             _json.dumps(lead, default=str),
-                            lead.get('primary_service_type', lead.get('_trade', '')),
+                            primary_service_type,
                             bool(lead.get('contact_phone') or lead.get('contact_email')),
                             bool(lead.get('contact_phone')),
+                            is_dead_lead,
                             sub_score, gc_score, ins_score,
                             year_built, lead.get('property_roof_material'),
                             lead.get('property_value'), lead.get('property_sqft'),
@@ -312,6 +325,16 @@ class BaseAgent(ABC):
             pass
         except Exception as e:
             logger.debug(f"[{self.agent_key}] Tripartite scoring error: {e}")
+
+        # Paso 3b-1b: Refresh SQLite consolidated row after AI/gc/scoring.
+        # register_lead() wrote the row before classification; without this,
+        # web filters can use stale primary_service_type/is_dead_lead and leak
+        # taken same-trade permits back into subcontractor feeds.
+        for lead in new_leads:
+            try:
+                dedup.refresh_consolidated_lead(lead, self.agent_key)
+            except Exception as e:
+                logger.debug(f"[{self.agent_key}] Consolidated refresh error: {e}")
 
         # Paso 3b-2: Route leads to GCs and Subs
         try:

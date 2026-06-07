@@ -168,6 +168,17 @@ class DeduplicationEngine:
                         notified       INTEGER DEFAULT 0
                     )
                 """)
+                for ddl in (
+                    "ALTER TABLE consolidated_leads ADD COLUMN primary_service_type TEXT",
+                    "ALTER TABLE consolidated_leads ADD COLUMN has_contact INTEGER DEFAULT 0",
+                    "ALTER TABLE consolidated_leads ADD COLUMN has_phone INTEGER DEFAULT 0",
+                    "ALTER TABLE consolidated_leads ADD COLUMN is_dead_lead INTEGER DEFAULT 0",
+                ):
+                    try:
+                        conn.execute(ddl)
+                    except sqlite3.OperationalError as e:
+                        if "duplicate column" not in str(e).lower():
+                            raise
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS property_signals (
                         id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -291,13 +302,22 @@ class DeduplicationEngine:
                 else:
                     primary_service_type = lead.get("service_type") or (agents[0] if agents else None)
 
-                # Compute has_contact / has_phone / is_dead_lead from lead data
+                # Compute has_contact / has_phone / is_dead_lead from lead data.
+                # A same-trade self-pull is NOT automatically dead: if gc_detector
+                # reclassified it to downstream trades, it remains sellable to those
+                # trades and must stay visible in the swipe feed. It is dead only
+                # when no current opportunity service remains.
                 has_contact = 1 if (
                     (lead.get("contact_phone") or "").strip()
                     or (lead.get("contact_email") or "").strip()
                 ) else 0
                 has_phone    = 1 if (lead.get("contact_phone") or "").strip() else 0
-                is_dead_lead = 1 if lead.get("_is_gc_self_pull") else 0
+                try:
+                    from utils.opportunity_rules import current_opportunity_services
+                    opportunity_services = current_opportunity_services(lead, agents[0] if agents else "")
+                except Exception:
+                    opportunity_services = {primary_service_type} if primary_service_type else set()
+                is_dead_lead = 1 if (lead.get("_is_gc_self_pull") and not opportunity_services) else 0
 
                 conn.execute("""
                     INSERT OR REPLACE INTO consolidated_leads
@@ -323,6 +343,20 @@ class DeduplicationEngine:
                 conn.commit()
         except Exception as e:
             logger.debug(f"[Dedup] Persist consolidated error: {e}")
+
+    def refresh_consolidated_lead(self, lead: dict, agent_key: str = ""):
+        """Refresh consolidated_leads after AI classification/scoring/routing.
+
+        register_lead() persists the row before downstream enrichers run. Call
+        this after gc_detector/opportunity rules so SQLite-backed web views use
+        the current opportunity trade, primary_service_type and is_dead_lead.
+        """
+        address = lead.get("address", "")
+        city = lead.get("city", "")
+        if not address:
+            return
+        agents = lead.get("_cross_agent_sources") or [agent_key or lead.get("_agent_key") or "unknown"]
+        self._persist_consolidated(_address_key(address, city), lead, list(agents))
 
     def _record_signal(self, address_key: str, agent_key: str, lead: dict):
         """Registra una señal de un agente para una propiedad."""
