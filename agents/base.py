@@ -11,6 +11,7 @@ Clase base para todos los agentes.
 """
 
 import logging
+import os
 from abc import ABC, abstractmethod
 from utils.db import is_sent, mark_sent
 from utils.telegram import send_message, send_message_to
@@ -46,6 +47,7 @@ try:
     from utils.gc_detector import enrich_lead_with_gc_detection as _gc_detect
     _GC_DETECTOR_AVAILABLE = True
 except Exception:
+    _gc_detect = None
     _GC_DETECTOR_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
@@ -277,6 +279,16 @@ class BaseAgent(ABC):
                 except Exception as e:
                     logger.debug(f"[{self.agent_key}] AI classify error: {e}")
 
+        # Paso 3b-ii: Detectar contractor self-pull ("lead tomado")
+        # Debe correr DESPUÉS de la clasificación AI y ANTES de scoring/routing,
+        # para que scores, CRM y fanout usen el trade de oportunidad real.
+        if _GC_DETECTOR_AVAILABLE and _gc_detect:
+            for lead in new_leads:
+                try:
+                    _gc_detect(lead)
+                except Exception as e:
+                    logger.debug(f"[{self.agent_key}] GC detect error: {e}")
+
         # Paso 3b-0: Enriquecer con Property DNA (year built, roof, value, flood zone)
         try:
             from utils.property_dna import get_property_dna
@@ -339,16 +351,6 @@ class BaseAgent(ABC):
             self._sync_to_postgres(new_leads)
         except Exception as e:
             logger.debug(f"[{self.agent_key}] PG sync error: {e}")
-
-        # Paso 3b-ii: Detectar GC self-pull ("lead muerto")
-        # Debe correr DESPUÉS de la clasificación AI para tener _trade disponible
-        if _GC_DETECTOR_AVAILABLE:
-            for lead in new_leads:
-                if lead.get("contractor") or lead.get("gc_name"):
-                    try:
-                        _gc_detect(lead)
-                    except Exception as e:
-                        logger.debug(f"[{self.agent_key}] GC detect error: {e}")
 
         # Paso 3c: Validate contractor licenses on leads that have them
         if _LICENSE_VALIDATOR_AVAILABLE:

@@ -27,6 +27,12 @@ This ensures subcontractors only see leads where they have a REAL opportunity.
 import re
 import logging
 
+try:
+    from utils.opportunity_rules import extract_contractor_name, infer_trade_from_license
+except Exception:  # pragma: no cover - keep detector safe during partial installs
+    extract_contractor_name = None
+    infer_trade_from_license = None
+
 logger = logging.getLogger(__name__)
 
 # ── Generic company terms (not trade-specific) ──────────────────────────────
@@ -131,49 +137,62 @@ def _tokens(name: str) -> set[str]:
 def detect_gc_self_pull(lead: dict) -> dict:
     """Detect if GC is specialized in the same trade as the permit."""
     gc_raw = (
-        lead.get("contractor")
-        or lead.get("gc_name")
-        or lead.get("owner")
-        or ""
+        extract_contractor_name(lead) if extract_contractor_name else (
+            lead.get("contractor")
+            or lead.get("gc_name")
+            or lead.get("owner")
+            or ""
+        )
     ).strip()
 
     trade = (lead.get("_trade") or "GENERAL").upper()
+    license_trade = infer_trade_from_license(lead) if infer_trade_from_license else None
 
-    if not gc_raw or trade == "GENERAL":
+    if not gc_raw and license_trade != trade:
+        return _no_match(gc_raw)
+    if trade == "GENERAL":
         return _no_match(gc_raw)
 
     trade_keywords = _TRADE_GC_KEYWORDS.get(trade, [])
-    if not trade_keywords:
+    if not trade_keywords and license_trade != trade:
         return _no_match(gc_raw)
 
     gc_norm = _normalize_name(gc_raw)
     gc_toks = _tokens(gc_raw)
 
     non_generic_toks = gc_toks - _GENERIC_TERMS
-    if not non_generic_toks:
+    if not non_generic_toks and license_trade != trade:
         return _no_match(gc_raw)
 
     matched_kw = None
+    match_source = "name"
     for kw in trade_keywords:
         if kw in gc_norm:
             matched_kw = kw
             break
 
+    if license_trade == trade:
+        matched_kw = matched_kw or f"license:{license_trade}"
+        match_source = "license"
+
     if not matched_kw:
         return _no_match(gc_raw)
 
     confidence = 0.5
-    if any(matched_kw in tok for tok in non_generic_toks):
+    if match_source == "license":
+        confidence = 0.95
+    elif any(matched_kw in tok for tok in non_generic_toks):
         confidence = 0.85
     if len(non_generic_toks) == 1:
         confidence = min(confidence + 0.1, 0.98)
-    if len(non_generic_toks) >= 4:
+    if len(non_generic_toks) >= 4 and match_source != "license":
         confidence = max(confidence - 0.15, 0.40)
 
     is_self_pull = confidence >= 0.5
 
     reason = (
-        f"GC '{gc_raw}' is a {trade.title()} specialist (keyword: '{matched_kw}', conf: {confidence:.0%})"
+        f"GC '{gc_raw}' is a {trade.title()} specialist "
+        f"({match_source}: '{matched_kw}', conf: {confidence:.0%})"
     )
     logger.debug(f"[gc_detector] {reason}")
 

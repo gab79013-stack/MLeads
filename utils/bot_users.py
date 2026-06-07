@@ -22,6 +22,10 @@ from datetime import datetime, timedelta
 from typing import Iterable
 
 from utils.web_db import get_db_connection
+try:
+    from utils.opportunity_rules import current_opportunity_services
+except Exception:  # pragma: no cover
+    current_opportunity_services = None
 
 logger = logging.getLogger(__name__)
 
@@ -483,9 +487,18 @@ def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> floa
 
 def _lead_service_keys(lead: dict, agent_key: str) -> set[str]:
     """
-    Derive the set of service keys a lead matches. Always includes the
-    source agent_key, plus any keyword matches in description/permit_type.
+    Derive the set of service keys a lead matches.
+
+    Use the post-classification opportunity trade first. This prevents routing a
+    permit back to a subscriber whose trade is already taken by the contractor
+    on the permit (for example, a CCC roofing contractor pulling a reroof permit
+    should not be sent to roofing companies).
     """
+    if current_opportunity_services:
+        opportunity_keys = current_opportunity_services(lead, agent_key)
+        if opportunity_keys:
+            return opportunity_keys
+
     keys: set[str] = set()
     if agent_key:
         keys.add(agent_key)
