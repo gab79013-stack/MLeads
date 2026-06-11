@@ -177,7 +177,7 @@
         .pills{display:flex;flex-wrap:wrap;gap:7px}
         .pill{padding:8px 13px;border-radius:999px;border:1.5px solid var(--border);background:var(--surface);font-size:12px;font-weight:600;color:var(--fg2);cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap}
         .pill:hover{opacity:.8}
-        /* Subcontractor pills: purple theme */
+        /* Legacy trade pills theme (unused in GC-only UI) */
         .pill.sub:hover{border-color:#c4b5fd;color:#7c3aed}
         .pill.sub.on{background:#7c3aed;border-color:#7c3aed;color:#fff}
         /* Lead type pills: orange theme */
@@ -379,46 +379,21 @@
                 <button class="tsw" id="hotToggle" role="switch" aria-checked="false"></button>
             </div>
 
-            <!-- Subcontractors -->
+            <!-- GC opportunity type -->
             <div>
                 <div class="fsec">
-                    <div class="fsec-icon purple">👷</div>
-                    <span class="fsec-label">Subcontratistas</span>
-                    <span class="fsec-count" id="subCount">0</span>
-                </div>
-                <div class="pills" id="subPills">
-                    <button class="pill sub" data-cat="roofing">🏠 Roofing</button>
-                    <button class="pill sub" data-cat="drywall">🧱 Drywall</button>
-                    <button class="pill sub" data-cat="paint">🎨 Pintura</button>
-                    <button class="pill sub" data-cat="electrical">⚡ Eléctrico</button>
-                    <button class="pill sub" data-cat="plumbing">🔧 Plomería</button>
-                    <button class="pill sub" data-cat="hvac">❄️ HVAC</button>
-                    <button class="pill sub" data-cat="flooring">🪵 Pisos</button>
-                    <button class="pill sub" data-cat="concrete">🧱 Concreto</button>
-                    <button class="pill sub" data-cat="framing">🪚 Framing</button>
-                    <button class="pill sub" data-cat="windows">🪟 Ventanas</button>
-                    <button class="pill sub" data-cat="landscaping">🌿 Paisajismo</button>
-                </div>
-            </div>
-
-            <!-- Lead type -->
-            <div>
-                <div class="fsec">
-                    <div class="fsec-icon orange">📋</div>
-                    <span class="fsec-label">Tipo de Lead</span>
+                    <div class="fsec-icon orange">🏗️</div>
+                    <span class="fsec-label">Oportunidad para GC</span>
                     <span class="fsec-count" id="ltypeCount">0</span>
                 </div>
                 <div class="pills" id="ltypePills">
-                    <button class="pill ltype" data-cat="permits">📋 Permisos</button>
-                    <button class="pill ltype" data-cat="construction">👷 Construcción Activa</button>
-                    <button class="pill ltype" data-cat="realestate">🏡 Venta de Propiedad</button>
-                    <button class="pill ltype" data-cat="solar">☀️ Solar</button>
-                    <button class="pill ltype" data-cat="flood">💧 Daño por Agua</button>
-                    <button class="pill ltype" data-cat="energy">⚡ Eficiencia Energética</button>
-                    <button class="pill ltype" data-cat="rodents">🐀 Control de Plagas</button>
-                    <button class="pill ltype" data-cat="deconstruction">🏚️ Demolición</button>
-                    <button class="pill ltype" data-cat="remodel">🔨 Remodelación</button>
-                    <button class="pill ltype" data-cat="crossdata">🔮 Cross-Data</button>
+                    <button class="pill ltype" data-cat="flood">⛈️ Daño por tormenta</button>
+                    <button class="pill ltype" data-cat="remodel">🔨 Remodelación / reparación</button>
+                    <button class="pill ltype" data-cat="permits">📋 Permisos listos</button>
+                    <button class="pill ltype" data-cat="construction">🏗️ Proyecto sin GC confirmado</button>
+                    <button class="pill ltype" data-cat="deconstruction">🏚️ Demolición / rebuild</button>
+                    <button class="pill ltype" data-cat="realestate">🏡 Venta de propiedad</button>
+                    <button class="pill ltype" data-cat="crossdata">🔮 Cross-data verificado</button>
                 </div>
             </div>
 
@@ -494,7 +469,7 @@
                 <div class="perk"><div class="perk-icon pi-g">🎁</div><span><strong>40 leads gratis</strong> — sin tarjeta de crédito</span></div>
                 <div class="perk"><div class="perk-icon pi-b">📞</div><span><strong>Contacto completo</strong> — Teléfono, email y contratista</span></div>
                 <div class="perk"><div class="perk-icon pi-p">🔥</div><span><strong>Leads HOT en tiempo real</strong> — Sé el primero en contactar</span></div>
-                <div class="perk"><div class="perk-icon pi-o">📍</div><span><strong>Filtros por zona y servicio</strong> — Roofing, solar, eléctrico…</span></div>
+                <div class="perk"><div class="perk-icon pi-o">📍</div><span><strong>Filtros por zona y oportunidad</strong> — tormenta, remodelación, permisos…</span></div>
             </div>
             <button class="oauth-btn google" id="btnGoogle">
                 <svg viewBox="0 0 24 24">
@@ -622,8 +597,8 @@ const authHdrs = () => { const h = {'Content-Type':'application/json'}; const t 
 // ── Filter state ──────────────────────────────────────────────────────────────
 const F = {
     hotOnly:  false,
-    subCats:  new Set(),   // roofing, drywall, paint, electrical, plumbing, hvac, flooring, concrete, framing, windows, landscaping
-    leadTypes: new Set(),  // permits, construction, solar, realestate, flood, energy, rodents, deconstruction, remodel
+    subCats:  new Set(),   // Legacy state ignored by GC-only UI.
+    leadTypes: new Set(),  // GC opportunities: permits, open/pre-award construction, realestate, flood, deconstruction, remodel, crossdata
     city:     '',
     radius:   25,
     minVal:   0,
@@ -635,7 +610,6 @@ function saveFilters() {
     try {
         const snap = {
             hotOnly:   F.hotOnly,
-            subCats:   [...F.subCats],
             leadTypes: [...F.leadTypes],
             city:      F.city,
             radius:    F.radius,
@@ -675,7 +649,7 @@ function loadFilters() {
         if (!raw) return;
         const snap = JSON.parse(raw);
         F.hotOnly   = snap.hotOnly  ?? false;
-        F.subCats   = new Set(snap.subCats  || []);
+        F.subCats   = new Set();
         F.leadTypes = new Set(snap.leadTypes || []);
         F.city      = snap.city   || '';
         F.radius    = snap.radius ?? 25;
@@ -745,66 +719,13 @@ function fmtPhone(p) {
     return String(p);
 }
 
-// ── Subcontractor type affinity mapping ───────────────────────────────────────
-const _SUBCAT_KEYWORDS = {
-    roofing:     ['roof','roofing','re-roof','reroof','shingle','tile roof','torch down','tpo','flat roof','gutter','fascia','eave'],
-    drywall:     ['drywall','sheetrock','gypsum','taping','texturing','wallboard','wall board','partition','plaster'],
-    paint:       ['paint','painting','repaint','painter','stucco paint','primer','exterior paint','coating','finishes'],
-    landscaping: ['landscap','hardscape','irrigation','sprinkler','retaining wall','paver','turf','grading','tree','garden'],
-    electrical:  ['electrical','panel upgrade','ev charger','200 amp','rewire','sub panel','wiring','low voltage','circuit','outlet'],
-    plumbing:    ['plumb','plumber','pipe','sewer','drain','water heater','gas line','fixture','bathroom','kitchen remodel'],
-    hvac:        ['hvac','heating','cooling','furnace','ac unit','air condition','duct','ventilation','heat pump','thermostat'],
-    flooring:    ['floor','flooring','hardwood','tile','carpet','laminate','vinyl','epoxy floor','subfloor','slab'],
-    concrete:    ['concrete','cement','foundation','slab','flatwork','driveway','sidewalk','curb','retaining wall','footing'],
-    framing:     ['framing','frame','lumber','stud','joist','beam','structural','addition','adu','new construction','rough'],
-    windows:     ['window','door','skylight','glass','glazing','storefront','sliding door','french door','entry','fenestration'],
-};
-const _SUBCAT_SERVICE_TYPES = {
-    roofing:     ['permits','construction','flood'],
-    drywall:     ['construction','permits','flood','remodel'],
-    paint:       ['construction','permits','remodel'],
-    landscaping: ['permits','construction','realestate'],
-    electrical:  ['permits','construction','energy','solar','remodel'],
-    plumbing:    ['permits','construction','remodel','realestate'],
-    hvac:        ['permits','construction','energy','remodel'],
-    flooring:    ['construction','permits','remodel','realestate'],
-    concrete:    ['permits','construction','deconstruction'],
-    framing:     ['permits','construction'],
-    windows:     ['permits','construction','remodel','realestate'],
-};
-
-/**
- * Compute a 0-100 type-match score based on user's active subCat filters.
- * If no filters active, returns the raw lead score.
- */
+// ── GC opportunity affinity scoring ──────────────────────────────────────────
 function _computeTypeMatchScore(lead) {
-    // No filter → use raw score
-    if (F.subCats.size === 0 && F.leadTypes.size === 0) return Number(lead.score || 0);
+    if (F.leadTypes.size === 0) return Number(lead.score || 0);
 
-    const desc        = ((lead.description || '') + ' ' + (lead.service_label || '') + ' ' + (lead.service_type || '')).toLowerCase();
     const serviceType = (lead.service_type || '').toLowerCase();
-    let   bestMatch   = 0;
-
-    const activeCats = [...F.subCats];
-    for (const cat of activeCats) {
-        let match = 0;
-        // Service type match → 50 pts
-        const svcTypes = _SUBCAT_SERVICE_TYPES[cat] || [];
-        if (svcTypes.includes(serviceType)) match += 50;
-        // Keyword match in description → up to 50 pts
-        const kws = _SUBCAT_KEYWORDS[cat] || [];
-        const hits = kws.filter(k => desc.includes(k)).length;
-        match += Math.min(50, Math.round(hits / Math.max(kws.length, 1) * 50 * 3));
-        bestMatch = Math.max(bestMatch, match);
-    }
-
-    // Lead type pills also contribute
-    for (const lt of F.leadTypes) {
-        if ((lead.service_type || '').toLowerCase() === lt.toLowerCase()) bestMatch = Math.max(bestMatch, 90);
-    }
-
-    // Scale: 0-100 capped, blended with raw score at 30%
-    const typeScore = Math.min(100, bestMatch);
+    const matched = [...F.leadTypes].some(lt => serviceType === lt.toLowerCase());
+    const typeScore = matched ? 90 : 0;
     const rawScore  = Number(lead.score || 0);
     return Math.round(typeScore * 0.7 + rawScore * 0.3);
 }
@@ -906,8 +827,8 @@ async function fetchFeed() {
             if (F.radius > 0) url.searchParams.set('radius_miles', F.radius);
         }
 
-        // Combine subcontractor + lead type cats
-        const allCats = [...F.subCats, ...F.leadTypes];
+        // GC-only feed: send only GC opportunity categories, never trade filters.
+        const allCats = [...F.leadTypes];
         if (allCats.length > 0) url.searchParams.set('service_cats', allCats.join(','));
 
         const res  = await fetch(url, { headers: authHdrs() });
@@ -1063,6 +984,36 @@ function buildCard(lead, idx) {
         lead.owner       ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Owner':'Propietario'}:</span><span class="det-v">${esc(lead.owner)}</span></div>` : '',
     ].filter(Boolean).join('');
 
+    // ── GC buyer insight section ───────────────────────────────────────────────
+    const insight = lead.gc_insight || {};
+    const conf = insight.confidence || lead.gc_confidence || 'candidate';
+    const confLabelMap = {
+        verified: isEN ? 'Verified' : 'Verificado',
+        candidate: isEN ? 'Candidate' : 'Candidato',
+        exploratory: isEN ? 'Exploratory' : 'Exploratorio',
+    };
+    const confColorMap = { verified:'#15803d', candidate:'#c2410c', exploratory:'#6b7280' };
+    const confLabel = insight.confidence_label || confLabelMap[conf] || conf;
+    const confColor = confColorMap[conf] || '#6b7280';
+    const gcBadges = (insight.badges || lead.gc_badges || []).map(b =>
+        `<span class="rc" style="background:#ecfdf5;border-color:#bbf7d0;color:#166534;font-weight:700">${esc(b)}</span>`
+    ).join('');
+    const gcReasons = (insight.reasons || []).map(r =>
+        `<div class="det-row"><span class="det-k">▸</span><span class="det-v wrap">${esc(r)}</span></div>`
+    ).join('');
+    const sourceUrl = insight.source_url || lead.source_url || '';
+    const sourceBtn = sourceUrl
+        ? `<a class="cta" href="${esc(sourceUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#1d4ed8;border-color:#bfdbfe;background:#eff6ff">🔎 ${isEN?'View source':'Ver fuente'}</a>`
+        : `<span class="rc" style="background:#f8fafc;color:#64748b">${esc(insight.source_label || lead.source_label || (isEN?'Unverified source':'Fuente no verificada'))}</span>`;
+    const addPipelineBtn = `<button type="button" onclick="event.stopPropagation(); commit(this.closest('.card'), 'like')" style="border:0;border-radius:9px;background:#16a34a;color:#fff;font-size:11.5px;font-weight:800;padding:7px 11px;cursor:pointer">➕ ${isEN?'Add to pipeline':'Agregar al pipeline'}</button>`;
+    const gcInsightHtml = (gcBadges || gcReasons || sourceUrl || insight.source_label) ? `<div class="det-sec gc-insight">
+        <div class="det-title">🎯 ${isEN?'Why this helps a GC':'Por qué le sirve a un GC'}</div>
+        <div class="det-row"><span class="det-k">▸ ${isEN?'Confidence level':'Nivel de confianza'}:</span><span class="det-v" style="font-weight:800;color:${confColor}">${esc(confLabel)}</span></div>
+        ${gcBadges ? `<div class="reasons">${gcBadges}</div>` : ''}
+        ${gcReasons}
+        <div class="contact-row" style="margin-top:4px">${sourceBtn}${addPipelineBtn}</div>
+    </div>` : '';
+
     // ── Inspection block ───────────────────────────────────────────────────────
     let inspHtml = '';
     if (lead.inspection_date && inspDays !== null && inspDays >= 0) {
@@ -1142,7 +1093,7 @@ function buildCard(lead, idx) {
         <div class="${heroClass}">
             <div class="hero-layout">
                 <div class="therm-col">
-                    <span class="therm-label">${F.subCats.size > 0 || F.leadTypes.size > 0 ? '🎯' : '°C'}</span>
+                    <span class="therm-label">${F.leadTypes.size > 0 ? '🎯' : '°C'}</span>
                     ${thermometerSVG(thermScore, uid)}
                 </div>
                 <div class="hero-info">
@@ -1181,6 +1132,8 @@ function buildCard(lead, idx) {
         </div>
 
         <div class="cbody">
+            ${gcInsightHtml}
+
             ${rows_ai ? `<div class="det-sec">
                 <div class="det-title">🤖 ${isEN?'AI Analysis (0brix)':'Análisis IA (0brix)'}</div>
                 ${rows_ai}
@@ -1240,7 +1193,7 @@ function showEmpty() {
     el.className = 'empty';
 
     // Build a contextual hint based on active filters
-    const hasFilters = F.city || F.leadTypes.size > 0 || F.subCats.size > 0 || F.hotOnly || F.minVal > 0;
+    const hasFilters = F.city || F.leadTypes.size > 0 || F.hotOnly || F.minVal > 0;
     let hint = '';
     let suggestions = [];
 
@@ -1248,7 +1201,7 @@ function showEmpty() {
         const parts = [];
         if (F.leadTypes.size > 0) {
             const labels = [...F.leadTypes].map(s => LTYPE_LABELS[s] || s).join(', ');
-            parts.push(CURRENT_LANG === 'es' ? `servicio "${labels}"` : `"${labels}" service`);
+            parts.push(CURRENT_LANG === 'es' ? `oportunidad "${labels}"` : `"${labels}" opportunity`);
         }
         if (F.city) parts.push(F.city);
         if (F.hotOnly) parts.push(CURRENT_LANG === 'es' ? 'solo leads HOT' : 'HOT leads only');
@@ -1271,7 +1224,7 @@ function showEmpty() {
             action: `F.city=''; applyFilters()`
         });
         if (F.leadTypes.size > 0) suggestions.push({
-            label: CURRENT_LANG === 'es' ? 'Ver todos los servicios' : 'All services',
+            label: CURRENT_LANG === 'es' ? 'Ver todas las oportunidades' : 'All opportunities',
             action: `F.leadTypes.clear(); applyFilters()`
         });
     } else {
@@ -1395,15 +1348,7 @@ document.getElementById('filterBtn').addEventListener('click', () => {
 });
 $backdrop.addEventListener('click', e => { if (e.target === $backdrop) $backdrop.classList.remove('open'); });
 
-// Sub pills
-document.querySelectorAll('#subPills .pill').forEach(p => {
-    p.addEventListener('click', () => {
-        p.classList.toggle('on');
-        updateCountBadge('subCount', '#subPills .pill.on');
-    });
-});
-
-// Lead type pills
+// GC opportunity pills
 document.querySelectorAll('#ltypePills .pill').forEach(p => {
     p.addEventListener('click', () => {
         p.classList.toggle('on');
@@ -1414,6 +1359,7 @@ document.querySelectorAll('#ltypePills .pill').forEach(p => {
 function updateCountBadge(badgeId, selector) {
     const n = document.querySelectorAll(selector).length;
     const el = document.getElementById(badgeId);
+    if (!el) return;
     el.textContent = n;
     el.classList.toggle('on', n > 0);
 }
@@ -1443,13 +1389,9 @@ document.querySelectorAll('.vpreset').forEach(b => {
 
 function syncDrawer() {
     document.getElementById('hotToggle').classList.toggle('on', F.hotOnly);
-    document.querySelectorAll('#subPills .pill').forEach(p =>
-        p.classList.toggle('on', F.subCats.has(p.dataset.cat))
-    );
     document.querySelectorAll('#ltypePills .pill').forEach(p =>
         p.classList.toggle('on', F.leadTypes.has(p.dataset.cat))
     );
-    updateCountBadge('subCount', '#subPills .pill.on');
     updateCountBadge('ltypeCount', '#ltypePills .pill.on');
     document.getElementById('cityInp').value = F.city;
     document.getElementById('minVal').value  = F.minVal > 0 ? F.minVal : '';
@@ -1465,7 +1407,6 @@ function syncDrawer() {
 function readDrawer() {
     F.hotOnly = document.getElementById('hotToggle').classList.contains('on');
     F.subCats.clear();
-    document.querySelectorAll('#subPills .pill.on').forEach(p => F.subCats.add(p.dataset.cat));
     F.leadTypes.clear();
     document.querySelectorAll('#ltypePills .pill.on').forEach(p => F.leadTypes.add(p.dataset.cat));
     F.city   = document.getElementById('cityInp').value.trim();
@@ -1495,25 +1436,17 @@ document.getElementById('btnReset').addEventListener('click', () => {
 function applyFilters() { saveFilters(); renderChips(); S.queue = []; fetchFeed(); }
 
 // ── Chips bar ─────────────────────────────────────────────────────────────────
-const SUB_LABELS = {
-    roofing:'🏠 Roofing', drywall:'🧱 Drywall', paint:'🎨 Pintura',
-    electrical:'⚡ Eléctrico', plumbing:'🔧 Plomería', hvac:'❄️ HVAC',
-    flooring:'🪵 Pisos', concrete:'🧱 Concreto', framing:'🪚 Framing',
-    windows:'🪟 Ventanas', landscaping:'🌿 Paisajismo',
-};
 const LTYPE_LABELS = {
-    permits:'📋 Permisos', construction:'👷 Construcción Activa',
-    realestate:'🏡 Venta de Propiedad', solar:'☀️ Solar',
-    flood:'💧 Daño por Agua', deconstruction:'🏚️ Demolición',
-    remodel:'🔨 Remodelación', energy:'⚡ Eficiencia Energética',
-    rodents:'🐀 Control de Plagas', crossdata:'🔮 Cross-Data',
+    flood:'⛈️ Daño por tormenta', remodel:'🔨 Remodelación / reparación',
+    permits:'📋 Permisos listos', construction:'🏗️ Proyecto sin GC confirmado',
+    deconstruction:'🏚️ Demolición / rebuild', realestate:'🏡 Venta de propiedad',
+    crossdata:'🔮 Cross-data verificado',
 };
 const LTYPE_LABELS_EN = {
-    permits:'📋 Permits', construction:'👷 Active Construction',
-    realestate:'🏡 Property Sale', solar:'☀️ Solar',
-    flood:'💧 Water Damage', deconstruction:'🏚️ Demolition',
-    remodel:'🔨 Remodel', energy:'⚡ Energy Efficiency',
-    rodents:'🐀 Pest Control', crossdata:'🔮 Cross-Data',
+    flood:'⛈️ Storm damage', remodel:'🔨 Remodel / repair',
+    permits:'📋 Permit-ready', construction:'🏗️ No GC confirmed',
+    deconstruction:'🏚️ Demolition / rebuild', realestate:'🏡 Property sale',
+    crossdata:'🔮 Verified cross-data',
 };
 
 function renderChips() {
@@ -1529,10 +1462,6 @@ function renderChips() {
     }
 
     if (F.hotOnly) addChip('🔥 Solo HOT', 'hot', () => { F.hotOnly = false; applyFilters(); });
-
-    F.subCats.forEach(cat => {
-        addChip(SUB_LABELS[cat] || cat, 'sub', () => { F.subCats.delete(cat); applyFilters(); });
-    });
 
     F.leadTypes.forEach(cat => {
         addChip(LTYPE_LABELS[cat] || cat, 'ltype', () => { F.leadTypes.delete(cat); applyFilters(); });
@@ -1552,7 +1481,7 @@ function renderChips() {
     }
 
     // Filter dot
-    const hasExtra = F.city || F.minVal > 0 || F.maxVal > 0 || !F.hotOnly || F.subCats.size > 0 || F.leadTypes.size > 0;
+    const hasExtra = F.city || F.minVal > 0 || F.maxVal > 0 || !F.hotOnly || F.leadTypes.size > 0;
     document.getElementById('filterDot').classList.toggle('on', hasExtra);
 }
 
@@ -1682,8 +1611,7 @@ const I18N = {
         filterReset:   'Restablecer',
         hotLabel:      '🔥 Solo leads HOT',
         hotDesc:       'Score ≥ 90 — máxima temperatura',
-        subTitle:      'Subcontratistas',
-        ltypeTitle:    'Tipo de Lead',
+        ltypeTitle:    'Oportunidad para GC',
         locationTitle: 'Ubicación',
         cityPH:        'Tu ciudad...',
         valueTitle:    'Valor del proyecto',
@@ -1720,8 +1648,7 @@ const I18N = {
         filterReset:   'Reset',
         hotLabel:      '🔥 HOT leads only',
         hotDesc:       'Score ≥ 90 — maximum heat',
-        subTitle:      'Subcontractors',
-        ltypeTitle:    'Lead Type',
+        ltypeTitle:    'GC Opportunity',
         locationTitle: 'Location',
         cityPH:        'Your city...',
         valueTitle:    'Project value',
@@ -1775,10 +1702,9 @@ function applyLang() {
     document.querySelector('.tlabel small').textContent= t('hotDesc');
     // Section labels
     const fsecLabels = document.querySelectorAll('.fsec-label');
-    if (fsecLabels[0]) fsecLabels[0].textContent = t('subTitle');
-    if (fsecLabels[1]) fsecLabels[1].textContent = t('ltypeTitle');
-    if (fsecLabels[2]) fsecLabels[2].textContent = t('locationTitle');
-    if (fsecLabels[3]) fsecLabels[3].textContent = t('valueTitle');
+    if (fsecLabels[0]) fsecLabels[0].textContent = t('ltypeTitle');
+    if (fsecLabels[1]) fsecLabels[1].textContent = t('locationTitle');
+    if (fsecLabels[2]) fsecLabels[2].textContent = t('valueTitle');
     document.getElementById('cityInp').placeholder = t('cityPH');
     document.getElementById('btnApply').textContent = t('applyBtn');
     document.getElementById('contactsTitle').textContent = t('contactsTitle');
@@ -1792,14 +1718,6 @@ function applyLang() {
     document.querySelectorAll('#ltypePills .pill').forEach(p => {
         const cat = p.dataset.cat;
         if (ltypeLabels[cat]) p.textContent = ltypeLabels[cat];
-    });
-    // Sub pills
-    const subLabels_en = { roofing:'🏠 Roofing', drywall:'🧱 Drywall', paint:'🎨 Painting', electrical:'⚡ Electrical', plumbing:'🔧 Plumbing', hvac:'❄️ HVAC', flooring:'🪵 Flooring', concrete:'🧱 Concrete', framing:'🪚 Framing', windows:'🪟 Windows', landscaping:'🌿 Landscaping' };
-    const subLabels_es = { roofing:'🏠 Roofing', drywall:'🧱 Drywall', paint:'🎨 Pintura', electrical:'⚡ Eléctrico', plumbing:'🔧 Plomería', hvac:'❄️ HVAC', flooring:'🪵 Pisos', concrete:'🧱 Concreto', framing:'🪚 Framing', windows:'🪟 Ventanas', landscaping:'🌿 Paisajismo' };
-    const subL = CURRENT_LANG === 'en' ? subLabels_en : subLabels_es;
-    document.querySelectorAll('#subPills .pill').forEach(p => {
-        const cat = p.dataset.cat;
-        if (subL[cat]) p.textContent = subL[cat];
     });
 }
 

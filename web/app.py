@@ -34,6 +34,7 @@ from workers.telegram_bot import start_bot_worker
 from utils import bot_users as bu
 from utils import billing
 from web.helpers.service_filter import build_service_category_filter
+from web.helpers.gc_interest import build_gc_insight, build_gc_interest_sql_filter, is_gc_interesting_lead
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -2583,11 +2584,10 @@ def swipe_feed():
       - max_value:     maximum project value in USD (0 = no limit)
       - city:          filter by city name (partial match)
       - radius_miles:  miles radius from city (requires city param)
-      - service_cats:  comma-separated list of categories
-                       subcontractor: roofing, drywall, paint, electrical,
-                         plumbing, hvac, flooring, concrete, framing, windows, landscaping
-                       lead type: solar, permits, construction, realestate,
-                         flood, energy, rodents, deconstruction, remodel
+      - service_cats:  comma-separated GC opportunity categories:
+                       flood, permits, remodel, deconstruction, realestate,
+                       crossdata, construction (construction is shown only when
+                       pre-award / no GC is confirmed)
 
     Anonymous visitors can view up to ANON_LEAD_LIMIT leads total.
     """
@@ -2705,6 +2705,10 @@ def swipe_feed():
     # is_dead_lead is a pre-computed indexed column set by gc_detector.py via base.py.
     conditions.append("COALESCE(is_dead_lead, 0) = 0")
 
+    # GC buyer-intent filter — the public swipe feed is now GC-only. Exclude
+    # already-awarded jobs and non-GC opportunity types before fetching a pool.
+    conditions.append(build_gc_interest_sql_filter())
+
     # City filter: without radius → simple LIKE; with radius → post-process
     if city_filter and not do_radius:
         conditions.append("LOWER(city) LIKE LOWER(?)")
@@ -2727,7 +2731,7 @@ def swipe_feed():
 
     # Fetch a large pool for diversity, then apply city round-robin
     # This prevents any single city from monopolizing the feed
-    fetch_limit = max(limit * 30, 300) if not do_radius else limit * 10
+    fetch_limit = max(limit * 50, 500) if not do_radius else limit * 20
 
     query = f"""
         SELECT address_key, address, city, agent_sources, lead_data,
@@ -2847,6 +2851,9 @@ def swipe_feed():
             or (row_dict["agent_sources"].split(",")[0]
                 if row_dict.get("agent_sources") else None)
         )
+        if not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        gc_insight = build_gc_insight(lead_data, service_type)
         service_info = service_types_map.get(service_type, {})
 
         desc = (lead_data.get("description") or lead_data.get("desc") or "")[:300]
@@ -2889,6 +2896,11 @@ def swipe_feed():
             "service_type":     service_type,
             "service_label":    service_info.get("label", ""),
             "service_emoji":    service_info.get("emoji", ""),
+            "gc_insight":       gc_insight,
+            "gc_confidence":    gc_insight.get("confidence", ""),
+            "gc_badges":        gc_insight.get("badges", []),
+            "source_url":       gc_insight.get("source_url", ""),
+            "source_label":     gc_insight.get("source_label", ""),
             "contractor":       contractor,
             "owner":            owner,
             "phone":            phone,
