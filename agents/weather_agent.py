@@ -417,10 +417,12 @@ def build_spc_lead(report: dict, metro: dict) -> dict:
         "metro_priority": metro["priority"],
         "impact_radius_miles": radius,
         "recommended_services": services,
-        "service_type": "roofing",
-        "primary_service_type": "roofing",
-        "_trade": "ROOFING",
-        "_sub_trades": [s.upper() for s in services if s != "roofing"],
+        # GC-facing category should be storm/weather damage; downstream trades
+        # remain in recommended_services/_sub_trades for routing and copy.
+        "service_type": "weather",
+        "primary_service_type": "weather",
+        "_trade": "STORM_DAMAGE",
+        "_sub_trades": [s.upper() for s in services],
         "_urgency": "HIGH" if sev in ("HIGH", "CRITICAL") else "MEDIUM",
         "_project_scope": "EMERGENCY" if sev in ("HIGH", "CRITICAL") else "REPAIR",
         "_decision_maker": "GC",
@@ -436,6 +438,8 @@ def build_spc_lead(report: dict, metro: dict) -> dict:
     if metro["priority"] == 1:
         severity_boost += 5
     scoring["score"] = min(100, scoring.get("score", 50) + severity_boost)
+    if sev in ("HIGH", "CRITICAL") and metro["priority"] == 1:
+        scoring["score"] = max(scoring["score"], 90)
     if scoring["score"] >= 90:
         scoring["grade"], scoring["grade_emoji"] = "HOT", "fire"
     elif scoring["score"] >= 70:

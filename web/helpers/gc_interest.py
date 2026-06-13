@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Mapping
+from urllib.parse import urlencode
 
 GC_OPPORTUNITY_SERVICE_TYPES = {
     "flood",
@@ -85,6 +86,29 @@ _SOURCE_URL_FIELDS = (
     "source_link",
     "report_url",
 )
+
+_SOCRATA_PERMIT_SOURCES = {
+    "honolulu1": ("https://data.honolulu.gov/resource/3fr8-2hnx.json", "buildingpermitno"),
+    "honolulu2": ("https://data.honolulu.gov/resource/4vab-c87q.json", "buildingpermitno"),
+    "austin": ("https://data.austintexas.gov/resource/3syk-w9eu.json", "permit_number"),
+    "sandiego": ("https://data.sandiegocounty.gov/resource/dyzh-7eat.json", "record_id"),
+}
+
+_PLACEHOLDER_TEXT_RE = re.compile(
+    r"\b(?:"
+    r"1234\s+maple|"
+    r"gc-demo|"
+    r"example\.(?:com|org|net|gov)|"
+    r"example@|"
+    r"test@|"
+    r"dummy|"
+    r"sample\s+lead|"
+    r"fake\s+lead|"
+    r"lorem\s+ipsum"
+    r")\b",
+    re.IGNORECASE,
+)
+_PLACEHOLDER_PHONE_RE = re.compile(r"\b(?:\(?\d{3}\)?[-.\s]*)?555[-.\s]*01\d{2}\b")
 
 
 def _text(*values: Any) -> str:
@@ -169,7 +193,48 @@ def _source_url(lead: Mapping[str, Any]) -> str:
         value = str(lead.get(field) or "").strip()
         if value.startswith(("http://", "https://")):
             return value
+    source = str(lead.get("source") or "").strip().lower()
+    permit_id = str(lead.get("permit_id") or lead.get("id") or "").strip()
+    if source in _SOCRATA_PERMIT_SOURCES and permit_id:
+        base_url, permit_field = _SOCRATA_PERMIT_SOURCES[source]
+        return f"{base_url}?{urlencode({permit_field: permit_id, '$limit': 1})}"
     return ""
+
+
+def is_placeholder_or_demo_lead(lead: Mapping[str, Any], address_key: str | None = None) -> bool:
+    """Return True for synthetic/demo rows that must never appear publicly."""
+    haystack = _text(
+        address_key,
+        lead.get("address"),
+        lead.get("description"),
+        lead.get("desc"),
+        lead.get("contractor"),
+        lead.get("contractor_name"),
+        lead.get("owner"),
+        lead.get("property_owner"),
+        lead.get("contact_email"),
+        lead.get("email"),
+        lead.get("permit_id"),
+        lead.get("id"),
+        _source_url(lead),
+    )
+    phone = _text(lead.get("contact_phone"), lead.get("phone"))
+    return bool(_PLACEHOLDER_TEXT_RE.search(haystack) or _PLACEHOLDER_PHONE_RE.search(phone))
+
+
+def build_public_real_lead_sql_filter() -> str:
+    """SQLite prefilter for excluding known placeholder/demo values."""
+    return (
+        "LOWER(address_key) NOT LIKE '%demo%' "
+        "AND LOWER(address) NOT LIKE '%1234 maple%' "
+        "AND LOWER(lead_data) NOT LIKE '%example.com%' "
+        "AND LOWER(lead_data) NOT LIKE '%example.gov%' "
+        "AND LOWER(lead_data) NOT LIKE '%gc-demo%' "
+        "AND LOWER(lead_data) NOT LIKE '%dummy%' "
+        "AND LOWER(lead_data) NOT LIKE '%lorem ipsum%' "
+        "AND LOWER(lead_data) NOT LIKE '%555010%' "
+        "AND LOWER(lead_data) NOT LIKE '%555-01%'"
+    )
 
 
 def build_gc_insight(lead: Mapping[str, Any], service_type: str | None) -> dict[str, Any]:
@@ -290,17 +355,17 @@ def is_gc_interesting_lead(lead: Mapping[str, Any], service_type: str | None) ->
 def build_gc_interest_sql_filter() -> str:
     """Broad SQLite prefilter; Python `is_gc_interesting_lead` is authoritative."""
     open_terms = [
-        "owner%builder",
-        "owner-builder",
-        "homeowner",
-        "property owner",
-        "tbd",
-        "pending",
-        "not assigned",
-        "unassigned",
-        "n/a",
-        "none",
-        "unknown",
+        "%owner%builder%",
+        "%owner-builder%",
+        "%homeowner%",
+        "%property owner%",
+        "%tbd%",
+        "%pending%",
+        "%not assigned%",
+        "%unassigned%",
+        "%n/a%",
+        "%none%",
+        "%unknown%",
     ]
     contractor_expr = "LOWER(COALESCE(json_extract(lead_data, '$.contractor'), json_extract(lead_data, '$.contractor_name'), ''))"
     open_clause = " OR ".join([f"{contractor_expr} LIKE '{term}'" for term in open_terms])

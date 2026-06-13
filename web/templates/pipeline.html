@@ -117,7 +117,7 @@ let dragFromStatus = null;
 
 function authHdrs() {
   const h = {"Content-Type":"application/json"};
-  const tk = localStorage.getItem("mleads_token");
+  const tk = localStorage.getItem("access_token") || localStorage.getItem("mleads_token") || localStorage.getItem("token");
   if (tk) h["Authorization"] = "Bearer " + tk;
   return h;
 }
@@ -178,6 +178,8 @@ function renderCard(l) {
       ${l.notes ? `<div class="notes-preview">📝 ${l.notes}</div>` : ""}
       <div class="card-actions">
         ${l.phone ? `<button onclick="window.location.href='tel:${l.phone}'">📞 Llamar</button>` : ""}
+        <button onclick="markContacted('${l.id}')">✓ Contactado</button>
+        <button onclick="prepareInvoice('${l.id}', ${Number(l.value || 0)})">🧾 Preparar invoice</button>
         <button onclick="openNotes('${l.id}')">📝 Notas</button>
         <button onclick="removeLead('${l.id}')" style="color:var(--red)">✕</button>
       </div>
@@ -251,6 +253,34 @@ async function saveNotes() {
 async function removeLead(leadId) {
   if (!confirm("¿Eliminar este lead del pipeline?")) return;
   await fetch("/api/pipeline/remove", {method:"POST", headers:authHdrs(), body:JSON.stringify({lead_id:leadId})});
+  loadPipeline();
+}
+
+async function markContacted(leadId) {
+  await fetch("/api/pipeline/contact", {
+    method:"POST",
+    headers:authHdrs(),
+    body:JSON.stringify({lead_id:leadId, contact_type:"call", outcome:"contacted_from_pipeline"})
+  });
+  loadPipeline();
+}
+
+async function prepareInvoice(leadId, suggestedAmount) {
+  const raw = prompt("Monto del invoice / propuesta", suggestedAmount > 0 ? String(suggestedAmount) : "0");
+  if (raw === null) return;
+  const amount = Number(String(raw).replace(/[^0-9.]/g, "")) || 0;
+  const description = prompt("Descripción", "Invoice draft preparado desde 0brix pipeline") || "Invoice draft preparado desde 0brix pipeline";
+  const res = await fetch("/api/pipeline/invoice", {
+    method:"POST",
+    headers:authHdrs(),
+    body:JSON.stringify({lead_id:leadId, amount, description})
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    alert(data.message || data.error || "No se pudo preparar el invoice");
+    return;
+  }
+  alert(`Invoice draft preparado (#${data.invoice_id})`);
   loadPipeline();
 }
 

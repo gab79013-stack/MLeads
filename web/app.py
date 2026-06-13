@@ -34,7 +34,13 @@ from workers.telegram_bot import start_bot_worker
 from utils import bot_users as bu
 from utils import billing
 from web.helpers.service_filter import build_service_category_filter
-from web.helpers.gc_interest import build_gc_insight, build_gc_interest_sql_filter, is_gc_interesting_lead
+from web.helpers.gc_interest import (
+    build_gc_insight,
+    build_gc_interest_sql_filter,
+    build_public_real_lead_sql_filter,
+    is_gc_interesting_lead,
+    is_placeholder_or_demo_lead,
+)
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -146,6 +152,18 @@ def swipe_page():
     html = html.replace('__FACEBOOK_APP_ID__', os.getenv('FACEBOOK_APP_ID', ''))
     html = html.replace('__GOOGLE_MAPS_API_KEY__', os.getenv('GOOGLE_MAPS_API_KEY', ''))
     return html
+
+
+@app.route('/pipeline', methods=['GET'])
+@app.route('/pipeline.html', methods=['GET'])
+def pipeline_page():
+    """Serve the Kanban pipeline page for swiped/right leads."""
+    pipeline_path = os.path.join(os.path.dirname(__file__), 'templates', 'pipeline.html')
+    try:
+        with open(pipeline_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return jsonify({"error": "Pipeline page not found"}), 404
 
 
 @app.route('/<path:filename>', methods=['GET'])
@@ -2404,17 +2422,17 @@ def _resolve_swipe_identity():
 
 
 def _count_swipes(user_id, anon_id) -> int:
-    """Count only right-swipes (likes) — dislikes don't consume quota."""
+    """Count every viewed/swiped lead for quota and counter consistency."""
     conn = get_db_connection()
     c = conn.cursor()
     if user_id:
         c.execute(
-            "SELECT COUNT(*) FROM swipe_actions WHERE user_id = ? AND action = 'like'",
+            "SELECT COUNT(*) FROM swipe_actions WHERE user_id = ?",
             (user_id,),
         )
     elif anon_id:
         c.execute(
-            "SELECT COUNT(*) FROM swipe_actions WHERE anon_id = ? AND action = 'like'",
+            "SELECT COUNT(*) FROM swipe_actions WHERE anon_id = ?",
             (anon_id,),
         )
     else:
@@ -2546,7 +2564,7 @@ _SERVICE_CAT_KEYWORDS: dict[str, list[str]] = {
     "remodel":     ["remodel", "renovation", "kitchen remodel", "bathroom remodel", "addition", "adu", "accessory dwelling", "tenant improvement", "interior alteration", "room addition"],
 }
 # These map directly to primary_service_type column
-_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "energy", "rodents", "deconstruction", "remodel", "crossdata"}
+_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "weather", "disaster", "energy", "rodents", "deconstruction", "remodel", "crossdata"}
 
 # Subcontractor categories must use the post-classification opportunity trade,
 # not raw permit keywords. Example: a REROOF permit pulled by a CCC roofer is
@@ -2585,7 +2603,7 @@ def swipe_feed():
       - city:          filter by city name (partial match)
       - radius_miles:  miles radius from city (requires city param)
       - service_cats:  comma-separated GC opportunity categories:
-                       flood, permits, remodel, deconstruction, realestate,
+                       weather/flood, permits, remodel, deconstruction, realestate,
                        crossdata, construction (construction is shown only when
                        pre-award / no GC is confirmed)
 
@@ -2685,8 +2703,12 @@ def swipe_feed():
         params.append(min_score)
 
     if min_value > 0:
+        # Storm/disaster leads are verified impact-zone/property candidates. Many
+        # do not have a project value yet, so the default permit-value floor must
+        # not hide them or make the storm-damage pill look unavailable.
         conditions.append(
-            "CAST(COALESCE(json_extract(lead_data, '$.value_float'), 0) AS REAL) >= ?"
+            "(primary_service_type IN ('weather', 'flood', 'disaster') OR "
+            "CAST(COALESCE(json_extract(lead_data, '$.value_float'), 0) AS REAL) >= ?)"
         )
         params.append(min_value)
 
@@ -2696,14 +2718,18 @@ def swipe_feed():
         )
         params.append(max_value)
 
-    # Phone filter — always required: only leads with a phone number are shown.
-    # has_phone is a pre-computed indexed column (set at insert time in dedup.py
-    # and re-synced at startup in web_db.py) so this is a fast index scan.
-    conditions.append("has_phone = 1")
+    # Phone filter — direct-contact leads need phone, but storm/disaster leads
+    # are sold as verified impact-zone/property candidates before owner-contact
+    # enrichment. Do not fabricate phones just to make them visible.
+    conditions.append("(has_phone = 1 OR primary_service_type IN ('weather', 'flood', 'disaster'))")
 
     # Dead-lead filter — exclude GC self-pull leads (contractor pulling own permit).
     # is_dead_lead is a pre-computed indexed column set by gc_detector.py via base.py.
     conditions.append("COALESCE(is_dead_lead, 0) = 0")
+
+    # Public integrity filter — never show synthetic/demo/placeholders in the
+    # public feed. Python validation below is authoritative for stale rows.
+    conditions.append(build_public_real_lead_sql_filter())
 
     # GC buyer-intent filter — the public swipe feed is now GC-only. Exclude
     # already-awarded jobs and non-GC opportunity types before fetching a pool.
@@ -2713,6 +2739,12 @@ def swipe_feed():
     if city_filter and not do_radius:
         conditions.append("LOWER(city) LIKE LOWER(?)")
         params.append(f"%{city_filter}%")
+
+    # Capture the verified, GC-eligible inventory before applying the selected
+    # service filter so the UI can disable zero-inventory filter pills instead of
+    # letting users get trapped in an empty state.
+    availability_conditions = list(conditions)
+    availability_params = list(params)
 
     # ── Service category filter ────────────────────────────────────────────────
     # For subcontractor trades, match the CURRENT opportunity trade only.
@@ -2798,6 +2830,39 @@ def swipe_feed():
         except Exception as ie:
             logger.debug(f"Inspection batch lookup failed: {ie}")
 
+    available_service_counts: dict[str, int] = {}
+    try:
+        availability_where = (
+            "WHERE " + " AND ".join(availability_conditions)
+            if availability_conditions else ""
+        )
+        c.execute(f"""
+            SELECT primary_service_type, lead_data
+            FROM consolidated_leads
+            {availability_where}
+            LIMIT 1000
+        """, availability_params)
+        for ar in c.fetchall():
+            ard = dict(ar)
+            try:
+                ald = json.loads(ard.get("lead_data") or "{}")
+            except Exception:
+                ald = {}
+            ast = (ard.get("primary_service_type") or ald.get("primary_service_type") or "").strip().lower()
+            if not ast:
+                continue
+            if is_placeholder_or_demo_lead(ald):
+                continue
+            if ast not in {"weather", "flood", "disaster"} and not (ald.get("contact_phone") or ald.get("phone")):
+                continue
+            if not is_gc_interesting_lead(ald, ast):
+                continue
+            if not build_gc_insight(ald, ast).get("source_url"):
+                continue
+            available_service_counts[ast] = available_service_counts.get(ast, 0) + 1
+    except Exception as ae:
+        logger.debug(f"Availability lookup failed: {ae}")
+
     conn.close()
 
     leads = []
@@ -2808,11 +2873,17 @@ def swipe_feed():
         except Exception:
             lead_data = {}
 
+        # ── Public data integrity guard ───────────────────────────────────────
+        # Skip synthetic/demo placeholders even if they are already in a local DB.
+        if is_placeholder_or_demo_lead(lead_data, row_dict.get("address_key")):
+            continue
+
         # ── Phone guard (belt-and-suspenders after DB filter) ─────────────────
-        # The WHERE clause already filters has_phone=1, but lead_data may have
-        # been updated after the column was computed. Skip stale rows.
+        # Direct-contact leads need a phone. Storm/disaster rows are allowed as
+        # impact-zone/property candidates without fabricated contact data.
         phone_check = (lead_data.get("contact_phone") or "").strip()
-        if not phone_check:
+        service_type_for_phone = (row_dict.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if service_type_for_phone not in {"weather", "flood", "disaster"} and not phone_check:
             continue
 
         # ── Radius filter (post-process) ───────────────────────────────────────
@@ -2854,6 +2925,10 @@ def swipe_feed():
         if not is_gc_interesting_lead(lead_data, service_type):
             continue
         gc_insight = build_gc_insight(lead_data, service_type)
+        # User-facing swipe leads must be independently verifiable. If we cannot
+        # build or store a working official source URL, do not show the row.
+        if not gc_insight.get("source_url"):
+            continue
         service_info = service_types_map.get(service_type, {})
 
         desc = (lead_data.get("description") or lead_data.get("desc") or "")[:300]
@@ -2957,6 +3032,8 @@ def swipe_feed():
         "free_limit":    FREE_USER_LEAD_LIMIT,
         "swipes_count":  swipes_count,
         "is_paid":       locals().get('is_paid', False) if user_id else None,
+        "available_service_counts": available_service_counts,
+        "available_service_types": sorted(available_service_counts.keys()),
     }
     if remaining is not None:
         response["remaining"] = remaining
@@ -3022,6 +3099,16 @@ def swipe_action():
             INSERT INTO swipe_actions (user_id, anon_id, lead_id, action)
             VALUES (?, ?, ?, ?)
         """, (user_id, anon_id, lead_id, action))
+        # If a caller likes a lead, put it in the lightweight Kanban pipeline.
+        # Anonymous likes can be reviewed in the browser; registered likes can
+        # continue into contact/estimate/invoice preparation.
+        if action == 'like':
+            pipeline_uid = str(user_id or anon_id)
+            if pipeline_uid:
+                c.execute("""
+                    INSERT OR IGNORE INTO lead_pipeline (user_id, lead_id, status, notes)
+                    VALUES (?, ?, 'Nuevo', '')
+                """, (pipeline_uid, lead_id))
         # If an authenticated user liked the lead, also log it as a contact
         if action == 'like' and user_id:
             try:
@@ -3121,6 +3208,208 @@ def swipe_upgrade_info():
             {"id": "premium", "price": 99,  "limit": None,           "label": "Premium"},
         ],
     }), 200
+
+
+PIPELINE_STATUSES = ["Nuevo", "Contactado", "Propuesta", "Negociación", "Ganado", "Perdido"]
+
+
+def _pipeline_uid(user_id, anon_id):
+    return str(user_id or anon_id) if (user_id or anon_id) else None
+
+
+def _pipeline_lead_payload(row):
+    rd = dict(row)
+    try:
+        ld = json.loads(rd.get('lead_data') or '{}')
+    except Exception:
+        ld = {}
+    scoring = ld.get('_scoring', {}) or {}
+    return {
+        "id": rd.get("lead_id"),
+        "address": rd.get("address") or rd.get("lead_id") or "",
+        "city": rd.get("city") or "",
+        "status": rd.get("status") or "Nuevo",
+        "notes": rd.get("notes") or "",
+        "created_at": rd.get("created_at") or "",
+        "updated_at": rd.get("updated_at") or "",
+        "service_type": rd.get("primary_service_type") or ld.get("primary_service_type") or "",
+        "trade": ld.get("_trade") or ld.get("trade") or "",
+        "contractor": ld.get("contractor") or ld.get("gc_name") or "",
+        "phone": (ld.get("contact_phone") or "").strip(),
+        "email": (ld.get("contact_email") or "").strip(),
+        "value": ld.get("value_float") or ld.get("permit_value") or 0,
+        "score": scoring.get("score") or ld.get("score") or 0,
+        "urgency": ld.get("_urgency") or "",
+        "pain_point": ld.get("_key_pain_point") or "",
+        "upsell": ld.get("_upsell_opportunity") or "",
+        "best_time": ld.get("_best_contact_time") or "",
+        "project_scope": ld.get("_project_scope") or "",
+        "decision_maker": ld.get("_decision_maker") or "",
+        "ai_summary": ld.get("_ai_summary") or "",
+    }
+
+
+@app.route('/api/pipeline', methods=['GET'])
+def api_pipeline():
+    """Return liked leads grouped by Kanban status for the current user/session."""
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = _pipeline_uid(user_id, anon_id)
+    columns = {s: [] for s in PIPELINE_STATUSES}
+    if not uid:
+        return jsonify(columns), 200
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            SELECT p.lead_id, p.status, p.notes, p.created_at, p.updated_at,
+                   l.address, l.city, l.primary_service_type, l.lead_data
+            FROM lead_pipeline p
+            LEFT JOIN consolidated_leads l ON l.address_key = p.lead_id
+            WHERE p.user_id = ?
+            ORDER BY p.updated_at DESC
+        """, (uid,))
+        for row in c.fetchall():
+            lead = _pipeline_lead_payload(row)
+            status = lead["status"] if lead["status"] in columns else "Nuevo"
+            columns[status].append(lead)
+    finally:
+        conn.close()
+    return jsonify(columns), 200
+
+
+@app.route('/api/pipeline/move', methods=['POST'])
+def api_pipeline_move():
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    new_status = (data.get("status") or "").strip()
+    if not lead_id or new_status not in PIPELINE_STATUSES:
+        return jsonify({"error": "lead_id and valid status required"}), 400
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = _pipeline_uid(user_id, anon_id)
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    conn = get_db_connection(); c = conn.cursor()
+    c.execute("UPDATE lead_pipeline SET status=?, updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=?", (new_status, lead_id, uid))
+    conn.commit(); ok = c.rowcount > 0; conn.close()
+    return jsonify({"ok": ok, "status": new_status}), 200
+
+
+@app.route('/api/pipeline/notes', methods=['POST'])
+def api_pipeline_notes():
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    notes = (data.get("notes") or "")[:4000]
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = _pipeline_uid(user_id, anon_id)
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    conn = get_db_connection(); c = conn.cursor()
+    c.execute("UPDATE lead_pipeline SET notes=?, updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=?", (notes, lead_id, uid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True}), 200
+
+
+@app.route('/api/pipeline/remove', methods=['POST'])
+def api_pipeline_remove():
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = _pipeline_uid(user_id, anon_id)
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    conn = get_db_connection(); c = conn.cursor()
+    c.execute("DELETE FROM lead_pipeline WHERE lead_id=? AND user_id=?", (lead_id, uid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True}), 200
+
+
+@app.route('/api/pipeline/contact', methods=['POST'])
+def api_pipeline_contact():
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    contact_type = data.get("contact_type", "call")
+    outcome = (data.get("outcome") or "")[:500]
+    notes = (data.get("notes") or "")[:2000]
+    if not lead_id or contact_type not in ("call", "sms", "email", "visit", "other"):
+        return jsonify({"error": "lead_id and valid contact_type required"}), 400
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = _pipeline_uid(user_id, anon_id)
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    conn = get_db_connection(); c = conn.cursor()
+    c.execute("INSERT INTO lead_contacts_log (lead_id, user_id, contact_type, outcome, notes) VALUES (?, ?, ?, ?, ?)", (lead_id, uid, contact_type, outcome, notes))
+    c.execute("UPDATE lead_pipeline SET status='Contactado', updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=? AND status='Nuevo'", (lead_id, uid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True}), 200
+
+
+@app.route('/api/pipeline/estimate', methods=['POST'])
+def api_pipeline_estimate():
+    """Create a draft estimate and advance the lead to Propuesta."""
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    amount = float(data.get("amount") or 0)
+    description = (data.get("description") or "")[:4000]
+    user_id, _ = _resolve_swipe_identity()
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    if not user_id:
+        return jsonify({"error": "registration_required", "message": "Regístrate para preparar estimados/invoices"}), 401
+    conn = get_db_connection(); c = conn.cursor()
+    c.execute("INSERT INTO lead_estimates (lead_id, user_id, amount, description, status) VALUES (?, ?, ?, ?, 'draft')", (lead_id, user_id, amount, description))
+    estimate_id = c.lastrowid
+    c.execute("INSERT OR IGNORE INTO lead_pipeline (user_id, lead_id, status, notes) VALUES (?, ?, 'Nuevo', '')", (str(user_id), lead_id))
+    c.execute("UPDATE lead_pipeline SET status='Propuesta', updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=?", (lead_id, str(user_id)))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True, "estimate_id": estimate_id, "amount": amount, "status": "draft"}), 200
+
+
+@app.route('/api/pipeline/invoice', methods=['POST'])
+def api_pipeline_invoice():
+    """Prepare a draft invoice for a liked lead; this does not charge the customer."""
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    amount = float(data.get("amount") or 0)
+    description = (data.get("description") or "")[:4000]
+    user_id, _ = _resolve_swipe_identity()
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    if not user_id:
+        return jsonify({"error": "registration_required", "message": "Regístrate para preparar invoices"}), 401
+    conn = get_db_connection(); c = conn.cursor()
+    c.execute("INSERT INTO lead_invoices (lead_id, user_id, amount, description, status) VALUES (?, ?, ?, ?, 'draft')", (lead_id, user_id, amount, description))
+    invoice_id = c.lastrowid
+    c.execute("INSERT OR IGNORE INTO lead_pipeline (user_id, lead_id, status, notes) VALUES (?, ?, 'Nuevo', '')", (str(user_id), lead_id))
+    c.execute("UPDATE lead_pipeline SET status='Propuesta', updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=?", (lead_id, str(user_id)))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True, "invoice_id": invoice_id, "amount": amount, "status": "draft", "prepared": True}), 200
+
+
+@app.route('/api/pipeline/activity/<path:lead_id>', methods=['GET'])
+def api_pipeline_activity(lead_id):
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = _pipeline_uid(user_id, anon_id)
+    if not uid:
+        return jsonify([]), 200
+    conn = get_db_connection(); c = conn.cursor(); timeline = []
+    c.execute("SELECT contact_type, outcome, notes, created_at FROM lead_contacts_log WHERE lead_id=? AND user_id=? ORDER BY created_at DESC", (lead_id, uid))
+    for row in c.fetchall():
+        timeline.append({"type": "contact", "contact_type": row[0], "outcome": row[1], "notes": row[2], "date": row[3]})
+    if user_id:
+        c.execute("SELECT amount, description, status, created_at FROM lead_estimates WHERE lead_id=? AND user_id=? ORDER BY created_at DESC", (lead_id, user_id))
+        for row in c.fetchall():
+            timeline.append({"type": "estimate", "amount": row[0], "description": row[1], "estimate_status": row[2], "date": row[3]})
+        c.execute("SELECT amount, description, status, prepared_at FROM lead_invoices WHERE lead_id=? AND user_id=? ORDER BY prepared_at DESC", (lead_id, user_id))
+        for row in c.fetchall():
+            timeline.append({"type": "invoice", "amount": row[0], "description": row[1], "invoice_status": row[2], "date": row[3]})
+    conn.close()
+    timeline.sort(key=lambda x: x.get("date") or "", reverse=True)
+    return jsonify(timeline), 200
 
 
 # ─────────────────────────────────────────────────────────

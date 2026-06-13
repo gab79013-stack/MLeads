@@ -54,3 +54,24 @@ def test_swipe_card_surfaces_gc_insight_confidence_source_and_actions():
     assert "Agregar al pipeline" in html
     assert "Verificado" in html
     assert "Candidato" in html
+
+
+def test_swipe_feed_requires_official_verifiable_source_url():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    helper_src = (TEMPLATE.parents[1] / "helpers" / "gc_interest.py").read_text(encoding="utf-8")
+
+    assert "must be independently verifiable" in app_src
+    assert 'if not gc_insight.get("source_url"):' in app_src
+    assert "_SOCRATA_PERMIT_SOURCES" in helper_src
+    assert "data.honolulu.gov/resource/4vab-c87q.json" in helper_src
+
+
+def test_swipe_actions_rerender_remaining_queue_after_each_card():
+    html = _html()
+
+    assert "S.queue.shift();" in html
+    assert "renderDeck();" in html
+    assert "cards 6–10 become visible" in html
+    assert "quota is exhausted" in html
+    assert "misleading \"no more leads\"" in html
+    assert "S.queue.shift(); restack();" not in html

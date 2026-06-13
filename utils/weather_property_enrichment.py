@@ -314,10 +314,13 @@ def build_property_candidate(zone: dict, element: dict, rank: int) -> dict | Non
         "property_kind": scoring["property_kind"],
         "building_type": scoring["building_type"],
         "recommended_services": services,
-        "service_type": "roofing",
-        "primary_service_type": "roofing",
-        "_trade": "ROOFING",
-        "_sub_trades": [str(s).upper() for s in services if s != "roofing"],
+        # Keep the lead in the GC storm-damage bucket. Specific repair trades
+        # stay available as recommended/sub-trades without turning this into a
+        # plain roofing lead.
+        "service_type": "weather",
+        "primary_service_type": "weather",
+        "_trade": "STORM_DAMAGE",
+        "_sub_trades": [str(s).upper() for s in services],
         "_urgency": "HIGH" if scoring["score"] >= 80 else "MEDIUM",
         "_project_scope": "EMERGENCY" if scoring["score"] >= 80 else "REPAIR",
         "_decision_maker": "GC",

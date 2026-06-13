@@ -1,0 +1,51 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: 0brix/mleads:local
+    container_name: 0brix-web
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      PORT: ${PORT:-5001}
+      DB_PATH: ${DB_PATH:-/app/data/leads.db}
+      CONTACTS_DIR: ${CONTACTS_DIR:-/app/contacts}
+      LOG_FILE: ${LOG_FILE:-/app/logs/mleads.log}
+      FLASK_DEBUG: "false"
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+    ports:
+      - "${PORT:-5001}:${PORT:-5001}"
+    volumes:
+      - ./data:/app/data
+      - ./contacts:/app/contacts
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${PORT:-5001}/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  # Optional background agent scheduler. Start only when you want collection jobs running:
+  # docker compose --profile agents up -d worker
+  worker:
+    image: 0brix/mleads:local
+    container_name: 0brix-worker
+    restart: unless-stopped
+    profiles: ["agents"]
+    env_file:
+      - .env.production
+    environment:
+      DB_PATH: ${DB_PATH:-/app/data/leads.db}
+      CONTACTS_DIR: ${CONTACTS_DIR:-/app/contacts}
+      LOG_FILE: ${LOG_FILE:-/app/logs/mleads.log}
+    command: ["python", "main.py"]
+    volumes:
+      - ./data:/app/data
+      - ./contacts:/app/contacts
+      - ./logs:/app/logs
+    depends_on:
+      web:
+        condition: service_healthy

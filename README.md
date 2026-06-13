@@ -2,24 +2,31 @@
 
 Lead generation platform for contractors: detects building permits, classifies AI-generated leads, and delivers them via a swipe feed + CRM pipeline.
 
-**Stack:** Python Flask + SQLite + Vue/JS frontend | **AI:** DeepSeek-V3.2-NVFP4 (free via Vultr Inference) | **Server:** 45.32.89.38
+**Stack:** Python Flask + SQLite + Vue/JS frontend | **AI:** DeepSeek-V3.2-NVFP4 (free via Vultr Inference) | **Server:** 2.25.162.58
 
 ---
 
 ## Quick Start
 
 ```bash
-ssh root@45.32.89.38
+ssh root@2.25.162.58
 cd /opt/MLeads
-git pull origin QWEN
+git pull origin fix/opportunity-trade-routing
 systemctl restart mleads-web
 ```
 
+For Docker-based deployment:
+
+```bash
+docker build -t mleads-web .
+docker run --rm -p 5001:5001 -v "$PWD/data:/app/data" -v "$PWD/contacts:/app/contacts" mleads-web
+```
+
 **Live URLs:**
-- Swipe feed: `http://45.32.89.38:5001/swipe`
-- Pipeline CRM: `http://45.32.89.38:5001/pipeline`
-- Dashboard: `http://45.32.89.38:5001/`
-- Huly CRM: `http://45.32.89.38:8080`
+- Swipe feed: `http://2.25.162.58/swipe`
+- Pipeline CRM: `http://2.25.162.58/pipeline`
+- Dashboard: `http://2.25.162.58/`
+- Huly CRM: `http://2.25.162.58:8080`
 
 ---
 
@@ -64,15 +71,18 @@ MLeads/
 
 ### Swipe Feed (`/swipe`)
 - Public Tinder-style swipe UI — no login required
+- 10-card anonymous preview with paywall/signup handoff
 - AI-classified leads only (DeepSeek-V3.2-NVFP4 via Vultr Inference, free)
 - Filter by city, service category, score, value
 - **Keyboard shortcuts:** `→` like | `←` dislike | `Q` qualify | `Esc` close
 - Like = auto-add to pipeline
+- GC-focused routing prioritizes storm/weather, open owner/GC opportunities, and independently verifiable official sources
 
 ### Pipeline CRM (`/pipeline`)
 - 6-column Kanban: Nuevo → Contactado → Propuesta → Negociación → Ganado / Perdido
 - Drag & drop between columns
 - Notes, follow-ups, estimates, contact log
+- Invoice/estimate draft preparation from saved leads
 - Auto-advances status on contact/estimate actions
 
 ### AI Classification
@@ -114,8 +124,15 @@ cd /opt/MLeads && python3 main.py --run permits  # single agent
 ## Deploy
 
 ```bash
-ssh root@45.32.89.38
+ssh root@2.25.162.58
 cd /opt/MLeads
-git pull origin QWEN
+git pull origin fix/opportunity-trade-routing
 systemctl restart mleads-web
+```
+
+For Docker-based deployment:
+
+```bash
+docker build -t mleads-web .
+docker run --rm -p 5001:5001 -v "$PWD/data:/app/data" -v "$PWD/contacts:/app/contacts" mleads-web
 ```

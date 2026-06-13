@@ -288,6 +288,80 @@ def init_web_db():
     """)
 
     # ─────────────────────────────────────────────────────
+    # Swipe Pipeline & Invoice Prep
+    # ─────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_pipeline (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            lead_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Nuevo',
+            notes TEXT DEFAULT '',
+            close_reason TEXT,
+            closed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, lead_id)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_lead_pipeline_user_status ON lead_pipeline(user_id, status, updated_at)")
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_contacts_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            contact_type TEXT NOT NULL,
+            outcome TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_followups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            due_at TIMESTAMP NOT NULL,
+            followup_type TEXT DEFAULT 'call',
+            notes TEXT DEFAULT '',
+            completed INTEGER DEFAULT 0,
+            completed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_estimates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
+            description TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'draft',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_invoices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
+            description TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'draft',
+            prepared_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    # ─────────────────────────────────────────────────────
     # Lead Notes (internal notes on leads)
     # ─────────────────────────────────────────────────────
     c.execute("""

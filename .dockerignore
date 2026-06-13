@@ -1,0 +1,33 @@
+# Secrets/env files are runtime-only. Do not bake them into the image.
+.env
+.env.*
+!.env.example
+
+# VCS / local tooling
+.git
+.gitignore
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+.venv
+venv
+__pycache__
+*.py[cod]
+*.pyo
+
+# Runtime mutable data must be mounted as volumes.
+data/*.db
+data/*.db-*
+data/*.sqlite*
+logs
+*.log
+contacts/*.csv
+
+# Local artifacts / bundles
+*.tar.gz
+*.tgz
+*.zip
+*.csv
+/tmp

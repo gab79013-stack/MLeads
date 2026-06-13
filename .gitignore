@@ -38,5 +38,12 @@ node_modules/
 contacts/
 huly-bridge/node_modules/
 *.bak
+
+# Local deploy/data artifacts
+*.tar.gz
+*.tgz
+*.zip
+*.csv
+
 data/backup_corrupted/
 data/backups/

@@ -183,6 +183,8 @@
         /* Lead type pills: orange theme */
         .pill.ltype:hover{border-color:#fdba74;color:#c2410c}
         .pill.ltype.on{background:#ea580c;border-color:#ea580c;color:#fff}
+        .pill.ltype.unavailable{opacity:.42;cursor:not-allowed;text-decoration:line-through;background:#f8fafc;color:#94a3b8}
+        .pill.ltype.unavailable:hover{border-color:var(--border);color:#94a3b8}
 
         /* City input + autocomplete */
         .inp-wrap{position:relative}
@@ -387,7 +389,7 @@
                     <span class="fsec-count" id="ltypeCount">0</span>
                 </div>
                 <div class="pills" id="ltypePills">
-                    <button class="pill ltype" data-cat="flood">⛈️ Daño por tormenta</button>
+                    <button class="pill ltype" data-cat="weather">⛈️ Daño por tormenta</button>
                     <button class="pill ltype" data-cat="remodel">🔨 Remodelación / reparación</button>
                     <button class="pill ltype" data-cat="permits">📋 Permisos listos</button>
                     <button class="pill ltype" data-cat="construction">🏗️ Proyecto sin GC confirmado</button>
@@ -598,7 +600,7 @@ const authHdrs = () => { const h = {'Content-Type':'application/json'}; const t 
 const F = {
     hotOnly:  false,
     subCats:  new Set(),   // Legacy state ignored by GC-only UI.
-    leadTypes: new Set(),  // GC opportunities: permits, open/pre-award construction, realestate, flood, deconstruction, remodel, crossdata
+    leadTypes: new Set(),  // GC opportunities: permits, open/pre-award construction, realestate, weather/flood, deconstruction, remodel, crossdata
     city:     '',
     radius:   25,
     minVal:   0,
@@ -659,7 +661,7 @@ function loadFilters() {
 }
 
 // ── App state ─────────────────────────────────────────────────────────────────
-const S = { queue:[], swipes:0, limit:10, loading:false, authed:!!getToken(), isPaid:false };
+const S = { queue:[], swipes:0, limit:10, loading:false, authed:!!getToken(), isPaid:false, availableServiceCounts:{} };
 
 // ── Progressive score reveal ──────────────────────────────────────────────────
 // Thresholds per "batch" of 10 leads seen. Drops every batch to show more leads.
@@ -820,8 +822,11 @@ async function fetchFeed() {
         const _dynScore = _getDynamicMinScore();
         if (_dynScore > 0) url.searchParams.set('min_score', _dynScore);
 
-        url.searchParams.set('min_value', Math.max(50000, F.minVal));
-        if (F.maxVal > 0) url.searchParams.set('max_value', F.maxVal);
+        const selectedOpportunityCats = [...F.leadTypes];
+        const hasStormCat = selectedOpportunityCats.some(cat => ['weather', 'flood', 'disaster'].includes(String(cat).toLowerCase()));
+        const effectiveMinValue = hasStormCat ? F.minVal : Math.max(50000, F.minVal);
+        if (effectiveMinValue > 0) url.searchParams.set('min_value', effectiveMinValue);
+        if (F.maxVal > 0 && !hasStormCat) url.searchParams.set('max_value', F.maxVal);
         if (F.city) {
             url.searchParams.set('city', F.city);
             if (F.radius > 0) url.searchParams.set('radius_miles', F.radius);
@@ -838,6 +843,22 @@ async function fetchFeed() {
 
         S.limit  = data.anon_limit || 10;
         S.swipes = data.swipes_count || 0;
+        S.availableServiceCounts = data.available_service_counts || {};
+        const selectedUnavailable = [...F.leadTypes].filter(cat =>
+            Object.keys(S.availableServiceCounts).length > 0 && Number(S.availableServiceCounts[cat] || 0) <= 0
+        );
+        if ((data.leads || []).length === 0 && selectedUnavailable.length > 0) {
+            selectedUnavailable.forEach(cat => F.leadTypes.delete(cat));
+            saveFilters();
+            renderChips();
+            syncAvailableLeadTypePills();
+            toast(CURRENT_LANG === 'es'
+                ? 'Quité filtros sin inventario verificado y recargué leads'
+                : 'Removed filters with no verified inventory and reloaded leads');
+            S.loading = false;
+            return fetchFeed();
+        }
+        syncAvailableLeadTypePills();
         if (data.is_paid !== undefined) S.isPaid = !!data.is_paid;
         updateCounter();
         S.queue  = data.leads || [];
@@ -1317,7 +1338,19 @@ function commit(card, action) {
     // Advance progressive score threshold only on right-swipes (likes = real leads)
     if (action === 'like') _advanceScoreStep();
     setTimeout(() => {
-        card.remove(); S.queue.shift(); restack();
+        card.remove();
+        S.queue.shift();
+        // If the quota is exhausted, keep the paywall as the only visible state
+        // instead of rendering a misleading "no more leads" empty deck behind it.
+        if (!S.authed && !S.isPaid && S.limit && S.swipes >= S.limit) {
+            [...$deck.querySelectorAll('.card,.empty')].forEach(n => n.remove());
+            document.getElementById('loader').style.display = 'none';
+            showPaywall('register');
+            return;
+        }
+        // Re-render from the remaining queue so cards 6–10 become visible after
+        // the initially rendered 5-card stack is exhausted.
+        renderDeck();
         if (S.queue.length <= 2) fetchFeed();
     }, 260);
 }
@@ -1349,8 +1382,29 @@ document.getElementById('filterBtn').addEventListener('click', () => {
 $backdrop.addEventListener('click', e => { if (e.target === $backdrop) $backdrop.classList.remove('open'); });
 
 // GC opportunity pills
+function syncAvailableLeadTypePills() {
+    const counts = S.availableServiceCounts || {};
+    const hasCounts = Object.keys(counts).length > 0;
+    document.querySelectorAll('#ltypePills .pill').forEach(p => {
+        const cat = p.dataset.cat;
+        const count = Number(counts[cat] || 0);
+        const unavailable = hasCounts && count <= 0;
+        p.classList.toggle('unavailable', unavailable);
+        p.disabled = unavailable;
+        p.title = unavailable
+            ? (CURRENT_LANG === 'es' ? 'Sin leads verificados disponibles ahora' : 'No verified leads available right now')
+            : (count > 0 ? `${count} verified leads` : '');
+        if (unavailable && p.classList.contains('on')) p.classList.remove('on');
+    });
+    updateCountBadge('ltypeCount', '#ltypePills .pill.on');
+}
+
 document.querySelectorAll('#ltypePills .pill').forEach(p => {
     p.addEventListener('click', () => {
+        if (p.disabled || p.classList.contains('unavailable')) {
+            toast(CURRENT_LANG === 'es' ? 'Ese filtro no tiene leads verificados ahora' : 'That filter has no verified leads right now');
+            return;
+        }
         p.classList.toggle('on');
         updateCountBadge('ltypeCount', '#ltypePills .pill.on');
     });
@@ -1390,8 +1444,9 @@ document.querySelectorAll('.vpreset').forEach(b => {
 function syncDrawer() {
     document.getElementById('hotToggle').classList.toggle('on', F.hotOnly);
     document.querySelectorAll('#ltypePills .pill').forEach(p =>
-        p.classList.toggle('on', F.leadTypes.has(p.dataset.cat))
+        p.classList.toggle('on', F.leadTypes.has(p.dataset.cat) && !p.classList.contains('unavailable'))
     );
+    syncAvailableLeadTypePills();
     updateCountBadge('ltypeCount', '#ltypePills .pill.on');
     document.getElementById('cityInp').value = F.city;
     document.getElementById('minVal').value  = F.minVal > 0 ? F.minVal : '';
@@ -1408,7 +1463,7 @@ function readDrawer() {
     F.hotOnly = document.getElementById('hotToggle').classList.contains('on');
     F.subCats.clear();
     F.leadTypes.clear();
-    document.querySelectorAll('#ltypePills .pill.on').forEach(p => F.leadTypes.add(p.dataset.cat));
+    document.querySelectorAll('#ltypePills .pill.on:not(.unavailable):not(:disabled)').forEach(p => F.leadTypes.add(p.dataset.cat));
     F.city   = document.getElementById('cityInp').value.trim();
     F.minVal = Number(document.getElementById('minVal').value) || 0;
     F.maxVal = Number(document.getElementById('maxVal').value) || 0;
