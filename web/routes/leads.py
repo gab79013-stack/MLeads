@@ -1114,10 +1114,14 @@ def _elite_checkout_guard(tier: str, data: dict):
     recommended_price = int(proof.get("recommended_price") or 0)
     market = proof.get("market") or {}
     if status != "ready_for_elite" or recommended_price < 500:
+        saved_request = _record_elite_pilot_request(
+            int(g.user_id), city, service, status or "needs_inventory", recommended_price, proof
+        )
         return (jsonify({
             "error": "Elite todavía no está listo para venderse en este mercado/filtro. Usa Premium o solicita piloto.",
             "code": "elite_market_not_ready",
             "checkout_allowed": False,
+            "pilot_request_saved": saved_request,
             "status": status or "needs_inventory",
             "recommended_price": recommended_price,
             "market": market,
@@ -1131,6 +1135,20 @@ def _elite_checkout_guard(tier: str, data: dict):
     if market.get("city"):
         context["elite_market_city"] = _checkout_filter(market.get("city"))
     return None, context
+
+
+def _record_elite_pilot_request(
+    user_id: int,
+    city: str,
+    service: str,
+    readiness_status: str,
+    recommended_price: int,
+    proof: dict,
+) -> bool:
+    record_fn = _get_app_const("_record_elite_pilot_request")
+    if callable(record_fn):
+        return bool(record_fn(user_id, city, service, readiness_status, recommended_price, proof))
+    return False
 
 
 def stripe_webhook():

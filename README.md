@@ -88,6 +88,7 @@ MLeads/
 - Pro/Premium/Elite Stripe checkout support
 - Elite plan designed for `$500/month` positioning
 - Elite checkout is blocked unless the selected market/filter is `ready_for_elite` with a `$500+` recommended price
+- Blocked Elite checkout attempts are saved as pilot requests so sales can follow up when the market becomes sellable
 - Elite leads can be reserved exclusively per contractor for a configurable claim window
 - Elite qualification requires a verified source, phone contact, high score, fresh signal, and either project value, action window, or direct homeowner intent
 - Admin quality report shows sellability, contact coverage, source coverage, project value coverage and market readiness
@@ -143,6 +144,7 @@ cd /opt/MLeads && python3 main.py --run permits  # single agent
   - `elite_lead_claims` — exclusive Elite lead reservations
   - `lead_quality_reports` — user-reported lead quality issues
   - `elite_replacement_credits` — replacement credits for reported Elite leads
+  - `elite_pilot_requests` — captured Elite demand for markets not ready for `$500/month`
 
 ---
 

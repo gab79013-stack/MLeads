@@ -330,12 +330,22 @@ def test_stripe_elite_subscription_state_is_persisted_for_recurring_billing():
     assert "paid_until" in db_src
     assert "def _elite_checkout_guard" in app_src
     assert "def _elite_checkout_guard" in route_src
+    assert "def _record_elite_pilot_request" in app_src
+    assert "def _record_elite_pilot_request" in route_src
     assert "elite_market_not_ready" in app_src
     assert "elite_market_not_ready" in route_src
+    assert "pilot_request_saved" in app_src
+    assert "pilot_request_saved" in route_src
+    assert "CREATE TABLE IF NOT EXISTS elite_pilot_requests" in db_src
+    assert "idx_elite_pilot_requests_status_market" in db_src
+    assert "@app.route('/api/admin/elite-pilot-requests'" in app_src
+    assert "function showElitePilotRequest" in html
+    assert "Solicitud piloto registrada" in html
     assert 'status != "ready_for_elite" or recommended_price < 500' in app_src
     assert 'status != "ready_for_elite" or recommended_price < 500' in route_src
     assert "'elite_market_status': status" in app_src or '"elite_market_status": status' in app_src
     assert "Elite checkout is blocked" in readme
+    assert "elite_pilot_requests" in readme
     assert "def _resolve_web_user_id_from_stripe_object" in app_src
     assert "stripe_subscription_id = COALESCE" in app_src
     assert "stripe_customer_id = COALESCE" in app_src

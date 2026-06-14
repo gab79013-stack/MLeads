@@ -1081,6 +1081,21 @@ async function loadEliteSalesProof() {
     }
 }
 
+function showElitePilotRequest(data) {
+    const box = document.getElementById('eliteSalesProof');
+    if (!box) return;
+    const market = data.market || {};
+    const city = market.city || F.city || (CURRENT_LANG === 'es' ? 'tu mercado' : 'your market');
+    const price = Number(data.recommended_price || 0);
+    document.getElementById('eliteProofHeadline').textContent = CURRENT_LANG === 'es'
+        ? `Solicitud piloto registrada para ${city}`
+        : `Pilot request saved for ${city}`;
+    document.getElementById('eliteProofBody').textContent = CURRENT_LANG === 'es'
+        ? `Todavía no cobraremos Elite aquí. Precio recomendado actual: ${price ? '$' + price + '/mes' : 'piloto'}. Te avisaremos cuando haya inventario suficiente; Premium sigue disponible hoy.`
+        : `We will not charge Elite here yet. Current recommended price: ${price ? '$' + price + '/mo' : 'pilot'}. We will follow up when inventory is ready; Premium is available today.`;
+    box.style.display = '';
+}
+
 async function refreshSubscriptionStatus(retries = 0) {
     if (!S.authed) return;
     try {
@@ -1929,7 +1944,10 @@ async function handleUpgrade(tier) {
             })
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Error al iniciar pago');
+        if (!res.ok) {
+            if (data.code === 'elite_market_not_ready') showElitePilotRequest(data);
+            throw new Error(data.error || 'Error al iniciar pago');
+        }
         hidePaywall();
         window.location.href = data.checkout_url;
     } catch (e) {

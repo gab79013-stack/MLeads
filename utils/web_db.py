@@ -373,6 +373,29 @@ def init_web_db():
     """)
 
     c.execute("""
+        CREATE TABLE IF NOT EXISTS elite_pilot_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            city TEXT DEFAULT '',
+            service TEXT DEFAULT '',
+            readiness_status TEXT DEFAULT '',
+            recommended_price INTEGER DEFAULT 0,
+            requested_price INTEGER DEFAULT 500,
+            proof_json TEXT DEFAULT '{}',
+            source TEXT NOT NULL DEFAULT 'checkout_block',
+            status TEXT NOT NULL DEFAULT 'open',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            UNIQUE(user_id, city, service)
+        )
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_elite_pilot_requests_status_market
+        ON elite_pilot_requests(status, city, service, updated_at)
+    """)
+
+    c.execute("""
         CREATE TABLE IF NOT EXISTS lead_followups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             lead_id TEXT NOT NULL,

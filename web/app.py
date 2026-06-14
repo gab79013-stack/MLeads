@@ -2443,6 +2443,67 @@ def bot_users_stats():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@app.route('/api/admin/elite-pilot-requests', methods=['GET'])
+@require_admin
+def admin_elite_pilot_requests():
+    """Show captured Elite demand in markets that were not ready for $500 checkout."""
+    status = (request.args.get("status") or "open").strip().lower()
+    if status not in {"open", "contacted", "closed", "all"}:
+        return jsonify({"error": "Invalid status"}), 400
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        where = "" if status == "all" else "WHERE epr.status = ?"
+        params = [] if status == "all" else [status]
+        c.execute(f"""
+            SELECT epr.id, epr.user_id, u.email, u.full_name,
+                   epr.city, epr.service, epr.readiness_status,
+                   epr.recommended_price, epr.requested_price,
+                   epr.proof_json, epr.source, epr.status,
+                   epr.created_at, epr.updated_at
+              FROM elite_pilot_requests epr
+              LEFT JOIN users u ON u.id = epr.user_id
+              {where}
+             ORDER BY epr.updated_at DESC
+             LIMIT 200
+        """, params)
+        requests = []
+        for row in c.fetchall():
+            item = dict(row)
+            try:
+                item["proof"] = json.loads(item.pop("proof_json") or "{}")
+            except Exception:
+                item["proof"] = {}
+            requests.append(item)
+
+        c.execute(f"""
+            SELECT COALESCE(NULLIF(city, ''), 'Unspecified') AS city,
+                   COALESCE(NULLIF(service, ''), 'all') AS service,
+                   readiness_status,
+                   COUNT(*) AS requests,
+                   MAX(updated_at) AS last_requested_at
+              FROM elite_pilot_requests epr
+              {where}
+             GROUP BY city, service, readiness_status
+             ORDER BY requests DESC, last_requested_at DESC
+             LIMIT 50
+        """, params)
+        markets = [dict(row) for row in c.fetchall()]
+    finally:
+        conn.close()
+
+    return jsonify({
+        "requests": requests,
+        "markets": markets,
+        "summary": {
+            "total_requests": len(requests),
+            "markets": len(markets),
+            "status": status,
+        },
+    }), 200
+
+
 # ─────────────────────────────────────────────────────────
 # Stripe — checkout + webhook
 # ─────────────────────────────────────────────────────────
@@ -2533,10 +2594,14 @@ def _elite_checkout_guard(tier: str, data: dict):
     recommended_price = int(proof.get("recommended_price") or 0)
     market = proof.get("market") or {}
     if status != "ready_for_elite" or recommended_price < 500:
+        saved_request = _record_elite_pilot_request(
+            int(g.user_id), city, service, status or "needs_inventory", recommended_price, proof
+        )
         return (jsonify({
             "error": "Elite todavía no está listo para venderse en este mercado/filtro. Usa Premium o solicita piloto.",
             "code": "elite_market_not_ready",
             "checkout_allowed": False,
+            "pilot_request_saved": saved_request,
             "status": status or "needs_inventory",
             "recommended_price": recommended_price,
             "market": market,
@@ -2550,6 +2615,52 @@ def _elite_checkout_guard(tier: str, data: dict):
     if market.get("city"):
         context["elite_market_city"] = _checkout_filter(market.get("city"))
     return None, context
+
+
+def _record_elite_pilot_request(
+    user_id: int,
+    city: str,
+    service: str,
+    readiness_status: str,
+    recommended_price: int,
+    proof: dict,
+) -> bool:
+    """Capture demand when a contractor wants Elite before the market is ready."""
+    try:
+        proof_snapshot = {
+            "status": readiness_status,
+            "recommended_price": recommended_price,
+            "market": proof.get("market"),
+            "proof_points": proof.get("proof_points", [])[:5],
+        }
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO elite_pilot_requests (
+                user_id, city, service, readiness_status, recommended_price,
+                requested_price, proof_json, source, status, updated_at
+            ) VALUES (?, ?, ?, ?, ?, 500, ?, 'checkout_block', 'open', CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, city, service) DO UPDATE SET
+                readiness_status = excluded.readiness_status,
+                recommended_price = excluded.recommended_price,
+                proof_json = excluded.proof_json,
+                source = excluded.source,
+                status = 'open',
+                updated_at = CURRENT_TIMESTAMP
+        """, (
+            user_id,
+            city,
+            service,
+            readiness_status,
+            recommended_price,
+            json.dumps(proof_snapshot, ensure_ascii=False),
+        ))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as exc:
+        logger.warning(f"Could not record Elite pilot request: {exc}")
+        return False
 
 
 @app.route('/api/stripe/webhook', methods=['POST'])
