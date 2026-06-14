@@ -3050,6 +3050,52 @@ def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scori
     return min(points, 100), checks[:5], is_elite
 
 
+def _elite_certificate(
+    lead_data: dict,
+    gc_insight: dict,
+    q_score: int,
+    q_checks: list[str],
+    is_elite: bool,
+    inspection_date: str = "",
+    first_seen: str = "",
+    claimed_by_me: bool = False,
+    claim_expires_at: str = "",
+) -> dict:
+    """Structured buyer-facing proof for why an Elite lead is worth paying for."""
+    age_days = _lead_age_days(lead_data, first_seen)
+    evidence = []
+    if gc_insight.get("source_url"):
+        evidence.append({
+            "label": "Fuente auditable",
+            "value": gc_insight.get("source_label") or "Fuente oficial",
+            "status": "verified" if gc_insight.get("confidence") == "verified" else "present",
+        })
+    if (lead_data.get("contact_phone") or "").strip():
+        evidence.append({"label": "Contacto directo", "value": "Teléfono disponible", "status": "verified"})
+    if lead_data.get("value_float"):
+        try:
+            value = f"${float(lead_data.get('value_float') or 0):,.0f}"
+        except Exception:
+            value = "Detectado"
+        evidence.append({"label": "Valor del proyecto", "value": value, "status": "verified"})
+    if inspection_date:
+        evidence.append({"label": "Ventana de acción", "value": str(inspection_date)[:10], "status": "timely"})
+    elif age_days is not None:
+        evidence.append({"label": "Frescura", "value": f"{age_days} días", "status": "fresh" if age_days <= 45 else "aging"})
+    if claimed_by_me:
+        evidence.append({"label": "Exclusividad", "value": f"Reservado hasta {claim_expires_at[:10]}", "status": "reserved"})
+    elif is_elite:
+        evidence.append({"label": "Exclusividad", "value": "Disponible para reservar", "status": "available"})
+
+    return {
+        "certified": bool(is_elite),
+        "quality_score": int(q_score or 0),
+        "headline": "Certificado Elite" if is_elite else "Evidencia de calidad",
+        "checks": q_checks[:5],
+        "evidence": evidence[:6],
+    }
+
+
 def _is_elite_lead_record(row_dict: dict, lead_data: dict | None = None) -> tuple[bool, int, list[str]]:
     try:
         lead_data = lead_data if lead_data is not None else json.loads(row_dict.get("lead_data") or "{}")
@@ -4338,6 +4384,17 @@ def swipe_feed():
             "is_elite_quality": is_elite_quality,
             "elite_claimed_by_me": elite_claimed_by_me,
             "elite_claim_expires_at": elite_claim_expires_at,
+            "elite_certificate": _elite_certificate(
+                lead_data,
+                gc_insight,
+                premium_quality_score,
+                premium_quality_checks,
+                is_elite_quality,
+                inspection_date,
+                row_dict.get("first_seen", ""),
+                elite_claimed_by_me,
+                elite_claim_expires_at,
+            ),
             "created_at":       row_dict.get("first_seen", ""),
             # AI classification fields (Qwen)
             "ai_trade":         lead_data.get("_trade", ""),

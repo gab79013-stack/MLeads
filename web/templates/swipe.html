@@ -1217,6 +1217,16 @@ function buildCard(lead, idx) {
         : (isEN ? 'Verified contact signal' : 'Señal con contacto verificable');
     const qualityChecks = Array.isArray(lead.premium_quality_checks) ? lead.premium_quality_checks : [];
     const qualityScore = Number(lead.premium_quality_score || 0);
+    const eliteCert = lead.elite_certificate || {};
+    const certEvidence = Array.isArray(eliteCert.evidence) ? eliteCert.evidence : [];
+    const certHtml = certEvidence.length
+        ? `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;margin-top:7px">
+            ${certEvidence.slice(0,4).map(e => `<div style="background:rgba(255,255,255,.7);border:1px solid #d1fae5;border-radius:7px;padding:5px 6px">
+                <span style="display:block;font-size:9.5px;color:#047857;font-weight:800;text-transform:uppercase">${esc(e.label || '')}</span>
+                <span style="display:block;font-size:11px;color:#064e3b;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.value || '')}</span>
+            </div>`).join('')}
+        </div>`
+        : '';
     const exclusiveText = lead.is_elite_quality
         ? (lead.elite_claimed_by_me
             ? (isEN ? 'Reserved for your company' : 'Reservado para tu empresa')
@@ -1224,8 +1234,9 @@ function buildCard(lead, idx) {
         : '';
     const qualityHtml = qualityScore
         ? `<div class="quality-box">
-            <strong>${lead.is_elite_quality ? (isEN ? 'Elite-grade lead' : 'Lead calidad Elite') : (isEN ? 'Quality checks' : 'Checks de calidad')} · ${qualityScore}/100</strong>
+            <strong>${lead.is_elite_quality ? (isEN ? 'Elite-certified lead' : 'Lead certificado Elite') : (isEN ? 'Quality checks' : 'Checks de calidad')} · ${qualityScore}/100</strong>
             <div>${esc(qualityChecks.slice(0,3).join(' · ') || (isEN ? 'Verified source and buyer intent' : 'Fuente e intención verificadas'))}</div>
+            ${certHtml}
             ${exclusiveText ? `<div style="margin-top:4px;font-weight:800;color:#111827">${esc(exclusiveText)}</div>` : ''}
         </div>`
         : '';

@@ -102,12 +102,15 @@ def test_swipe_supports_elite_500_plan_and_quality_evidence():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
     route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
     db_src = (TEMPLATE.parents[1].parents[0] / "utils" / "web_db.py").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
 
     assert "Elite" in html
     assert "$500" in html
     assert "handleUpgrade('elite')" in html
-    assert "Lead calidad Elite" in html
     assert "premium_quality_score" in html
+    assert "elite_certificate" in html
+    assert "Lead certificado Elite" in html
+    assert "elite_certificate" in readme
     assert "elite_only" in html
     assert 'url.searchParams.set("elite_only", "1")' in html or "url.searchParams.set('elite_only', '1')" in html
     assert "STRIPE_PRICE_ID_ELITE" in (TEMPLATE.parents[2] / ".env.example").read_text(encoding="utf-8")
@@ -256,11 +259,15 @@ def test_elite_leads_are_exclusive_claims_for_500_plan():
     assert "CREATE TABLE IF NOT EXISTS elite_lead_claims" in db_src
     assert "SWIPE_ELITE_CLAIM_DAYS" in app_src
     assert "def _claim_elite_lead" in app_src
+    assert "def _elite_certificate" in app_src
+    assert "elite_certificate" in app_src
     assert "def _active_elite_claim" in app_src
     assert "exclusive_unavailable" in app_src
     assert "elite_claimed_by_me" in app_src
     assert "elite_claim_expires_at" in app_src
     assert "def _claim_elite_lead" in route_src
+    assert "def _elite_certificate" in route_src
+    assert "elite_certificate" in route_src
     assert "exclusive_unavailable" in route_src
     assert "Reservado para tu empresa" in html
     assert "Lead Elite reservado para ti" in html
