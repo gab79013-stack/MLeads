@@ -4490,8 +4490,10 @@ def swipe_action():
         # Check quota by subscription tier.
         _is_paid, _tier = _get_web_subscription(user_id)
         _current = _count_swipes(user_id, None)
+        _replacement_credits = _elite_replacement_credit_count(user_id) if _tier == "elite" else 0
+        _billable_current = max(_current - _replacement_credits, 0)
         _limit = _tier_lead_limit(_tier, _is_paid)
-        if _limit is not None and _current >= _limit:
+        if _limit is not None and _billable_current >= _limit:
             return jsonify({
                 "ok": False,
                 "auth_required": True,
@@ -4500,6 +4502,8 @@ def swipe_action():
                 "tier_limit":   _limit,
                 "tier":         _tier,
                 "swipes_count": _current,
+                "billable_swipes_count": _billable_current,
+                "replacement_credits": _replacement_credits,
                 "remaining":    0,
             }), 200
 
@@ -4582,12 +4586,23 @@ def swipe_action():
     if not user_id:
         remaining = max(ANON_LEAD_LIMIT - swipes_count, 0)
         auth_required = remaining == 0
+        billable_swipes_count = swipes_count
+        replacement_credits = 0
+    else:
+        _is_paid, _tier = _get_web_subscription(user_id)
+        replacement_credits = _elite_replacement_credit_count(user_id) if _tier == "elite" else 0
+        billable_swipes_count = max(swipes_count - replacement_credits, 0)
+        _limit = _tier_lead_limit(_tier, _is_paid)
+        if _limit is not None:
+            remaining = max(_limit - billable_swipes_count, 0)
 
     return jsonify({
         "ok":            True,
         "auth_required": auth_required,
         "anon_limit":    ANON_LEAD_LIMIT,
         "swipes_count":  swipes_count,
+        "billable_swipes_count": billable_swipes_count,
+        "replacement_credits": replacement_credits,
         "remaining":     remaining,
         "elite_claim":    claim_result,
     }), 200

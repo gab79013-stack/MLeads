@@ -310,6 +310,10 @@ def test_elite_reports_auto_grant_replacement_credits_for_guarantee():
     assert "replacement_credits" in app_src
     assert "billable_swipes" in app_src
     assert "billable_swipes_count" in app_src
+    assert "_billable_current = max(_current - _replacement_credits, 0)" in app_src
+    assert "_billable_current = max(_current - _replacement_credits, 0)" in route_src
+    assert "billable_swipes_count = max(swipes_count - replacement_credits, 0)" in app_src
+    assert "billable_swipes_count = max(swipes_count - replacement_credits, 0)" in route_src
     assert "replacement_credit_granted" in route_src
     assert "billable_swipes" in route_src
     assert "Te agregamos 1 crédito de reemplazo Elite" in html
