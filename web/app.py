@@ -5323,6 +5323,8 @@ def swipe_report_lead_quality():
 
     conn = get_db_connection()
     c = conn.cursor()
+    credit_granted = False
+    replacement_credits = 0
     try:
         c.execute("""
             SELECT address_key, lead_data, primary_service_type, first_seen
@@ -5402,55 +5404,57 @@ def swipe_my_contacts():
         LIMIT 100
     """, (user_id,))
     rows = c.fetchall()
-    conn.close()
 
     contacts = []
-    for row in rows:
-        rd = dict(row)
-        try:
-            ld = json.loads(rd.get('lead_data') or '{}')
-        except Exception:
-            ld = {}
-        scoring = ld.get('_scoring', {}) or {}
-        service_type = (rd.get('primary_service_type') or ld.get('primary_service_type') or '').strip().lower()
-        gc_insight = build_gc_insight(ld, service_type) if service_type else {}
-        is_elite_quality = False
-        premium_quality_score = 0
-        premium_quality_checks = []
-        if service_type:
-            is_elite_quality, premium_quality_score, premium_quality_checks = _is_elite_lead_record(rd, ld)
-        claim = _active_elite_claim(c, rd['lead_id']) if is_elite_quality else None
-        elite_claimed_by_me = bool(claim and int(claim['user_id']) == int(user_id))
-        elite_claim_expires_at = claim['expires_at'] if elite_claimed_by_me else ''
-        contacts.append({
-            'id':           rd['lead_id'],
-            'address':      rd['address'],
-            'city':         rd['city'],
-            'contacted_at': rd['contacted_at'],
-            'score':        scoring.get('score', 0),
-            'grade':        scoring.get('grade', ''),
-            'phone':        (ld.get('contact_phone') or '').strip(),
-            'email':        (ld.get('contact_email') or '').strip(),
-            'value':        ld.get('value_float', 0),
-            'service_type':  service_type,
-            'source_url':    gc_insight.get('source_url', ''),
-            'source_label':  gc_insight.get('source_label', ''),
-            'is_elite_quality': is_elite_quality,
-            'premium_quality_score': premium_quality_score,
-            'elite_claimed_by_me': elite_claimed_by_me,
-            'elite_claim_expires_at': elite_claim_expires_at,
-            'elite_certificate': _elite_certificate(
-                ld,
-                gc_insight,
-                premium_quality_score,
-                premium_quality_checks,
-                is_elite_quality,
-                '',
-                rd.get('first_seen', ''),
-                elite_claimed_by_me,
-                elite_claim_expires_at,
-            ),
-        })
+    try:
+        for row in rows:
+            rd = dict(row)
+            try:
+                ld = json.loads(rd.get('lead_data') or '{}')
+            except Exception:
+                ld = {}
+            scoring = ld.get('_scoring', {}) or {}
+            service_type = (rd.get('primary_service_type') or ld.get('primary_service_type') or '').strip().lower()
+            gc_insight = build_gc_insight(ld, service_type) if service_type else {}
+            is_elite_quality = False
+            premium_quality_score = 0
+            premium_quality_checks = []
+            if service_type:
+                is_elite_quality, premium_quality_score, premium_quality_checks = _is_elite_lead_record(rd, ld)
+            claim = _active_elite_claim(c, rd['lead_id']) if is_elite_quality else None
+            elite_claimed_by_me = bool(claim and int(claim['user_id']) == int(user_id))
+            elite_claim_expires_at = claim['expires_at'] if elite_claimed_by_me else ''
+            contacts.append({
+                'id':           rd['lead_id'],
+                'address':      rd['address'],
+                'city':         rd['city'],
+                'contacted_at': rd['contacted_at'],
+                'score':        scoring.get('score', 0),
+                'grade':        scoring.get('grade', ''),
+                'phone':        (ld.get('contact_phone') or '').strip(),
+                'email':        (ld.get('contact_email') or '').strip(),
+                'value':        ld.get('value_float', 0),
+                'service_type':  service_type,
+                'source_url':    gc_insight.get('source_url', ''),
+                'source_label':  gc_insight.get('source_label', ''),
+                'is_elite_quality': is_elite_quality,
+                'premium_quality_score': premium_quality_score,
+                'elite_claimed_by_me': elite_claimed_by_me,
+                'elite_claim_expires_at': elite_claim_expires_at,
+                'elite_certificate': _elite_certificate(
+                    ld,
+                    gc_insight,
+                    premium_quality_score,
+                    premium_quality_checks,
+                    is_elite_quality,
+                    '',
+                    rd.get('first_seen', ''),
+                    elite_claimed_by_me,
+                    elite_claim_expires_at,
+                ),
+            })
+    finally:
+        conn.close()
     return jsonify({'contacts': contacts}), 200
 
 

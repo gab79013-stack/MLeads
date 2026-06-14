@@ -278,11 +278,13 @@ def test_elite_leads_are_exclusive_claims_for_500_plan():
     assert "exclusive_unavailable" in app_src
     assert "elite_claimed_by_me" in app_src
     assert "elite_claim_expires_at" in app_src
+    assert "finally:\n        conn.close()\n    return jsonify({'contacts': contacts}), 200" in app_src
     assert "def _claim_elite_lead" in route_src
     assert "def _elite_certificate" in route_src
     assert "elite_certificate" in route_src
     assert "'elite_certificate': _elite_certificate" in route_src
     assert "exclusive_unavailable" in route_src
+    assert "finally:\n        conn.close()\n    return jsonify({'contacts': contacts}), 200" in route_src
     assert "Reservado para tu empresa" in html
     assert "Reserved until" in html
     assert "View source" in html
@@ -304,6 +306,10 @@ def test_elite_quality_guarantee_has_user_reports_and_admin_queue():
     assert "@bp.route('/swipe/report-lead'" in route_src
     assert "replacement_review" in app_src
     assert "lead_quality_reports" in app_src
+    assert "credit_granted = False" in app_src
+    assert "replacement_credits = 0" in app_src
+    assert "credit_granted = False" in route_src
+    assert "replacement_credits = 0" in route_src
     assert "@app.route('/api/admin/lead-quality-reports'" in app_src
     assert "@app.route('/api/admin/lead-quality-reports/<int:report_id>', methods=['PATCH'])" in app_src
     assert "def admin_update_lead_quality_report" in app_src
