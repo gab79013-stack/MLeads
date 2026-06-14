@@ -2504,6 +2504,42 @@ def admin_elite_pilot_requests():
     }), 200
 
 
+@app.route('/api/admin/elite-pilot-requests/<int:request_id>', methods=['PATCH'])
+@require_admin
+def admin_update_elite_pilot_request(request_id):
+    """Update sales follow-up status for captured Elite pilot demand."""
+    data = request.get_json(silent=True) or {}
+    status = (data.get("status") or "").strip().lower()
+    if status not in {"open", "contacted", "closed"}:
+        return jsonify({"error": "Status must be open, contacted or closed"}), 400
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            UPDATE elite_pilot_requests
+               SET status = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?
+        """, (status, request_id))
+        if c.rowcount == 0:
+            conn.rollback()
+            return jsonify({"error": "Elite pilot request not found"}), 404
+        conn.commit()
+        c.execute("""
+            SELECT epr.id, epr.user_id, u.email, u.full_name,
+                   epr.city, epr.service, epr.readiness_status,
+                   epr.recommended_price, epr.requested_price,
+                   epr.source, epr.status, epr.created_at, epr.updated_at
+              FROM elite_pilot_requests epr
+              LEFT JOIN users u ON u.id = epr.user_id
+             WHERE epr.id = ?
+        """, (request_id,))
+        row = c.fetchone()
+        return jsonify({"ok": True, "request": dict(row) if row else {"id": request_id, "status": status}}), 200
+    finally:
+        conn.close()
+
+
 # ─────────────────────────────────────────────────────────
 # Stripe — checkout + webhook
 # ─────────────────────────────────────────────────────────

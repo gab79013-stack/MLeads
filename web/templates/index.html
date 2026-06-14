@@ -2137,7 +2137,6 @@
                 if (!response.ok) throw new Error('elite pilot demand unavailable');
                 const data = await response.json();
                 const summary = data.summary || {};
-                const markets = data.markets || [];
                 const requests = data.requests || [];
                 document.getElementById('elitePilotTotal').textContent = summary.total_requests || 0;
                 document.getElementById('elitePilotMarkets').textContent = summary.markets || 0;
@@ -2151,11 +2150,14 @@
                 document.getElementById('elitePilotAlerts').textContent = hasDemand
                     ? 'Contractors tried to buy Elite in markets that need pilot pricing or more inventory.'
                     : 'No blocked Elite checkout demand captured yet.';
-                listEl.innerHTML = markets.slice(0, 6).map(m => `
+                listEl.innerHTML = requests.slice(0, 6).map(r => `
                     <div class="market-readiness-row">
-                        <strong>${escHtml(m.city || 'Unspecified')}</strong>
-                        <span>${escHtml(m.service || 'all')} · ${escHtml(m.readiness_status || 'needs_inventory')}</span>
-                        <span class="market-readiness-price">${Number(m.requests || 0)} req</span>
+                        <strong>${escHtml(r.email || r.full_name || 'Unknown GC')}</strong>
+                        <span>${escHtml(r.city || 'Unspecified')} · ${escHtml(r.service || 'all')} · ${escHtml(r.readiness_status || 'needs_inventory')}</span>
+                        <span>
+                            <button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" onclick="updateElitePilotRequest(${Number(r.id || 0)}, 'contacted')">Contacted</button>
+                            <button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" onclick="updateElitePilotRequest(${Number(r.id || 0)}, 'closed')">Closed</button>
+                        </span>
                     </div>
                 `).join('') || '<div class="elite-quality-alert">No pilot requests yet.</div>';
             } catch (e) {
@@ -2163,6 +2165,24 @@
                 statusEl.classList.add('danger');
                 document.getElementById('elitePilotAlerts').textContent = 'Elite pilot demand could not be loaded.';
                 listEl.innerHTML = '';
+            }
+        }
+
+        async function updateElitePilotRequest(id, status) {
+            if (!id) return;
+            try {
+                const response = await fetch(`/api/admin/elite-pilot-requests/${id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentAccessToken}`
+                    },
+                    body: JSON.stringify({ status })
+                });
+                if (!response.ok) throw new Error('Could not update Elite pilot request');
+                await loadElitePilotDemand();
+            } catch (e) {
+                alert(e.message || 'Could not update Elite pilot request');
             }
         }
 

@@ -239,7 +239,11 @@ def test_admin_dashboard_surfaces_elite_quality_report():
     assert 'id="elitePilotTotal"' in html
     assert 'id="elitePilotMarkets"' in html
     assert "loadElitePilotDemand()" in html
+    assert "updateElitePilotRequest" in html
+    assert "Contacted" in html
+    assert "Closed" in html
     assert "/api/admin/elite-pilot-requests?status=open" in html
+    assert "/api/admin/elite-pilot-requests/${id}" in html
     assert "Contractors tried to buy Elite" in html
 
 
@@ -345,6 +349,8 @@ def test_stripe_elite_subscription_state_is_persisted_for_recurring_billing():
     assert "CREATE TABLE IF NOT EXISTS elite_pilot_requests" in db_src
     assert "idx_elite_pilot_requests_status_market" in db_src
     assert "@app.route('/api/admin/elite-pilot-requests'" in app_src
+    assert "@app.route('/api/admin/elite-pilot-requests/<int:request_id>', methods=['PATCH'])" in app_src
+    assert "def admin_update_elite_pilot_request" in app_src
     assert "function showElitePilotRequest" in html
     assert "Solicitud piloto registrada" in html
     assert 'status != "ready_for_elite" or recommended_price < 500' in app_src
