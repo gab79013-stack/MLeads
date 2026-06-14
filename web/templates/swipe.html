@@ -329,6 +329,9 @@
         .quality-box{background:#ecfdf5;border:1px solid #86efac;border-radius:10px;padding:8px 10px;margin:0 0 8px;color:#166534}
         .quality-box strong{font-size:12px}
         .quality-box div{font-size:11.5px;line-height:1.4;margin-top:2px}
+        .elite-proof{display:none;border:1px solid #c7d2fe;background:#eef2ff;color:#312e81;border-radius:10px;padding:10px 11px;margin:0 0 12px}
+        .elite-proof strong{display:block;font-size:12px;margin-bottom:4px}
+        .elite-proof div{font-size:11.5px;line-height:1.4}
         .oauth-btn{width:100%;padding:13px 16px;border-radius:13px;border:1px solid var(--border);background:var(--surface);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:9px;transition:background .15s,transform .1s}
         .oauth-btn:hover{background:#f8f9fa}.oauth-btn:active{transform:scale(.98)}
         .oauth-btn svg{width:20px;height:20px}
@@ -627,6 +630,10 @@
         <!-- Upgrade flow (paid tiers) -->
         <div id="pwUpgradeSection" class="pw-body" style="display:none">
             <p id="pwUpgradeUsage" style="font-size:13px;color:var(--muted);margin-bottom:12px;text-align:center"></p>
+            <div class="elite-proof" id="eliteSalesProof">
+                <strong id="eliteProofHeadline">Elite proof</strong>
+                <div id="eliteProofBody">Calculando inventario y ROI...</div>
+            </div>
             <div class="tier-grid">
                 <div class="tier-card">
                     <div class="tier-head"><div><div class="tier-name">Pro</div><div class="tier-price">$29<small>/mes</small></div></div><strong style="font-size:11px;color:#e11d48">200 leads</strong></div>
@@ -1050,6 +1057,27 @@ async function loadFilterOptions() {
         syncAvailableLeadTypePills();
     } catch (e) {
         console.debug('Filter options unavailable', e);
+    }
+}
+
+async function loadEliteSalesProof() {
+    const box = document.getElementById('eliteSalesProof');
+    if (!box) return;
+    box.style.display = 'none';
+    try {
+        const url = new URL('/api/swipe/elite-sales-proof', location.origin);
+        if (F.city) url.searchParams.set('city', F.city);
+        if (F.leadTypes.size) url.searchParams.set('service', [...F.leadTypes].join(','));
+        const res = await fetch(url, { headers: authHdrs() });
+        if (!res.ok) return;
+        const data = await res.json();
+        const points = Array.isArray(data.proof_points) ? data.proof_points.slice(0, 3) : [];
+        if (!points.length && !data.headline) return;
+        document.getElementById('eliteProofHeadline').textContent = data.headline || (CURRENT_LANG === 'es' ? 'Prueba de valor Elite' : 'Elite value proof');
+        document.getElementById('eliteProofBody').textContent = points.join(' ');
+        box.style.display = '';
+    } catch (e) {
+        box.style.display = 'none';
     }
 }
 
@@ -1873,6 +1901,7 @@ function showPaywall(mode) {
             : `You contacted <strong>${S.swipes} leads</strong>. If one close is worth $10k+, Elite ($500/mo) can justify itself with one well-verified opportunity.`;
         regSec.style.display = 'none';
         upgSec.style.display = '';
+        loadEliteSalesProof();
     } else {
         // Anonymous → register for free leads
         document.getElementById('pwTitle').textContent  = CURRENT_LANG === 'es' ? 'Convierte señales en trabajos' : 'Turn signals into jobs';
