@@ -117,6 +117,23 @@ def test_swipe_supports_elite_500_plan_and_quality_evidence():
     assert "subscription_tier" in db_src
 
 
+def test_elite_quality_gate_requires_phone_source_score_and_action_signal():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+
+    for src in (app_src, route_src):
+        assert "has_source = bool(gc_insight.get(\"source_url\"))" in src
+        assert "has_phone = bool((lead_data.get(\"contact_phone\") or \"\").strip())" in src
+        assert "and has_source" in src
+        assert "and has_phone" in src
+        assert "and score >= 85" in src
+        assert "has_value or has_action_window or has_direct_owner_intent" in src
+        assert "No Elite: falta teléfono" in src
+
+    assert "Elite qualification requires a verified source, phone contact, high score" in readme
+
+
 def test_swipe_exposes_elite_inventory_for_sales_proof():
     html = _html()
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")

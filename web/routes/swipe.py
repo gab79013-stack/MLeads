@@ -62,29 +62,46 @@ def _tier_lead_limit(tier: str, is_paid: bool) -> int | None:
 
 def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scoring: dict, inspection_date: str = "") -> tuple[int, list[str], bool]:
     score = int(scoring.get("score") or 0)
+    service = str(service_type or "").lower()
+    has_source = bool(gc_insight.get("source_url"))
+    has_phone = bool((lead_data.get("contact_phone") or "").strip())
+    has_value = bool(lead_data.get("value_float"))
+    has_action_window = bool(inspection_date) or service in {"weather", "flood", "disaster"}
+    has_direct_owner_intent = str(lead_data.get("_lead_channel") or "") == "homeowner_intake"
     points = 0
     checks: list[str] = []
     if gc_insight.get("confidence") == "verified":
         points += 30
         checks.append("Fuente oficial verificada")
-    if gc_insight.get("source_url"):
+    if has_source:
         points += 15
         checks.append("Link de fuente auditable")
-    if (lead_data.get("contact_phone") or "").strip():
+    if has_phone:
         points += 20
         checks.append("Teléfono disponible")
     if score >= 90:
         points += 15
         checks.append("Score HOT 90+")
-    if lead_data.get("value_float"):
+    if has_value:
         points += 10
         checks.append("Valor de proyecto detectado")
     if inspection_date:
         points += 10
         checks.append("Ventana de visita/inspección")
-    if str(service_type or "").lower() in {"weather", "flood", "disaster"}:
+    if service in {"weather", "flood", "disaster"}:
         checks.append("Oportunidad sensible al tiempo")
-    return min(points, 100), checks[:5], points >= 70
+    if has_direct_owner_intent:
+        checks.append("Homeowner pidió GC directamente")
+    is_elite = (
+        points >= 70
+        and has_source
+        and has_phone
+        and score >= 85
+        and (has_value or has_action_window or has_direct_owner_intent)
+    )
+    if not is_elite and not has_phone:
+        checks.append("No Elite: falta teléfono")
+    return min(points, 100), checks[:5], is_elite
 
 
 def _is_elite_lead_record(row_dict: dict, lead_data: dict | None = None) -> tuple[bool, int, list[str]]:
