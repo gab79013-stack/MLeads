@@ -87,6 +87,7 @@ MLeads/
 - Free preview and authenticated free quota
 - Pro/Premium/Elite Stripe checkout support
 - Elite plan designed for `$500/month` positioning
+- Elite checkout is blocked unless the selected market/filter is `ready_for_elite` with a `$500+` recommended price
 - Elite leads can be reserved exclusively per contractor for a configurable claim window
 - Elite qualification requires a verified source, phone contact, high score, fresh signal, and either project value, action window, or direct homeowner intent
 - Admin quality report shows sellability, contact coverage, source coverage, project value coverage and market readiness

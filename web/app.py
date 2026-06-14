@@ -2455,12 +2455,16 @@ def create_payment_checkout():
     Create a Stripe Checkout session for the authenticated web user.
     Body: {"tier": "pro" | "premium" | "elite"}
     Returns: {"checkout_url": "https://checkout.stripe.com/..."}
-    Requires STRIPE_API_KEY and STRIPE_PRICE_ID_PRO / STRIPE_PRICE_ID_PREMIUM in env.
+    Requires STRIPE_API_KEY and STRIPE_PRICE_ID_PRO / STRIPE_PRICE_ID_PREMIUM / STRIPE_PRICE_ID_ELITE in env.
     """
     data = request.get_json(silent=True) or {}
     tier = (data.get('tier') or 'pro').lower()
     if tier not in ('pro', 'premium', 'elite'):
         return jsonify({"error": "Tier must be 'pro', 'premium' or 'elite'"}), 400
+
+    elite_gate, checkout_context = _elite_checkout_guard(tier, data)
+    if elite_gate:
+        return elite_gate
 
     stripe_key = os.getenv('STRIPE_API_KEY', '')
     price_id   = os.getenv(f'STRIPE_PRICE_ID_{tier.upper()}', os.getenv('STRIPE_PRICE_ID', ''))
@@ -2478,7 +2482,7 @@ def create_payment_checkout():
         conn.close()
 
         base_url = os.getenv('BASE_URL', 'http://104.42.252.241:5000')
-        checkout_metadata = {'user_id': str(g.user_id), 'tier': tier}
+        checkout_metadata = {'user_id': str(g.user_id), 'tier': tier, **checkout_context}
         session = _stripe.checkout.Session.create(
             mode='subscription',
             line_items=[{'price': price_id, 'quantity': 1}],
@@ -2493,6 +2497,59 @@ def create_payment_checkout():
     except Exception as e:
         logger.exception(f"Stripe checkout creation failed: {e}")
         return jsonify({"error": "Error al procesar el pago. Intenta de nuevo."}), 500
+
+
+def _checkout_filter(value) -> str:
+    """Keep checkout metadata/filter values compact and Stripe-safe."""
+    if isinstance(value, (list, tuple, set)):
+        value = ",".join(str(v) for v in value if str(v).strip())
+    return str(value or "").strip()[:120]
+
+
+def _elite_checkout_guard(tier: str, data: dict):
+    """Only sell the $500 Elite plan where inventory is actually ready."""
+    city = _checkout_filter(data.get('city'))
+    service = _checkout_filter(data.get('service') or data.get('service_cats'))
+    context = {}
+    if city:
+        context['market_city'] = city
+    if service:
+        context['market_service'] = service
+
+    if tier != 'elite':
+        return None, context
+
+    try:
+        proof = _elite_sales_proof_payload(city, service)
+    except Exception as exc:
+        logger.warning(f"Elite checkout readiness unavailable: {exc}")
+        return (jsonify({
+            "error": "Elite requiere validación de inventario antes de cobrar. Intenta de nuevo en unos minutos.",
+            "code": "elite_readiness_unavailable",
+            "checkout_allowed": False,
+        }), 503), context
+
+    status = proof.get("status")
+    recommended_price = int(proof.get("recommended_price") or 0)
+    market = proof.get("market") or {}
+    if status != "ready_for_elite" or recommended_price < 500:
+        return (jsonify({
+            "error": "Elite todavía no está listo para venderse en este mercado/filtro. Usa Premium o solicita piloto.",
+            "code": "elite_market_not_ready",
+            "checkout_allowed": False,
+            "status": status or "needs_inventory",
+            "recommended_price": recommended_price,
+            "market": market,
+            "proof_points": proof.get("proof_points", []),
+        }), 409), context
+
+    context.update({
+        "elite_market_status": status,
+        "elite_recommended_price": str(recommended_price),
+    })
+    if market.get("city"):
+        context["elite_market_city"] = _checkout_filter(market.get("city"))
+    return None, context
 
 
 @app.route('/api/stripe/webhook', methods=['POST'])

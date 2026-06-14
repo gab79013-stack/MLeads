@@ -315,15 +315,27 @@ def test_real_data_elite_auditor_script_exists_for_sales_checks():
 
 
 def test_stripe_elite_subscription_state_is_persisted_for_recurring_billing():
+    html = _html()
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
     route_src = (TEMPLATE.parents[1] / "routes" / "leads.py").read_text(encoding="utf-8")
     db_src = (TEMPLATE.parents[1].parents[0] / "utils" / "web_db.py").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
 
+    assert "city: F.city || ''" in html
+    assert "service: [...F.leadTypes].join(',')" in html
     assert "subscription_data={'metadata': checkout_metadata}" in app_src
     assert "subscription_data={'metadata': checkout_metadata}" in route_src
     assert "stripe_customer_id" in db_src
     assert "stripe_subscription_id" in db_src
     assert "paid_until" in db_src
+    assert "def _elite_checkout_guard" in app_src
+    assert "def _elite_checkout_guard" in route_src
+    assert "elite_market_not_ready" in app_src
+    assert "elite_market_not_ready" in route_src
+    assert 'status != "ready_for_elite" or recommended_price < 500' in app_src
+    assert 'status != "ready_for_elite" or recommended_price < 500' in route_src
+    assert "'elite_market_status': status" in app_src or '"elite_market_status": status' in app_src
+    assert "Elite checkout is blocked" in readme
     assert "def _resolve_web_user_id_from_stripe_object" in app_src
     assert "stripe_subscription_id = COALESCE" in app_src
     assert "stripe_customer_id = COALESCE" in app_src

@@ -1922,7 +1922,11 @@ async function handleUpgrade(tier) {
         const res = await fetch('/api/payment/checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...authHdrs() },
-            body: JSON.stringify({ tier })
+            body: JSON.stringify({
+                tier,
+                city: F.city || '',
+                service: [...F.leadTypes].join(',')
+            })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Error al iniciar pago');
