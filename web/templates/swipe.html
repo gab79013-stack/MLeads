@@ -23,6 +23,7 @@
         .brand-icon{width:32px;height:32px;border-radius:8px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center}
         .brand-icon svg{width:17px;height:17px}
         .hdr-right{display:flex;align-items:center;gap:8px}
+        .brand-sub{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--fg3);margin-left:-3px}
         .counter{font-size:12px;font-weight:600;color:var(--fg2);background:var(--surface);padding:5px 11px;border-radius:999px;border:1px solid var(--border)}
         .counter strong{color:var(--fg)}
         .icon-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--fg2);transition:all .15s;box-shadow:0 2px 6px rgba(0,0,0,.06);position:relative;flex-shrink:0}
@@ -44,7 +45,7 @@
         .chip-x:hover{opacity:1}
 
         /* ─── Deck ────────────────────────────────────── */
-        .deck{position:relative;width:100%;max-width:420px;height:min(560px,calc(100dvh - 215px));margin-top:2px}
+        .deck{position:relative;width:100%;max-width:420px;height:min(520px,calc(100dvh - 265px));margin-top:2px}
         .card{position:absolute;inset:0;background:var(--surface);border-radius:20px;box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden;cursor:grab;user-select:none;display:flex;flex-direction:column;touch-action:pan-y;transition:transform .25s cubic-bezier(.2,.9,.3,1.3),opacity .25s ease;will-change:transform}
         .card.drag{transition:none;cursor:grabbing}
         .card.go-left{transform:translate(-160%,40px) rotate(-26deg)!important;opacity:0}
@@ -177,12 +178,14 @@
         .pills{display:flex;flex-wrap:wrap;gap:7px}
         .pill{padding:8px 13px;border-radius:999px;border:1.5px solid var(--border);background:var(--surface);font-size:12px;font-weight:600;color:var(--fg2);cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap}
         .pill:hover{opacity:.8}
-        /* Subcontractor pills: purple theme */
+        /* Legacy trade pills theme (unused in GC-only UI) */
         .pill.sub:hover{border-color:#c4b5fd;color:#7c3aed}
         .pill.sub.on{background:#7c3aed;border-color:#7c3aed;color:#fff}
         /* Lead type pills: orange theme */
         .pill.ltype:hover{border-color:#fdba74;color:#c2410c}
         .pill.ltype.on{background:#ea580c;border-color:#ea580c;color:#fff}
+        .pill.ltype.unavailable{opacity:.42;cursor:not-allowed;text-decoration:line-through;background:#f8fafc;color:#94a3b8}
+        .pill.ltype.unavailable:hover{border-color:var(--border);color:#94a3b8}
 
         /* City input + autocomplete */
         .inp-wrap{position:relative}
@@ -202,6 +205,36 @@
         .beta-text{flex:1;font-size:11px;color:#92400e;line-height:1.3}
         .beta-fb-btn{font-size:10px;font-weight:700;color:#c2410c;background:none;border:1px solid #fdba74;border-radius:6px;padding:3px 8px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0}
         .beta-fb-btn:hover{background:#fff7ed}
+
+        /* Value proof strip */
+        .value-strip{width:100%;max-width:420px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:9px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 4px 12px rgba(15,23,42,.05)}
+        .value-main{font-size:12px;font-weight:800;color:var(--fg);line-height:1.25}
+        .value-sub{font-size:10.5px;color:var(--fg2);line-height:1.3;margin-top:2px}
+        .value-pill{font-size:10px;font-weight:900;color:#166534;background:#dcfce7;border:1px solid #86efac;border-radius:999px;padding:4px 8px;white-space:nowrap}
+        .homeowner-link{display:inline-flex;margin-top:4px;font-size:10.5px;font-weight:800;color:#0f766e;text-decoration:none}
+        .homeowner-link:hover{text-decoration:underline}
+
+        /* Onboarding */
+        .ob-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.64);backdrop-filter:blur(6px);z-index:1100;display:flex;align-items:flex-end;justify-content:center;padding:0;opacity:0;pointer-events:none;transition:opacity .25s}
+        .ob-backdrop.open{opacity:1;pointer-events:auto}
+        .ob-card{width:100%;max-width:480px;background:var(--surface);border-radius:24px 24px 0 0;padding:20px 18px max(18px,env(safe-area-inset-bottom));box-shadow:0 -20px 48px rgba(15,23,42,.24);transform:translateY(40px);transition:transform .28s cubic-bezier(.32,.72,0,1)}
+        .ob-backdrop.open .ob-card{transform:translateY(0)}
+        .ob-kicker{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;color:#c2410c;margin-bottom:6px}
+        .ob-title{font-size:22px;font-weight:900;letter-spacing:-.5px;line-height:1.08;margin-bottom:6px;color:var(--fg)}
+        .ob-copy{font-size:13px;line-height:1.45;color:var(--fg2);margin-bottom:16px}
+        .ob-section{margin-top:14px}
+        .ob-label{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--fg3);margin-bottom:8px}
+        .ob-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        .ob-choice{border:1.5px solid var(--border);background:#fff;border-radius:12px;padding:10px 11px;text-align:left;font-family:inherit;cursor:pointer;transition:all .15s;color:var(--fg)}
+        .ob-choice strong{display:block;font-size:12.5px;line-height:1.25}
+        .ob-choice span{display:block;font-size:10.5px;color:var(--fg2);line-height:1.3;margin-top:3px}
+        .ob-choice.on{border-color:#ea580c;background:#fff7ed;color:#9a3412}
+        .ob-location{display:grid;grid-template-columns:1fr auto;gap:8px}
+        .ob-location .city-inp{height:42px}
+        .ob-radius{border:1px solid var(--border);border-radius:11px;background:#fafafa;padding:0 10px;font-size:13px;font-weight:700;color:var(--fg);font-family:inherit}
+        .ob-actions{display:flex;gap:10px;margin-top:18px}
+        .ob-primary{flex:1;border:none;border-radius:13px;background:var(--accent);color:#fff;font-size:14px;font-weight:800;padding:13px;font-family:inherit;cursor:pointer}
+        .ob-secondary{border:none;background:transparent;color:var(--fg2);font-size:13px;font-weight:700;padding:13px 6px;font-family:inherit;cursor:pointer}
 
         /* Lang toggle */
         .lang-btn{font-size:18px;font-weight:800;padding:2px 6px;border-radius:999px;border:1.5px solid var(--accent);background:var(--surface);color:var(--accent);cursor:pointer;font-family:inherit;transition:all .15s;letter-spacing:.3px;line-height:1}
@@ -267,8 +300,8 @@
         .mbackdrop.open{opacity:1;pointer-events:auto}
         .modal{background:var(--surface);border-radius:24px 24px 0 0;width:100%;max-width:480px;padding:0 0 env(safe-area-inset-bottom,20px);transform:translateY(60px);transition:transform .3s cubic-bezier(.32,.72,0,1);overflow:hidden}
         .mbackdrop.open .modal{transform:translateY(0)}
-        .pw-hero{background:linear-gradient(160deg,#1a0a1e,#3b0764 50%,#1a0a1e);padding:28px 24px 22px;text-align:center;position:relative;overflow:hidden}
-        .pw-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(168,85,247,.35),transparent 70%)}
+        .pw-hero{background:linear-gradient(160deg,#111827,#7f1d1d 58%,#111827);padding:28px 24px 22px;text-align:center;position:relative;overflow:hidden}
+        .pw-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(248,113,113,.32),transparent 70%)}
         .pw-stars{font-size:26px;margin-bottom:8px;display:block}
         .pw-hero h2{font-size:21px;font-weight:900;color:#fff;letter-spacing:-.4px;line-height:1.2;margin-bottom:5px}
         .pw-hero p{font-size:13px;color:rgba(255,255,255,.7);line-height:1.5}
@@ -279,6 +312,23 @@
         .perk{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:var(--fg)}
         .perk-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
         .pi-g{background:#f0fdf4}.pi-b{background:#eff6ff}.pi-p{background:#faf5ff}.pi-o{background:#fff7ed}
+        .roi-box{border:1px solid #bbf7d0;background:#f0fdf4;border-radius:12px;padding:11px 12px;margin-bottom:12px;color:#166534}
+        .roi-box strong{color:#14532d}
+        .roi-box div:first-child{font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+        .roi-box div:last-child{font-size:12px;line-height:1.45}
+        .tier-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:14px}
+        .tier-card{border:1.5px solid var(--border);border-radius:14px;padding:13px 12px;background:var(--surface)}
+        .tier-card.featured{border:2px solid #16a34a;background:#f0fdf4}
+        .tier-card.elite{border:2px solid #111827;background:#f8fafc}
+        .tier-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+        .tier-price{font-size:20px;font-weight:900;color:var(--fg)}
+        .tier-price small{font-size:12px;font-weight:500;color:var(--fg2)}
+        .tier-name{font-size:14px;font-weight:900;margin-top:2px}
+        .tier-desc{font-size:12px;color:var(--fg2);line-height:1.45;margin:7px 0 10px}
+        .tier-btn{width:100%;padding:9px;border-radius:9px;color:#fff;border:none;font-weight:800;cursor:pointer;font-family:inherit}
+        .quality-box{background:#ecfdf5;border:1px solid #86efac;border-radius:10px;padding:8px 10px;margin:0 0 8px;color:#166534}
+        .quality-box strong{font-size:12px}
+        .quality-box div{font-size:11.5px;line-height:1.4;margin-top:2px}
         .oauth-btn{width:100%;padding:13px 16px;border-radius:13px;border:1px solid var(--border);background:var(--surface);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:9px;transition:background .15s,transform .1s}
         .oauth-btn:hover{background:#f8f9fa}.oauth-btn:active{transform:scale(.98)}
         .oauth-btn svg{width:20px;height:20px}
@@ -293,8 +343,11 @@
         .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
         @media(max-width:400px){
-            .deck{height:calc(100dvh - 210px)}
+            .deck{height:calc(100dvh - 270px)}
             .abtn{width:54px;height:54px}
+            .brand-sub{display:none}
+            .value-strip{padding:8px 10px}
+            .ob-grid{grid-template-columns:1fr}
         }
     </style>
 </head>
@@ -305,7 +358,7 @@
     <div class="brand">
         <div class="brand-icon" style="font-size:16px;font-weight:900;color:#fff;letter-spacing:-1px">0b</div>
         <span>0brix</span>
-        <span>0brix</span>
+        <span class="brand-sub">Leads</span>
     </div>
     <div class="hdr-right">
         <button class="lang-btn" id="langToggle" aria-label="Cambiar idioma">🇲🇽</button>
@@ -335,6 +388,54 @@
     <span class="beta-tag">BETA</span>
     <span class="beta-text" id="betaText">Esta app está en versión BETA. ¡Tu opinión nos ayuda a mejorar!</span>
     <button class="beta-fb-btn" id="openFeedback" onclick="showFeedback()">Comentar</button>
+</div>
+
+<!-- Value proof -->
+	<div class="value-strip" id="valueStrip">
+	    <div>
+	        <div class="value-main" id="valueMain">Leads verificados para GCs listos para llamar</div>
+	        <div class="value-sub" id="valueSub">Permisos, tormentas y oportunidades sin GC confirmado.</div>
+	        <div class="value-sub" id="eliteInventoryText">Inventario Elite filtrado por ciudad y categoría.</div>
+	        <a class="homeowner-link" href="/homeowner-intake" id="homeownerLeadLink">¿Homeowner? Solicita GC para una adición o remodel</a>
+	    </div>
+	    <div class="value-pill" id="valuePill">$500/mes Elite</div>
+	</div>
+
+<!-- First-run onboarding -->
+<div class="ob-backdrop" id="onboarding">
+    <div class="ob-card">
+        <div class="ob-kicker" id="obKicker">Configura tu búsqueda</div>
+        <h2 class="ob-title" id="obTitle">Encuentra leads cerca de ti</h2>
+        <p class="ob-copy" id="obCopy">Dinos qué oportunidad buscas y en qué zona trabajas. Te mostramos permisos, daños por tormenta y proyectos listos para contactar.</p>
+
+        <div class="ob-section">
+            <div class="ob-label" id="obTypeLabel">Tipo de oportunidad</div>
+            <div class="ob-grid" id="obChoices">
+                <button class="ob-choice on" data-cat="weather"><strong>Daño por tormenta</strong><span>Roofing, siding, emergencia</span></button>
+                <button class="ob-choice" data-cat="permits"><strong>Permisos listos</strong><span>Obras nuevas o remodelaciones</span></button>
+                <button class="ob-choice" data-cat="construction"><strong>Sin GC confirmado</strong><span>Proyecto abierto para cotizar</span></button>
+                <button class="ob-choice" data-cat="remodel"><strong>Remodelación</strong><span>Reparación y mejoras</span></button>
+            </div>
+        </div>
+
+        <div class="ob-section">
+            <div class="ob-label" id="obLocLabel">Zona de trabajo</div>
+            <div class="ob-location">
+                <input class="city-inp" id="obCity" type="text" placeholder="Tu ciudad..." autocomplete="off" autocorrect="off" spellcheck="false">
+                <select class="ob-radius" id="obRadius" aria-label="Radio de búsqueda">
+                    <option value="10">10 mi</option>
+                    <option value="25" selected>25 mi</option>
+                    <option value="50">50 mi</option>
+                    <option value="100">100 mi</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="ob-actions">
+            <button class="ob-secondary" id="obSkip" type="button">Saltar</button>
+            <button class="ob-primary" id="obStart" type="button">Ver mis leads</button>
+        </div>
+    </div>
 </div>
 
 <!-- Deck -->
@@ -379,46 +480,29 @@
                 <button class="tsw" id="hotToggle" role="switch" aria-checked="false"></button>
             </div>
 
-            <!-- Subcontractors -->
-            <div>
-                <div class="fsec">
-                    <div class="fsec-icon purple">👷</div>
-                    <span class="fsec-label">Subcontratistas</span>
-                    <span class="fsec-count" id="subCount">0</span>
+            <div class="trow">
+                <div class="tlabel">
+                    <span id="eliteOnlyLabel">🏆 Solo leads Elite</span>
+                    <small id="eliteOnlyDesc">Fuente oficial + contacto + alta intención</small>
                 </div>
-                <div class="pills" id="subPills">
-                    <button class="pill sub" data-cat="roofing">🏠 Roofing</button>
-                    <button class="pill sub" data-cat="drywall">🧱 Drywall</button>
-                    <button class="pill sub" data-cat="paint">🎨 Pintura</button>
-                    <button class="pill sub" data-cat="electrical">⚡ Eléctrico</button>
-                    <button class="pill sub" data-cat="plumbing">🔧 Plomería</button>
-                    <button class="pill sub" data-cat="hvac">❄️ HVAC</button>
-                    <button class="pill sub" data-cat="flooring">🪵 Pisos</button>
-                    <button class="pill sub" data-cat="concrete">🧱 Concreto</button>
-                    <button class="pill sub" data-cat="framing">🪚 Framing</button>
-                    <button class="pill sub" data-cat="windows">🪟 Ventanas</button>
-                    <button class="pill sub" data-cat="landscaping">🌿 Paisajismo</button>
-                </div>
+                <button class="tsw" id="eliteToggle" role="switch" aria-checked="false"></button>
             </div>
 
-            <!-- Lead type -->
+            <!-- GC opportunity type -->
             <div>
                 <div class="fsec">
-                    <div class="fsec-icon orange">📋</div>
-                    <span class="fsec-label">Tipo de Lead</span>
+                    <div class="fsec-icon orange">🏗️</div>
+                    <span class="fsec-label">Oportunidad para GC</span>
                     <span class="fsec-count" id="ltypeCount">0</span>
                 </div>
                 <div class="pills" id="ltypePills">
-                    <button class="pill ltype" data-cat="permits">📋 Permisos</button>
-                    <button class="pill ltype" data-cat="construction">👷 Construcción Activa</button>
-                    <button class="pill ltype" data-cat="realestate">🏡 Venta de Propiedad</button>
-                    <button class="pill ltype" data-cat="solar">☀️ Solar</button>
-                    <button class="pill ltype" data-cat="flood">💧 Daño por Agua</button>
-                    <button class="pill ltype" data-cat="energy">⚡ Eficiencia Energética</button>
-                    <button class="pill ltype" data-cat="rodents">🐀 Control de Plagas</button>
-                    <button class="pill ltype" data-cat="deconstruction">🏚️ Demolición</button>
-                    <button class="pill ltype" data-cat="remodel">🔨 Remodelación</button>
-                    <button class="pill ltype" data-cat="crossdata">🔮 Cross-Data</button>
+                    <button class="pill ltype" data-cat="weather">⛈️ Daño por tormenta</button>
+                    <button class="pill ltype" data-cat="remodel">🔨 Remodelación / reparación</button>
+                    <button class="pill ltype" data-cat="permits">📋 Permisos listos</button>
+                    <button class="pill ltype" data-cat="construction">🏗️ Proyecto sin GC confirmado</button>
+                    <button class="pill ltype" data-cat="deconstruction">🏚️ Demolición / rebuild</button>
+                    <button class="pill ltype" data-cat="realestate">🏡 Venta de propiedad</button>
+                    <button class="pill ltype" data-cat="crossdata">🔮 Cross-data verificado</button>
                 </div>
             </div>
 
@@ -477,7 +561,7 @@
     <div class="modal">
         <div class="pw-hero">
             <span class="pw-stars">🔥✨🔥</span>
-            <h2 id="pwTitle">¡Desbloquea leads ilimitados!</h2>
+            <h2 id="pwTitle">Convierte señales en trabajos</h2>
             <p id="pwSubtitle">Has visto tus <strong style="color:#fff">10 leads gratis</strong>.<br>Regístrate y obtén <strong style="color:#4ade80">40 leads adicionales gratis</strong>.</p>
             <div class="trial-badge" id="pwBadge">
                 🎁 40 Leads Gratis
@@ -491,10 +575,14 @@
         <!-- Register flow (default) -->
         <div id="pwRegisterSection" class="pw-body">
             <div class="perks">
+                <div class="roi-box" id="pwRoiBox">
+                    <div>Por qué vale pagarlo</div>
+                    <div>Si cierras 1 trabajo de cada 20 leads a $3k, un mes Pro puede pagarse muchas veces.</div>
+                </div>
                 <div class="perk"><div class="perk-icon pi-g">🎁</div><span><strong>40 leads gratis</strong> — sin tarjeta de crédito</span></div>
                 <div class="perk"><div class="perk-icon pi-b">📞</div><span><strong>Contacto completo</strong> — Teléfono, email y contratista</span></div>
                 <div class="perk"><div class="perk-icon pi-p">🔥</div><span><strong>Leads HOT en tiempo real</strong> — Sé el primero en contactar</span></div>
-                <div class="perk"><div class="perk-icon pi-o">📍</div><span><strong>Filtros por zona y servicio</strong> — Roofing, solar, eléctrico…</span></div>
+                <div class="perk"><div class="perk-icon pi-o">📍</div><span><strong>Filtros por zona y oportunidad</strong> — tormenta, remodelación, permisos…</span></div>
             </div>
             <button class="oauth-btn google" id="btnGoogle">
                 <svg viewBox="0 0 24 24">
@@ -539,20 +627,21 @@
         <!-- Upgrade flow (paid tiers) -->
         <div id="pwUpgradeSection" class="pw-body" style="display:none">
             <p id="pwUpgradeUsage" style="font-size:13px;color:var(--muted);margin-bottom:12px;text-align:center"></p>
-            <div style="display:flex;gap:10px;margin-bottom:14px">
-                <!-- Pro tier -->
-                <div style="flex:1;border:2px solid var(--accent);border-radius:14px;padding:14px 12px;text-align:center;background:var(--surface)">
-                    <div style="font-size:20px;font-weight:900;color:var(--accent)">$29<small style="font-size:12px;font-weight:500">/mes</small></div>
-                    <div style="font-weight:700;margin:4px 0 8px">Pro</div>
-                    <div style="font-size:12px;color:var(--muted);line-height:1.5">200 leads/mes<br>Todos los filtros<br>Contacto completo</div>
-                    <button onclick="handleUpgrade('pro')" style="margin-top:10px;width:100%;padding:8px;border-radius:8px;background:var(--accent);color:#fff;border:none;font-weight:700;cursor:pointer">Elegir Pro</button>
+            <div class="tier-grid">
+                <div class="tier-card">
+                    <div class="tier-head"><div><div class="tier-name">Pro</div><div class="tier-price">$29<small>/mes</small></div></div><strong style="font-size:11px;color:#e11d48">200 leads</strong></div>
+                    <div class="tier-desc">Para probar el canal: filtros, contacto completo y pipeline.</div>
+                    <button class="tier-btn" onclick="handleUpgrade('pro')" style="background:var(--accent)">Elegir Pro</button>
                 </div>
-                <!-- Premium tier -->
-                <div style="flex:1;border:2px solid #f59e0b;border-radius:14px;padding:14px 12px;text-align:center;background:var(--surface)">
-                    <div style="font-size:20px;font-weight:900;color:#f59e0b">$99<small style="font-size:12px;font-weight:500">/mes</small></div>
-                    <div style="font-weight:700;margin:4px 0 8px">Premium ✨</div>
-                    <div style="font-size:12px;color:var(--muted);line-height:1.5">Leads ilimitados<br>Inspecciones en tiempo real<br>Prioridad de soporte</div>
-                    <button onclick="handleUpgrade('premium')" style="margin-top:10px;width:100%;padding:8px;border-radius:8px;background:#f59e0b;color:#fff;border:none;font-weight:700;cursor:pointer">Elegir Premium</button>
+                <div class="tier-card featured">
+                    <div class="tier-head"><div><div class="tier-name">Premium</div><div class="tier-price">$99<small>/mes</small></div></div><strong style="font-size:11px;color:#166534">Ilimitado</strong></div>
+                    <div class="tier-desc">Para equipos activos: leads ilimitados, señales HOT e inspecciones priorizadas.</div>
+                    <button class="tier-btn" onclick="handleUpgrade('premium')" style="background:#16a34a">Elegir Premium</button>
+                </div>
+                <div class="tier-card elite">
+                    <div class="tier-head"><div><div class="tier-name">Elite</div><div class="tier-price">$500<small>/mes</small></div></div><strong style="font-size:11px;color:#111827">Curado</strong></div>
+                    <div class="tier-desc">Solo leads con evidencia fuerte: fuente oficial, contacto, score alto y ventana de acción. Ideal si un cierre paga varios meses.</div>
+                    <button class="tier-btn" onclick="handleUpgrade('elite')" style="background:#111827">Elegir Elite</button>
                 </div>
             </div>
             <p style="font-size:11px;color:var(--muted);text-align:center">Cancela cuando quieras · sin compromisos</p>
@@ -622,8 +711,9 @@ const authHdrs = () => { const h = {'Content-Type':'application/json'}; const t 
 // ── Filter state ──────────────────────────────────────────────────────────────
 const F = {
     hotOnly:  false,
-    subCats:  new Set(),   // roofing, drywall, paint, electrical, plumbing, hvac, flooring, concrete, framing, windows, landscaping
-    leadTypes: new Set(),  // permits, construction, solar, realestate, flood, energy, rodents, deconstruction, remodel
+    eliteOnly:false,
+    subCats:  new Set(),   // Legacy state ignored by GC-only UI.
+    leadTypes: new Set(),  // GC opportunities: permits, open/pre-award construction, realestate, weather/flood, deconstruction, remodel, crossdata
     city:     '',
     radius:   25,
     minVal:   0,
@@ -635,7 +725,7 @@ function saveFilters() {
     try {
         const snap = {
             hotOnly:   F.hotOnly,
-            subCats:   [...F.subCats],
+            eliteOnly: F.eliteOnly,
             leadTypes: [...F.leadTypes],
             city:      F.city,
             radius:    F.radius,
@@ -650,6 +740,8 @@ function saveFilters() {
         else                      url.searchParams.delete('city');
         if (F.leadTypes.size > 0) url.searchParams.set('service', [...F.leadTypes].join(','));
         else                      url.searchParams.delete('service');
+        if (F.eliteOnly)          url.searchParams.set('elite', '1');
+        else                      url.searchParams.delete('elite');
         if (!F.hotOnly)           url.searchParams.set('all', '1');
         else                      url.searchParams.delete('all');
         history.replaceState(null, '', url.toString());
@@ -663,19 +755,22 @@ function loadFilters() {
         const urlCity    = url.searchParams.get('city');
         const urlService = url.searchParams.get('service');
         const urlAll     = url.searchParams.get('all');
+        const urlElite   = url.searchParams.get('elite');
 
-        if (urlCity || urlService || urlAll !== null) {
+        if (urlCity || urlService || urlAll !== null || urlElite !== null) {
             if (urlCity)    F.city = urlCity;
             if (urlService) urlService.split(',').forEach(s => F.leadTypes.add(s.trim()));
             if (urlAll === '1') F.hotOnly = false;
+            if (urlElite === '1') F.eliteOnly = true;
             return; // URL params win — don't restore localStorage
         }
 
         const raw = localStorage.getItem('mleads_filters');
         if (!raw) return;
         const snap = JSON.parse(raw);
-        F.hotOnly   = snap.hotOnly  ?? false;
-        F.subCats   = new Set(snap.subCats  || []);
+            F.hotOnly   = snap.hotOnly  ?? false;
+            F.eliteOnly = snap.eliteOnly ?? false;
+        F.subCats   = new Set();
         F.leadTypes = new Set(snap.leadTypes || []);
         F.city      = snap.city   || '';
         F.radius    = snap.radius ?? 25;
@@ -685,7 +780,8 @@ function loadFilters() {
 }
 
 // ── App state ─────────────────────────────────────────────────────────────────
-const S = { queue:[], swipes:0, limit:10, loading:false, authed:!!getToken(), isPaid:false };
+const S = { queue:[], swipes:0, limit:10, loading:false, authed:!!getToken(), isPaid:false, tier:'free', availableServiceCounts:{}, onboardingOpen:false };
+const ONBOARDING_DONE_KEY = 'mleads_onboarding_done';
 
 // ── Progressive score reveal ──────────────────────────────────────────────────
 // Thresholds per "batch" of 10 leads seen. Drops every batch to show more leads.
@@ -745,66 +841,30 @@ function fmtPhone(p) {
     return String(p);
 }
 
-// ── Subcontractor type affinity mapping ───────────────────────────────────────
-const _SUBCAT_KEYWORDS = {
-    roofing:     ['roof','roofing','re-roof','reroof','shingle','tile roof','torch down','tpo','flat roof','gutter','fascia','eave'],
-    drywall:     ['drywall','sheetrock','gypsum','taping','texturing','wallboard','wall board','partition','plaster'],
-    paint:       ['paint','painting','repaint','painter','stucco paint','primer','exterior paint','coating','finishes'],
-    landscaping: ['landscap','hardscape','irrigation','sprinkler','retaining wall','paver','turf','grading','tree','garden'],
-    electrical:  ['electrical','panel upgrade','ev charger','200 amp','rewire','sub panel','wiring','low voltage','circuit','outlet'],
-    plumbing:    ['plumb','plumber','pipe','sewer','drain','water heater','gas line','fixture','bathroom','kitchen remodel'],
-    hvac:        ['hvac','heating','cooling','furnace','ac unit','air condition','duct','ventilation','heat pump','thermostat'],
-    flooring:    ['floor','flooring','hardwood','tile','carpet','laminate','vinyl','epoxy floor','subfloor','slab'],
-    concrete:    ['concrete','cement','foundation','slab','flatwork','driveway','sidewalk','curb','retaining wall','footing'],
-    framing:     ['framing','frame','lumber','stud','joist','beam','structural','addition','adu','new construction','rough'],
-    windows:     ['window','door','skylight','glass','glazing','storefront','sliding door','french door','entry','fenestration'],
-};
-const _SUBCAT_SERVICE_TYPES = {
-    roofing:     ['permits','construction','flood'],
-    drywall:     ['construction','permits','flood','remodel'],
-    paint:       ['construction','permits','remodel'],
-    landscaping: ['permits','construction','realestate'],
-    electrical:  ['permits','construction','energy','solar','remodel'],
-    plumbing:    ['permits','construction','remodel','realestate'],
-    hvac:        ['permits','construction','energy','remodel'],
-    flooring:    ['construction','permits','remodel','realestate'],
-    concrete:    ['permits','construction','deconstruction'],
-    framing:     ['permits','construction'],
-    windows:     ['permits','construction','remodel','realestate'],
-};
+function hasUrlFilters() {
+    try {
+        const url = new URL(window.location.href);
+        return Boolean(url.searchParams.get('city') || url.searchParams.get('service') || url.searchParams.get('elite') || url.searchParams.get('all') !== null);
+    } catch(e) { return false; }
+}
+function leadLocationParts(lead) {
+    return [lead.address, lead.city, lead.state, lead.zip].filter(Boolean).map(String);
+}
+function leadMapsQuery(lead) {
+    const parts = leadLocationParts(lead);
+    return parts.length ? encodeURIComponent(parts.join(', ')) : '';
+}
+function leadLocationLabel(lead) {
+    return [lead.city, lead.state].filter(Boolean).join(', ') || lead.city || '';
+}
 
-/**
- * Compute a 0-100 type-match score based on user's active subCat filters.
- * If no filters active, returns the raw lead score.
- */
+// ── GC opportunity affinity scoring ──────────────────────────────────────────
 function _computeTypeMatchScore(lead) {
-    // No filter → use raw score
-    if (F.subCats.size === 0 && F.leadTypes.size === 0) return Number(lead.score || 0);
+    if (F.leadTypes.size === 0) return Number(lead.score || 0);
 
-    const desc        = ((lead.description || '') + ' ' + (lead.service_label || '') + ' ' + (lead.service_type || '')).toLowerCase();
     const serviceType = (lead.service_type || '').toLowerCase();
-    let   bestMatch   = 0;
-
-    const activeCats = [...F.subCats];
-    for (const cat of activeCats) {
-        let match = 0;
-        // Service type match → 50 pts
-        const svcTypes = _SUBCAT_SERVICE_TYPES[cat] || [];
-        if (svcTypes.includes(serviceType)) match += 50;
-        // Keyword match in description → up to 50 pts
-        const kws = _SUBCAT_KEYWORDS[cat] || [];
-        const hits = kws.filter(k => desc.includes(k)).length;
-        match += Math.min(50, Math.round(hits / Math.max(kws.length, 1) * 50 * 3));
-        bestMatch = Math.max(bestMatch, match);
-    }
-
-    // Lead type pills also contribute
-    for (const lt of F.leadTypes) {
-        if ((lead.service_type || '').toLowerCase() === lt.toLowerCase()) bestMatch = Math.max(bestMatch, 90);
-    }
-
-    // Scale: 0-100 capped, blended with raw score at 30%
-    const typeScore = Math.min(100, bestMatch);
+    const matched = [...F.leadTypes].some(lt => serviceType === lt.toLowerCase());
+    const typeScore = matched ? 90 : 0;
     const rawScore  = Number(lead.score || 0);
     return Math.round(typeScore * 0.7 + rawScore * 0.3);
 }
@@ -884,6 +944,7 @@ function animateThermometers() {
 
 // ── API ───────────────────────────────────────────────────────────────────────
 async function fetchFeed() {
+    if (S.onboardingOpen) return;
     if (S.loading) return;
     S.loading = true;
     document.getElementById('loader').style.display = '';
@@ -898,16 +959,20 @@ async function fetchFeed() {
         // Threshold drops every 10 leads seen (based on total swipes in session)
         const _dynScore = _getDynamicMinScore();
         if (_dynScore > 0) url.searchParams.set('min_score', _dynScore);
+        if (F.eliteOnly || S.tier === 'elite') url.searchParams.set('elite_only', '1');
 
-        url.searchParams.set('min_value', Math.max(50000, F.minVal));
-        if (F.maxVal > 0) url.searchParams.set('max_value', F.maxVal);
+        const selectedOpportunityCats = [...F.leadTypes];
+        const hasStormCat = selectedOpportunityCats.some(cat => ['weather', 'flood', 'disaster'].includes(String(cat).toLowerCase()));
+        const effectiveMinValue = hasStormCat ? F.minVal : Math.max(50000, F.minVal);
+        if (effectiveMinValue > 0) url.searchParams.set('min_value', effectiveMinValue);
+        if (F.maxVal > 0 && !hasStormCat) url.searchParams.set('max_value', F.maxVal);
         if (F.city) {
             url.searchParams.set('city', F.city);
             if (F.radius > 0) url.searchParams.set('radius_miles', F.radius);
         }
 
-        // Combine subcontractor + lead type cats
-        const allCats = [...F.subCats, ...F.leadTypes];
+        // GC-only feed: send only GC opportunity categories, never trade filters.
+        const allCats = [...F.leadTypes];
         if (allCats.length > 0) url.searchParams.set('service_cats', allCats.join(','));
 
         const res  = await fetch(url, { headers: authHdrs() });
@@ -917,7 +982,24 @@ async function fetchFeed() {
 
         S.limit  = data.anon_limit || 10;
         S.swipes = data.swipes_count || 0;
+        S.availableServiceCounts = data.available_service_counts || {};
+        const selectedUnavailable = [...F.leadTypes].filter(cat =>
+            Object.keys(S.availableServiceCounts).length > 0 && Number(S.availableServiceCounts[cat] || 0) <= 0
+        );
+        if ((data.leads || []).length === 0 && selectedUnavailable.length > 0) {
+            selectedUnavailable.forEach(cat => F.leadTypes.delete(cat));
+            saveFilters();
+            renderChips();
+            syncAvailableLeadTypePills();
+            toast(CURRENT_LANG === 'es'
+                ? 'Quité filtros sin inventario verificado y recargué leads'
+                : 'Removed filters with no verified inventory and reloaded leads');
+            S.loading = false;
+            return fetchFeed();
+        }
+        syncAvailableLeadTypePills();
         if (data.is_paid !== undefined) S.isPaid = !!data.is_paid;
+        if (data.tier) S.tier = data.tier;
         updateCounter();
         S.queue  = data.leads || [];
         renderDeck();
@@ -929,6 +1011,40 @@ async function fetchFeed() {
     }
 }
 
+async function loadEliteInventory() {
+    const el = document.getElementById('eliteInventoryText');
+    if (!el) return;
+    try {
+        const url = new URL('/api/swipe/elite-inventory', location.origin);
+        if (F.city) url.searchParams.set('city', F.city);
+        if (F.leadTypes.size) url.searchParams.set('service', [...F.leadTypes].join(','));
+        const res = await fetch(url, { headers: authHdrs() });
+        if (!res.ok) return;
+        const data = await res.json();
+        const count = Number(data.total_elite_leads || 0);
+        const avg = Number(data.average_quality_score || 0);
+        const place = F.city ? ` cerca de ${F.city}` : '';
+        el.textContent = CURRENT_LANG === 'es'
+            ? `${count.toLocaleString()} leads Elite curados${place}${avg ? ` · calidad ${avg}/100` : ''}`
+            : `${count.toLocaleString()} curated Elite leads${place}${avg ? ` · quality ${avg}/100` : ''}`;
+    } catch (e) {}
+}
+
+async function refreshSubscriptionStatus(retries = 0) {
+    if (!S.authed) return;
+    try {
+        const res = await fetch('/api/swipe/upgrade-info', { headers: authHdrs() });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.is_paid !== undefined) S.isPaid = !!data.is_paid;
+        if (data.tier) S.tier = data.tier;
+        updateCounter();
+        if (!S.isPaid && retries > 0) {
+            setTimeout(() => refreshSubscriptionStatus(retries - 1), 1500);
+        }
+    } catch (e) {}
+}
+
 async function postSwipe(leadId, action) {
     try {
         const body = { lead_id: leadId, action };
@@ -937,7 +1053,36 @@ async function postSwipe(leadId, action) {
         const data = await res.json();
         if (data.swipes_count !== undefined) { S.swipes = data.swipes_count; updateCounter(); }
         if (data.auth_required) showPaywall(data.auth_mode || 'register');
+        if (data.exclusive_unavailable) {
+            toast(data.message || (CURRENT_LANG === 'es' ? 'Este lead Elite ya fue reservado.' : 'This Elite lead has already been reserved.'));
+            S.queue = [];
+            fetchFeed();
+        } else if (data.elite_claim?.claimed) {
+            toast(CURRENT_LANG === 'es' ? 'Lead Elite reservado para ti.' : 'Elite lead reserved for you.');
+        }
     } catch (e) { console.error(e); }
+}
+
+async function reportLeadQuality(leadId) {
+    if (!S.authed) { showPaywall('register'); return; }
+    const details = prompt(CURRENT_LANG === 'es'
+        ? '¿Qué salió mal con este lead?'
+        : 'What went wrong with this lead?');
+    if (details === null) return;
+    try {
+        const res = await fetch('/api/swipe/report-lead', {
+            method: 'POST',
+            headers: authHdrs(),
+            body: JSON.stringify({ lead_id: leadId, reason: 'other', details })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'report failed');
+        toast(data.replacement_review
+            ? (CURRENT_LANG === 'es' ? 'Reporte recibido. Revisaremos reemplazo Elite.' : 'Report received. We will review Elite replacement.')
+            : (CURRENT_LANG === 'es' ? 'Reporte recibido. Gracias.' : 'Report received. Thank you.'));
+    } catch (e) {
+        toast(CURRENT_LANG === 'es' ? 'No se pudo enviar el reporte' : 'Could not send report');
+    }
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -946,7 +1091,8 @@ const $deck = document.getElementById('deck');
 function updateCounter() {
     const cnt = document.getElementById('counter');
     if (S.isPaid) {
-        cnt.innerHTML = '<strong style="color:var(--like)">Pro</strong> ✨';
+        const label = S.tier === 'elite' ? 'Elite' : S.tier === 'premium' ? 'Premium' : 'Pro';
+        cnt.innerHTML = `<strong style="color:var(--like)">${label}</strong> ✨`;
         return;
     }
     const limit = S.authed ? 40 : (S.limit || 10);
@@ -995,6 +1141,25 @@ function buildCard(lead, idx) {
     const gradeLabel = lead.grade || (isHot ? 'HOT' : isWarm ? 'WARM' : isMed ? 'MEDIUM' : 'COOL');
     const tempWord   = isHot ? '🔥 Muy caliente' : isWarm ? '🌡️ Caliente' : isMed ? '🌤️ Templado' : '❄️ Frío';
     const isEN       = CURRENT_LANG === 'en';
+    const mapsQ      = leadMapsQuery(lead);
+    const locationLabel = leadLocationLabel(lead);
+    const valueProof = lead.value
+        ? (isEN ? `${fmtMoney(lead.value)} project signal` : `Señal de proyecto ${fmtMoney(lead.value)}`)
+        : (isEN ? 'Verified contact signal' : 'Señal con contacto verificable');
+    const qualityChecks = Array.isArray(lead.premium_quality_checks) ? lead.premium_quality_checks : [];
+    const qualityScore = Number(lead.premium_quality_score || 0);
+    const exclusiveText = lead.is_elite_quality
+        ? (lead.elite_claimed_by_me
+            ? (isEN ? 'Reserved for your company' : 'Reservado para tu empresa')
+            : (isEN ? 'Elite plans can reserve this lead exclusively' : 'El plan Elite puede reservar este lead en exclusiva'))
+        : '';
+    const qualityHtml = qualityScore
+        ? `<div class="quality-box">
+            <strong>${lead.is_elite_quality ? (isEN ? 'Elite-grade lead' : 'Lead calidad Elite') : (isEN ? 'Quality checks' : 'Checks de calidad')} · ${qualityScore}/100</strong>
+            <div>${esc(qualityChecks.slice(0,3).join(' · ') || (isEN ? 'Verified source and buyer intent' : 'Fuente e intención verificadas'))}</div>
+            ${exclusiveText ? `<div style="margin-top:4px;font-weight:800;color:#111827">${esc(exclusiveText)}</div>` : ''}
+        </div>`
+        : '';
 
     // ── Contact buttons ────────────────────────────────────────────────────────
     const phone  = lead.phone ? fmtPhone(lead.phone) : null;
@@ -1063,6 +1228,37 @@ function buildCard(lead, idx) {
         lead.owner       ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Owner':'Propietario'}:</span><span class="det-v">${esc(lead.owner)}</span></div>` : '',
     ].filter(Boolean).join('');
 
+    // ── GC buyer insight section ───────────────────────────────────────────────
+    const insight = lead.gc_insight || {};
+    const conf = insight.confidence || lead.gc_confidence || 'candidate';
+    const confLabelMap = {
+        verified: isEN ? 'Verified' : 'Verificado',
+        candidate: isEN ? 'Candidate' : 'Candidato',
+        exploratory: isEN ? 'Exploratory' : 'Exploratorio',
+    };
+    const confColorMap = { verified:'#15803d', candidate:'#c2410c', exploratory:'#6b7280' };
+    const confLabel = insight.confidence_label || confLabelMap[conf] || conf;
+    const confColor = confColorMap[conf] || '#6b7280';
+    const gcBadges = (insight.badges || lead.gc_badges || []).map(b =>
+        `<span class="rc" style="background:#ecfdf5;border-color:#bbf7d0;color:#166534;font-weight:700">${esc(b)}</span>`
+    ).join('');
+    const gcReasons = (insight.reasons || []).map(r =>
+        `<div class="det-row"><span class="det-k">▸</span><span class="det-v wrap">${esc(r)}</span></div>`
+    ).join('');
+    const sourceUrl = insight.source_url || lead.source_url || '';
+    const sourceBtn = sourceUrl
+        ? `<a class="cta" href="${esc(sourceUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#1d4ed8;border-color:#bfdbfe;background:#eff6ff">🔎 ${isEN?'View source':'Ver fuente'}</a>`
+        : `<span class="rc" style="background:#f8fafc;color:#64748b">${esc(insight.source_label || lead.source_label || (isEN?'Unverified source':'Fuente no verificada'))}</span>`;
+    const addPipelineBtn = `<button type="button" onclick="event.stopPropagation(); commit(this.closest('.card'), 'like')" style="border:0;border-radius:9px;background:#16a34a;color:#fff;font-size:11.5px;font-weight:800;padding:7px 11px;cursor:pointer">➕ ${isEN?'Add to pipeline':'Agregar al pipeline'}</button>`;
+    const reportLeadBtn = `<button type="button" onclick="event.stopPropagation(); reportLeadQuality('${esc(lead.id || '')}')" style="border:1px solid #fecaca;border-radius:9px;background:#fff1f2;color:#be123c;font-size:11.5px;font-weight:800;padding:7px 11px;cursor:pointer">⚠ ${isEN?'Report issue':'Reportar problema'}</button>`;
+    const gcInsightHtml = (gcBadges || gcReasons || sourceUrl || insight.source_label) ? `<div class="det-sec gc-insight">
+        <div class="det-title">🎯 ${isEN?'Why this helps a GC':'Por qué le sirve a un GC'}</div>
+        <div class="det-row"><span class="det-k">▸ ${isEN?'Confidence level':'Nivel de confianza'}:</span><span class="det-v" style="font-weight:800;color:${confColor}">${esc(confLabel)}</span></div>
+        ${gcBadges ? `<div class="reasons">${gcBadges}</div>` : ''}
+        ${gcReasons}
+        <div class="contact-row" style="margin-top:4px">${sourceBtn}${addPipelineBtn}${reportLeadBtn}</div>
+    </div>` : '';
+
     // ── Inspection block ───────────────────────────────────────────────────────
     let inspHtml = '';
     if (lead.inspection_date && inspDays !== null && inspDays >= 0) {
@@ -1088,7 +1284,6 @@ function buildCard(lead, idx) {
                     ? `📅 Inspector scheduled <strong>${inspDateFmt.slice(5)}</strong> ${timeWindow}. Show up early — the GC will be there.`
                     : `📅 Inspector agendado el <strong>${inspDateFmt.slice(5)}</strong> ${timeWindow}. Llega antes — el GC estará en obra.`);
 
-        const mapsQ   = lead.address ? encodeURIComponent((lead.address||'') + ', ' + (lead.city||'') + ', CA') : '';
         const mapsBtn = mapsQ
             ? `<a href="https://www.google.com/maps/search/?api=1&query=${mapsQ}" target="_blank" rel="noopener"
                 onclick="event.stopPropagation()"
@@ -1142,7 +1337,7 @@ function buildCard(lead, idx) {
         <div class="${heroClass}">
             <div class="hero-layout">
                 <div class="therm-col">
-                    <span class="therm-label">${F.subCats.size > 0 || F.leadTypes.size > 0 ? '🎯' : '°C'}</span>
+                    <span class="therm-label">${F.leadTypes.size > 0 ? '🎯' : '°C'}</span>
                     ${thermometerSVG(thermScore, uid)}
                 </div>
                 <div class="hero-info">
@@ -1160,9 +1355,8 @@ function buildCard(lead, idx) {
                 </div>
             </div>
             <div class="hero-addr" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📌 ${esc(lead.city||'')} — ${esc(lead.address||'')}</span>
-                ${lead.address ? (() => {
-                    const mapsQ = encodeURIComponent((lead.address||'') + ', ' + (lead.city||'') + ', CA');
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📌 ${esc(locationLabel)} — ${esc(lead.address||'')}</span>
+                ${mapsQ ? (() => {
                     return `<a href="https://www.google.com/maps/search/?api=1&query=${mapsQ}" target="_blank" rel="noopener"
                         onclick="event.stopPropagation()"
                         style="flex-shrink:0;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:3px 7px;font-size:11px;font-weight:700;color:#fff;text-decoration:none;white-space:nowrap;display:inline-flex;align-items:center;gap:4px">
@@ -1171,9 +1365,8 @@ function buildCard(lead, idx) {
                     </a>`;
                 })() : ''}
             </div>
-            ${(GOOGLE_MAPS_API_KEY && lead.address) ? (() => {
-                const addr = encodeURIComponent((lead.address||'') + ', ' + (lead.city||'') + ', CA');
-                const svUrl = `https://maps.googleapis.com/maps/api/streetview?size=400x90&location=${addr}&key=${GOOGLE_MAPS_API_KEY}&return_error_code=true`;
+            ${(GOOGLE_MAPS_API_KEY && mapsQ) ? (() => {
+                const svUrl = `https://maps.googleapis.com/maps/api/streetview?size=400x90&location=${mapsQ}&key=${GOOGLE_MAPS_API_KEY}&return_error_code=true`;
                 return `<img src="${svUrl}" alt="" loading="lazy"
                     style="width:100%;height:72px;object-fit:cover;border-radius:0 0 0 0;display:block;opacity:.85"
                     onerror="this.style.display='none'">`;
@@ -1181,6 +1374,13 @@ function buildCard(lead, idx) {
         </div>
 
         <div class="cbody">
+            <div class="cta-bar" style="margin-bottom:6px">
+                <div style="font-weight:800;font-size:12.5px">${isEN ? 'Why it can pay for itself' : 'Por qué puede pagarse solo'}</div>
+                <div style="font-size:12px;opacity:.9">${esc(valueProof)} · ${isEN ? 'source checked and ready to qualify today' : 'fuente revisada y listo para calificar hoy'}</div>
+            </div>
+            ${qualityHtml}
+            ${gcInsightHtml}
+
             ${rows_ai ? `<div class="det-sec">
                 <div class="det-title">🤖 ${isEN?'AI Analysis (0brix)':'Análisis IA (0brix)'}</div>
                 ${rows_ai}
@@ -1240,7 +1440,7 @@ function showEmpty() {
     el.className = 'empty';
 
     // Build a contextual hint based on active filters
-    const hasFilters = F.city || F.leadTypes.size > 0 || F.subCats.size > 0 || F.hotOnly || F.minVal > 0;
+    const hasFilters = F.city || F.leadTypes.size > 0 || F.hotOnly || F.minVal > 0;
     let hint = '';
     let suggestions = [];
 
@@ -1248,7 +1448,7 @@ function showEmpty() {
         const parts = [];
         if (F.leadTypes.size > 0) {
             const labels = [...F.leadTypes].map(s => LTYPE_LABELS[s] || s).join(', ');
-            parts.push(CURRENT_LANG === 'es' ? `servicio "${labels}"` : `"${labels}" service`);
+            parts.push(CURRENT_LANG === 'es' ? `oportunidad "${labels}"` : `"${labels}" opportunity`);
         }
         if (F.city) parts.push(F.city);
         if (F.hotOnly) parts.push(CURRENT_LANG === 'es' ? 'solo leads HOT' : 'HOT leads only');
@@ -1271,7 +1471,7 @@ function showEmpty() {
             action: `F.city=''; applyFilters()`
         });
         if (F.leadTypes.size > 0) suggestions.push({
-            label: CURRENT_LANG === 'es' ? 'Ver todos los servicios' : 'All services',
+            label: CURRENT_LANG === 'es' ? 'Ver todas las oportunidades' : 'All opportunities',
             action: `F.leadTypes.clear(); applyFilters()`
         });
     } else {
@@ -1364,7 +1564,19 @@ function commit(card, action) {
     // Advance progressive score threshold only on right-swipes (likes = real leads)
     if (action === 'like') _advanceScoreStep();
     setTimeout(() => {
-        card.remove(); S.queue.shift(); restack();
+        card.remove();
+        S.queue.shift();
+        // If the quota is exhausted, keep the paywall as the only visible state
+        // instead of rendering a misleading "no more leads" empty deck behind it.
+        if (!S.authed && !S.isPaid && S.limit && S.swipes >= S.limit) {
+            [...$deck.querySelectorAll('.card,.empty')].forEach(n => n.remove());
+            document.getElementById('loader').style.display = 'none';
+            showPaywall('register');
+            return;
+        }
+        // Re-render from the remaining queue so cards 6–10 become visible after
+        // the initially rendered 5-card stack is exhausted.
+        renderDeck();
         if (S.queue.length <= 2) fetchFeed();
     }, 260);
 }
@@ -1395,17 +1607,30 @@ document.getElementById('filterBtn').addEventListener('click', () => {
 });
 $backdrop.addEventListener('click', e => { if (e.target === $backdrop) $backdrop.classList.remove('open'); });
 
-// Sub pills
-document.querySelectorAll('#subPills .pill').forEach(p => {
-    p.addEventListener('click', () => {
-        p.classList.toggle('on');
-        updateCountBadge('subCount', '#subPills .pill.on');
+// GC opportunity pills
+function syncAvailableLeadTypePills() {
+    const counts = S.availableServiceCounts || {};
+    const hasCounts = Object.keys(counts).length > 0;
+    document.querySelectorAll('#ltypePills .pill').forEach(p => {
+        const cat = p.dataset.cat;
+        const count = Number(counts[cat] || 0);
+        const unavailable = hasCounts && count <= 0;
+        p.classList.toggle('unavailable', unavailable);
+        p.disabled = unavailable;
+        p.title = unavailable
+            ? (CURRENT_LANG === 'es' ? 'Sin leads verificados disponibles ahora' : 'No verified leads available right now')
+            : (count > 0 ? `${count} verified leads` : '');
+        if (unavailable && p.classList.contains('on')) p.classList.remove('on');
     });
-});
+    updateCountBadge('ltypeCount', '#ltypePills .pill.on');
+}
 
-// Lead type pills
 document.querySelectorAll('#ltypePills .pill').forEach(p => {
     p.addEventListener('click', () => {
+        if (p.disabled || p.classList.contains('unavailable')) {
+            toast(CURRENT_LANG === 'es' ? 'Ese filtro no tiene leads verificados ahora' : 'That filter has no verified leads right now');
+            return;
+        }
         p.classList.toggle('on');
         updateCountBadge('ltypeCount', '#ltypePills .pill.on');
     });
@@ -1414,6 +1639,7 @@ document.querySelectorAll('#ltypePills .pill').forEach(p => {
 function updateCountBadge(badgeId, selector) {
     const n = document.querySelectorAll(selector).length;
     const el = document.getElementById(badgeId);
+    if (!el) return;
     el.textContent = n;
     el.classList.toggle('on', n > 0);
 }
@@ -1443,13 +1669,11 @@ document.querySelectorAll('.vpreset').forEach(b => {
 
 function syncDrawer() {
     document.getElementById('hotToggle').classList.toggle('on', F.hotOnly);
-    document.querySelectorAll('#subPills .pill').forEach(p =>
-        p.classList.toggle('on', F.subCats.has(p.dataset.cat))
-    );
+    document.getElementById('eliteToggle').classList.toggle('on', F.eliteOnly);
     document.querySelectorAll('#ltypePills .pill').forEach(p =>
-        p.classList.toggle('on', F.leadTypes.has(p.dataset.cat))
+        p.classList.toggle('on', F.leadTypes.has(p.dataset.cat) && !p.classList.contains('unavailable'))
     );
-    updateCountBadge('subCount', '#subPills .pill.on');
+    syncAvailableLeadTypePills();
     updateCountBadge('ltypeCount', '#ltypePills .pill.on');
     document.getElementById('cityInp').value = F.city;
     document.getElementById('minVal').value  = F.minVal > 0 ? F.minVal : '';
@@ -1464,10 +1688,10 @@ function syncDrawer() {
 
 function readDrawer() {
     F.hotOnly = document.getElementById('hotToggle').classList.contains('on');
+    F.eliteOnly = document.getElementById('eliteToggle').classList.contains('on');
     F.subCats.clear();
-    document.querySelectorAll('#subPills .pill.on').forEach(p => F.subCats.add(p.dataset.cat));
     F.leadTypes.clear();
-    document.querySelectorAll('#ltypePills .pill.on').forEach(p => F.leadTypes.add(p.dataset.cat));
+    document.querySelectorAll('#ltypePills .pill.on:not(.unavailable):not(:disabled)').forEach(p => F.leadTypes.add(p.dataset.cat));
     F.city   = document.getElementById('cityInp').value.trim();
     F.minVal = Number(document.getElementById('minVal').value) || 0;
     F.maxVal = Number(document.getElementById('maxVal').value) || 0;
@@ -1479,6 +1703,10 @@ document.getElementById('hotToggle').addEventListener('click', function() {
     this.classList.toggle('on');
     this.setAttribute('aria-checked', this.classList.contains('on'));
 });
+document.getElementById('eliteToggle').addEventListener('click', function() {
+    this.classList.toggle('on');
+    this.setAttribute('aria-checked', this.classList.contains('on'));
+});
 
 document.getElementById('btnApply').addEventListener('click', () => {
     readDrawer();
@@ -1487,33 +1715,78 @@ document.getElementById('btnApply').addEventListener('click', () => {
 });
 
 document.getElementById('btnReset').addEventListener('click', () => {
-    F.hotOnly = false; F.subCats.clear(); F.leadTypes.clear();
+    F.hotOnly = false; F.eliteOnly = false; F.subCats.clear(); F.leadTypes.clear();
     F.city = ''; F.radius = 25; F.minVal = 0; F.maxVal = 0;
     syncDrawer();
 });
 
-function applyFilters() { saveFilters(); renderChips(); S.queue = []; fetchFeed(); }
+function applyFilters() { saveFilters(); renderChips(); loadEliteInventory(); S.queue = []; fetchFeed(); }
+
+// ── First-run onboarding ──────────────────────────────────────────────────────
+const $onboarding = document.getElementById('onboarding');
+
+function shouldShowOnboarding() {
+    if (hasUrlFilters()) return false;
+    try { return localStorage.getItem(ONBOARDING_DONE_KEY) !== '1'; }
+    catch(e) { return false; }
+}
+
+function showOnboarding() {
+    S.onboardingOpen = true;
+    document.getElementById('obCity').value = F.city || '';
+    document.getElementById('obRadius').value = String(F.radius || 25);
+    const selected = F.leadTypes.size ? [...F.leadTypes][0] : 'weather';
+    document.querySelectorAll('#obChoices .ob-choice').forEach(btn =>
+        btn.classList.toggle('on', btn.dataset.cat === selected)
+    );
+    $onboarding.classList.add('open');
+}
+
+function closeOnboarding() {
+    S.onboardingOpen = false;
+    $onboarding.classList.remove('open');
+    try { localStorage.setItem(ONBOARDING_DONE_KEY, '1'); } catch(e) {}
+}
+
+function startFromOnboarding() {
+    const selected = document.querySelector('#obChoices .ob-choice.on')?.dataset.cat || 'weather';
+    F.leadTypes = new Set([selected]);
+    F.city = document.getElementById('obCity').value.trim();
+    F.radius = Number(document.getElementById('obRadius').value) || 25;
+    F.hotOnly = false;
+    F.eliteOnly = false;
+    closeOnboarding();
+    saveFilters();
+    renderChips();
+    loadEliteInventory();
+    S.queue = [];
+    fetchFeed();
+}
+
+document.querySelectorAll('#obChoices .ob-choice').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('#obChoices .ob-choice').forEach(x => x.classList.remove('on'));
+        btn.classList.add('on');
+    });
+});
+document.getElementById('obStart').addEventListener('click', startFromOnboarding);
+document.getElementById('obSkip').addEventListener('click', () => {
+    closeOnboarding();
+    fetchFeed();
+});
 
 // ── Chips bar ─────────────────────────────────────────────────────────────────
-const SUB_LABELS = {
-    roofing:'🏠 Roofing', drywall:'🧱 Drywall', paint:'🎨 Pintura',
-    electrical:'⚡ Eléctrico', plumbing:'🔧 Plomería', hvac:'❄️ HVAC',
-    flooring:'🪵 Pisos', concrete:'🧱 Concreto', framing:'🪚 Framing',
-    windows:'🪟 Ventanas', landscaping:'🌿 Paisajismo',
-};
 const LTYPE_LABELS = {
-    permits:'📋 Permisos', construction:'👷 Construcción Activa',
-    realestate:'🏡 Venta de Propiedad', solar:'☀️ Solar',
-    flood:'💧 Daño por Agua', deconstruction:'🏚️ Demolición',
-    remodel:'🔨 Remodelación', energy:'⚡ Eficiencia Energética',
-    rodents:'🐀 Control de Plagas', crossdata:'🔮 Cross-Data',
+    weather:'⛈️ Daño por tormenta', flood:'⛈️ Daño por tormenta', remodel:'🔨 Remodelación / reparación',
+    permits:'📋 Permisos listos', construction:'🏗️ Proyecto sin GC confirmado',
+    deconstruction:'🏚️ Demolición / rebuild', realestate:'🏡 Venta de propiedad',
+    crossdata:'🔮 Cross-data verificado',
 };
 const LTYPE_LABELS_EN = {
-    permits:'📋 Permits', construction:'👷 Active Construction',
-    realestate:'🏡 Property Sale', solar:'☀️ Solar',
-    flood:'💧 Water Damage', deconstruction:'🏚️ Demolition',
-    remodel:'🔨 Remodel', energy:'⚡ Energy Efficiency',
-    rodents:'🐀 Pest Control', crossdata:'🔮 Cross-Data',
+    weather:'⛈️ Storm damage', flood:'⛈️ Storm damage', remodel:'🔨 Remodel / repair',
+    permits:'📋 Permit-ready', construction:'🏗️ No GC confirmed',
+    deconstruction:'🏚️ Demolition / rebuild', realestate:'🏡 Property sale',
+    crossdata:'🔮 Verified cross-data',
 };
 
 function renderChips() {
@@ -1529,10 +1802,7 @@ function renderChips() {
     }
 
     if (F.hotOnly) addChip('🔥 Solo HOT', 'hot', () => { F.hotOnly = false; applyFilters(); });
-
-    F.subCats.forEach(cat => {
-        addChip(SUB_LABELS[cat] || cat, 'sub', () => { F.subCats.delete(cat); applyFilters(); });
-    });
+    if (F.eliteOnly) addChip('🏆 Solo Elite', 'hot', () => { F.eliteOnly = false; applyFilters(); });
 
     F.leadTypes.forEach(cat => {
         addChip(LTYPE_LABELS[cat] || cat, 'ltype', () => { F.leadTypes.delete(cat); applyFilters(); });
@@ -1552,7 +1822,7 @@ function renderChips() {
     }
 
     // Filter dot
-    const hasExtra = F.city || F.minVal > 0 || F.maxVal > 0 || !F.hotOnly || F.subCats.size > 0 || F.leadTypes.size > 0;
+    const hasExtra = F.city || F.minVal > 0 || F.maxVal > 0 || F.eliteOnly || !F.hotOnly || F.leadTypes.size > 0;
     document.getElementById('filterDot').classList.toggle('on', hasExtra);
 }
 
@@ -1565,19 +1835,19 @@ function showPaywall(mode) {
 
     if (mode === 'upgrade') {
         // Already registered free user → show tier comparison
-        document.getElementById('pwTitle').textContent  = '¡Elige tu plan!';
+        document.getElementById('pwTitle').textContent  = CURRENT_LANG === 'es' ? 'Sigue llenando tu pipeline' : 'Keep filling your pipeline';
         document.getElementById('pwSubtitle').innerHTML = 'Has agotado tus <strong style="color:#fff">40 leads gratis</strong>.<br>Elige un plan para seguir encontrando clientes.';
-        document.getElementById('pwBadge').innerHTML    = '📊 <span id="pwUsageNum">40</span> leads usados<div style="text-align:left"><small>Pro $29/mes · 200 leads</small><small>Premium $99/mes · ilimitado</small></div>';
+        document.getElementById('pwBadge').innerHTML    = '📊 <span id="pwUsageNum">40</span> leads usados<div style="text-align:left"><small>Premium $99/mes · ilimitado</small><small>Elite $500/mes · leads curados</small></div>';
         document.getElementById('pwFooter').textContent = 'Sin compromisos · cancela cuando quieras';
         const _roi = Math.round(S.swipes / 20 * 3000);
         document.getElementById('pwUpgradeUsage').innerHTML = CURRENT_LANG === 'es'
-            ? `Contactaste <strong>${S.swipes} leads</strong> esta semana. Si 1 de cada 20 cierra un trabajo de $3k, ya vas por <strong>$${_roi.toLocaleString()} de potencial</strong>. Con Pro ($29/mes) accedes a 200/mes.`
-            : `You contacted <strong>${S.swipes} leads</strong> this week. If 1 in 20 closes at $3k, that's <strong>$${_roi.toLocaleString()} in potential revenue</strong>. Go Pro ($29/mo) for 200/month.`;
+            ? `Contactaste <strong>${S.swipes} leads</strong>. Si un solo cierre vale $10k+, Elite ($500/mes) se justifica con una oportunidad bien verificada.`
+            : `You contacted <strong>${S.swipes} leads</strong>. If one close is worth $10k+, Elite ($500/mo) can justify itself with one well-verified opportunity.`;
         regSec.style.display = 'none';
         upgSec.style.display = '';
     } else {
         // Anonymous → register for free leads
-        document.getElementById('pwTitle').textContent  = '¡Desbloquea leads ilimitados!';
+        document.getElementById('pwTitle').textContent  = CURRENT_LANG === 'es' ? 'Convierte señales en trabajos' : 'Turn signals into jobs';
         document.getElementById('pwSubtitle').innerHTML = 'Has visto tus <strong style="color:#fff">10 leads gratis</strong>.<br>Regístrate y obtén <strong style="color:#4ade80">40 leads adicionales gratis</strong>.';
         document.getElementById('pwBadge').innerHTML    = '🎁 40 Leads Gratis<div style="text-align:left"><small id="pwBadgeSmall">Después desde $29/mes</small><small>Sin tarjeta de crédito</small></div>';
         document.getElementById('pwFooter').textContent = '40 leads gratis · después desde $29/mes';
@@ -1603,7 +1873,10 @@ async function handleUpgrade(tier) {
         window.location.href = data.checkout_url;
     } catch (e) {
         toast(e.message || 'Error al conectar con el servidor de pagos');
-        if (btn) { btn.disabled = false; btn.textContent = tier === 'pro' ? 'Elegir Pro' : 'Elegir Premium'; }
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = tier === 'pro' ? 'Elegir Pro' : tier === 'elite' ? 'Elegir Elite' : 'Elegir Premium';
+        }
     }
 }
 
@@ -1682,8 +1955,9 @@ const I18N = {
         filterReset:   'Restablecer',
         hotLabel:      '🔥 Solo leads HOT',
         hotDesc:       'Score ≥ 90 — máxima temperatura',
-        subTitle:      'Subcontratistas',
-        ltypeTitle:    'Tipo de Lead',
+        eliteOnlyLabel:'🏆 Solo leads Elite',
+        eliteOnlyDesc: 'Fuente oficial + contacto + alta intención',
+        ltypeTitle:    'Oportunidad para GC',
         locationTitle: 'Ubicación',
         cityPH:        'Tu ciudad...',
         valueTitle:    'Valor del proyecto',
@@ -1712,6 +1986,24 @@ const I18N = {
         contactsClose: 'Cerrar',
         contactsEmpty: 'Aún no has contactado ningún lead. Desliza a la derecha o llama para guardar.',
         contactsBtn:   'Mis Contactos',
+        valueMain:     'Leads verificados para GCs listos para llamar',
+        valueSub:      'Permisos, tormentas y oportunidades sin GC confirmado.',
+        valuePill:     '$500/mes Elite',
+        roiTitle:      'Por qué vale pagarlo',
+        roiText:       'Si un cierre vale $10k+, pagar $500/mes por leads curados puede tener sentido rápido.',
+        obKicker:      'Configura tu búsqueda',
+        obTitle:       'Encuentra leads cerca de ti',
+        obCopy:        'Dinos qué oportunidad buscas y en qué zona trabajas. Te mostramos permisos, daños por tormenta y proyectos listos para contactar.',
+        obTypeLabel:   'Tipo de oportunidad',
+        obLocLabel:    'Zona de trabajo',
+        obSkip:        'Saltar',
+        obStart:       'Ver mis leads',
+        obChoices: {
+            weather: ['Daño por tormenta', 'Roofing, siding, emergencia'],
+            permits: ['Permisos listos', 'Obras nuevas o remodelaciones'],
+            construction: ['Sin GC confirmado', 'Proyecto abierto para cotizar'],
+            remodel: ['Remodelación', 'Reparación y mejoras'],
+        },
     },
     en: {
         langBtn:       '🇺🇸',
@@ -1720,8 +2012,9 @@ const I18N = {
         filterReset:   'Reset',
         hotLabel:      '🔥 HOT leads only',
         hotDesc:       'Score ≥ 90 — maximum heat',
-        subTitle:      'Subcontractors',
-        ltypeTitle:    'Lead Type',
+        eliteOnlyLabel:'🏆 Elite leads only',
+        eliteOnlyDesc: 'Official source + contact + high intent',
+        ltypeTitle:    'GC Opportunity',
         locationTitle: 'Location',
         cityPH:        'Your city...',
         valueTitle:    'Project value',
@@ -1750,6 +2043,24 @@ const I18N = {
         contactsClose: 'Close',
         contactsEmpty: 'You haven\'t contacted any lead yet. Swipe right or call to save.',
         contactsBtn:   'My Contacts',
+        valueMain:     'Verified GC leads ready to call',
+        valueSub:      'Permits, storms, and no-GC-confirmed opportunities.',
+        valuePill:     '$500/mo Elite',
+        roiTitle:      'Why it can pay off',
+        roiText:       'If one close is worth $10k+, paying $500/mo for curated leads can make sense fast.',
+        obKicker:      'Set up your search',
+        obTitle:       'Find leads near you',
+        obCopy:        'Tell us what opportunity you want and where you work. We will show permits, storm damage, and projects ready to contact.',
+        obTypeLabel:   'Opportunity type',
+        obLocLabel:    'Work area',
+        obSkip:        'Skip',
+        obStart:       'Show my leads',
+        obChoices: {
+            weather: ['Storm damage', 'Roofing, siding, emergency'],
+            permits: ['Permit-ready', 'New builds or remodels'],
+            construction: ['No GC confirmed', 'Open project to quote'],
+            remodel: ['Remodel', 'Repair and improvements'],
+        },
     }
 };
 
@@ -1773,16 +2084,42 @@ function applyLang() {
     document.querySelector('.dreset').textContent      = t('filterReset');
     document.querySelector('.tlabel span').textContent = t('hotLabel');
     document.querySelector('.tlabel small').textContent= t('hotDesc');
+    document.getElementById('eliteOnlyLabel').textContent = t('eliteOnlyLabel');
+    document.getElementById('eliteOnlyDesc').textContent = t('eliteOnlyDesc');
     // Section labels
     const fsecLabels = document.querySelectorAll('.fsec-label');
-    if (fsecLabels[0]) fsecLabels[0].textContent = t('subTitle');
-    if (fsecLabels[1]) fsecLabels[1].textContent = t('ltypeTitle');
-    if (fsecLabels[2]) fsecLabels[2].textContent = t('locationTitle');
-    if (fsecLabels[3]) fsecLabels[3].textContent = t('valueTitle');
+    if (fsecLabels[0]) fsecLabels[0].textContent = t('ltypeTitle');
+    if (fsecLabels[1]) fsecLabels[1].textContent = t('locationTitle');
+    if (fsecLabels[2]) fsecLabels[2].textContent = t('valueTitle');
     document.getElementById('cityInp').placeholder = t('cityPH');
     document.getElementById('btnApply').textContent = t('applyBtn');
     document.getElementById('contactsTitle').textContent = t('contactsTitle');
     document.getElementById('contactsClose').textContent = t('contactsClose');
+    document.getElementById('valueMain').textContent = t('valueMain');
+    document.getElementById('valueSub').textContent = t('valueSub');
+    document.getElementById('valuePill').textContent = t('valuePill');
+    const roiBox = document.getElementById('pwRoiBox');
+    if (roiBox) {
+        roiBox.children[0].textContent = t('roiTitle');
+        roiBox.children[1].textContent = t('roiText');
+    }
+    document.getElementById('obKicker').textContent = t('obKicker');
+    document.getElementById('obTitle').textContent = t('obTitle');
+    document.getElementById('obCopy').textContent = t('obCopy');
+    document.getElementById('obTypeLabel').textContent = t('obTypeLabel');
+    document.getElementById('obLocLabel').textContent = t('obLocLabel');
+    document.getElementById('obCity').placeholder = t('cityPH');
+    document.getElementById('obSkip').textContent = t('obSkip');
+    document.getElementById('obStart').textContent = t('obStart');
+    const obChoices = t('obChoices');
+    if (obChoices && typeof obChoices === 'object') {
+        document.querySelectorAll('#obChoices .ob-choice').forEach(btn => {
+            const copy = obChoices[btn.dataset.cat];
+            if (!copy) return;
+            btn.querySelector('strong').textContent = copy[0];
+            btn.querySelector('span').textContent = copy[1];
+        });
+    }
     // Value labels
     const vLabels = document.querySelectorAll('.vfield label');
     if (vLabels[0]) vLabels[0].textContent = t('valMin');
@@ -1792,14 +2129,6 @@ function applyLang() {
     document.querySelectorAll('#ltypePills .pill').forEach(p => {
         const cat = p.dataset.cat;
         if (ltypeLabels[cat]) p.textContent = ltypeLabels[cat];
-    });
-    // Sub pills
-    const subLabels_en = { roofing:'🏠 Roofing', drywall:'🧱 Drywall', paint:'🎨 Painting', electrical:'⚡ Electrical', plumbing:'🔧 Plumbing', hvac:'❄️ HVAC', flooring:'🪵 Flooring', concrete:'🧱 Concrete', framing:'🪚 Framing', windows:'🪟 Windows', landscaping:'🌿 Landscaping' };
-    const subLabels_es = { roofing:'🏠 Roofing', drywall:'🧱 Drywall', paint:'🎨 Pintura', electrical:'⚡ Eléctrico', plumbing:'🔧 Plomería', hvac:'❄️ HVAC', flooring:'🪵 Pisos', concrete:'🧱 Concreto', framing:'🪚 Framing', windows:'🪟 Ventanas', landscaping:'🌿 Paisajismo' };
-    const subL = CURRENT_LANG === 'en' ? subLabels_en : subLabels_es;
-    document.querySelectorAll('#subPills .pill').forEach(p => {
-        const cat = p.dataset.cat;
-        if (subL[cat]) p.textContent = subL[cat];
     });
 }
 
@@ -2062,7 +2391,8 @@ async function submitEmailRegister() {
     const params = new URLSearchParams(window.location.search);
     const payStatus = params.get('payment');
     if (payStatus === 'success') {
-        toast('🎉 ¡Pago completado! Tu plan ya está activo.');
+        toast('🎉 Pago completado. Activando tu plan...');
+        refreshSubscriptionStatus(3);
         history.replaceState(null, '', window.location.pathname);
     } else if (payStatus === 'cancel') {
         toast('Pago cancelado. Puedes intentarlo de nuevo cuando quieras.');
@@ -2074,7 +2404,9 @@ loadFilters();   // restore saved filters before first render
 applyLang();
 syncContactsBtn();
 renderChips();
-fetchFeed();
+loadEliteInventory();
+if (shouldShowOnboarding()) showOnboarding();
+else fetchFeed();
 
 // ── Real-time sync: poll /api/swipe/pulse every 30s ──────────────────────────
 (function startPulse() {
@@ -2097,7 +2429,7 @@ fetchFeed();
             if (data.latest_update && data.latest_update !== _lastUpdate && data.new_since > 0) {
                 _lastUpdate = data.latest_update;
                 // Only auto-refresh if deck is nearly empty to avoid interrupting user
-                if (S.queue.length <= 2 && !S.loading) {
+                if (S.queue.length <= 2 && !S.loading && !S.onboardingOpen) {
                     fetchFeed();
                     toast('🔄 Nuevos leads disponibles');
                 }

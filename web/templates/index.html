@@ -359,6 +359,68 @@
             letter-spacing: -0.5px;
         }
 
+        .elite-quality-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 18px 20px;
+            margin-bottom: 24px;
+            display: grid;
+            grid-template-columns: minmax(160px, 220px) 1fr;
+            gap: 18px;
+        }
+
+        .elite-quality-kpi {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .elite-quality-status {
+            display: inline-flex;
+            align-items: center;
+            width: max-content;
+            max-width: 100%;
+            padding: 4px 8px;
+            border-radius: 6px;
+            background: var(--green-light);
+            color: var(--green);
+            font-size: 12px;
+            font-weight: 700;
+            margin-top: 6px;
+        }
+
+        .elite-quality-status.warn {
+            background: var(--orange-light);
+            color: var(--orange);
+        }
+
+        .elite-quality-status.danger {
+            background: var(--red-light);
+            color: var(--red);
+        }
+
+        .elite-quality-detail {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+            font-size: 13px;
+        }
+
+        .elite-quality-detail strong {
+            display: block;
+            font-size: 18px;
+            color: var(--fg);
+            margin-bottom: 2px;
+        }
+
+        .elite-quality-alert {
+            grid-column: 1 / -1;
+            color: var(--fg-muted);
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
         /* ── SECTION HEADER ── */
         .section-header {
             display: flex;
@@ -1224,6 +1286,20 @@
                         </div>
                     </div>
 
+                    <div class="elite-quality-card" id="eliteQualityCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Elite QA</div>
+                            <div class="stat-value" id="eliteQaTotal">0</div>
+                            <span class="elite-quality-status warn" id="eliteQaStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="eliteQaAvg">0/100</strong><span>Avg quality</span></div>
+                            <div><strong id="eliteQaPhone">0%</strong><span>Phone coverage</span></div>
+                            <div><strong id="eliteQaValue">0%</strong><span>Project value</span></div>
+                            <div class="elite-quality-alert" id="eliteQaAlerts">Checking sellability...</div>
+                        </div>
+                    </div>
+
                     <div class="section-header">
                         <h3 class="section-title">Recent Leads</h3>
                     </div>
@@ -1490,10 +1566,19 @@
                         <h1>💬 Feedback de Usuarios (BETA)</h1>
                         <button class="btn btn-primary" onclick="loadFeedback()">🔄 Recargar</button>
                     </div>
-                    <div class="card">
-                        <div class="card-header">
-                            <h3>Comentarios recibidos</h3>
-                            <span id="feedbackCount" style="font-size:12px;color:#6b7280"></span>
+	                    <div class="card">
+	                        <div class="card-header">
+	                            <h3>Reportes de calidad</h3>
+	                            <span id="qualityReportCount" style="font-size:12px;color:#6b7280"></span>
+	                        </div>
+	                        <div id="qualityReportList" style="display:flex;flex-direction:column;gap:10px;padding:16px">
+	                            <p style="color:#6b7280">Cargando...</p>
+	                        </div>
+	                    </div>
+	                    <div class="card" style="margin-top:16px">
+	                        <div class="card-header">
+	                            <h3>Comentarios recibidos</h3>
+	                            <span id="feedbackCount" style="font-size:12px;color:#6b7280"></span>
                         </div>
                         <div id="feedbackList" style="display:flex;flex-direction:column;gap:10px;padding:16px">
                             <p style="color:#6b7280">Cargando...</p>
@@ -1881,6 +1966,7 @@
         // ── Dashboard ──
         async function loadDashboard() {
             try {
+                loadEliteQualityReport();
                 const response = await fetch('/api/leads', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const data = await response.json();
                 document.getElementById('totalLeads').textContent = data.total || 0;
@@ -1904,6 +1990,40 @@
                     </tr>
                 `).join('') || '<tr><td colspan="5" class="empty-state"><p>No leads</p></td></tr>';
             } catch (e) { console.error(e); }
+        }
+
+        async function loadEliteQualityReport() {
+            const statusEl = document.getElementById('eliteQaStatus');
+            if (!statusEl) return;
+            try {
+                const response = await fetch('/api/admin/elite-quality-report', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('elite qa unavailable');
+                const data = await response.json();
+                const phonePct = data.coverage?.phone?.pct || 0;
+                const valuePct = data.coverage?.project_value?.pct || 0;
+                document.getElementById('eliteQaTotal').textContent = data.elite_leads || 0;
+                document.getElementById('eliteQaAvg').textContent = `${data.average_quality_score || 0}/100`;
+                document.getElementById('eliteQaPhone').textContent = `${phonePct}%`;
+                document.getElementById('eliteQaValue').textContent = `${valuePct}%`;
+                const labels = {
+                    ready_for_elite: 'Ready for Elite',
+                    pilot_market: 'Pilot market',
+                    needs_inventory: 'Needs inventory'
+                };
+                statusEl.textContent = labels[data.sellability] || 'Review';
+                statusEl.classList.toggle('danger', data.sellability === 'needs_inventory');
+                statusEl.classList.toggle('warn', data.sellability === 'pilot_market');
+                const alerts = data.alerts && data.alerts.length
+                    ? data.alerts.join(' ')
+                    : 'Inventory quality is within Elite sales guardrails.';
+                document.getElementById('eliteQaAlerts').textContent = alerts;
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('eliteQaAlerts').textContent = 'Elite QA report could not be loaded.';
+            }
         }
 
         // ── Leads ──
@@ -2502,8 +2622,33 @@
 
         async function loadFeedback() {
             const list = document.getElementById('feedbackList');
+            const qualityList = document.getElementById('qualityReportList');
+            if (qualityList) qualityList.innerHTML = '<p style="color:#6b7280">Cargando...</p>';
             list.innerHTML = '<p style="color:#6b7280">Cargando...</p>';
             try {
+                const qualityResp = await fetch('/api/admin/lead-quality-reports?status=open', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (qualityResp.ok && qualityList) {
+                    const qData = await qualityResp.json();
+                    document.getElementById('qualityReportCount').textContent =
+                        `${qData.summary?.open_count || 0} abiertos · ${qData.summary?.elite_count || 0} Elite`;
+                    if (!qData.reports.length) {
+                        qualityList.innerHTML = '<p style="color:#6b7280">No hay reportes de calidad abiertos.</p>';
+                    } else {
+                        qualityList.innerHTML = qData.reports.map(r => `
+                            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px">
+                                <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:6px">
+                                    <strong>${r.is_elite ? 'Elite · ' : ''}${escHtml(r.reason)}</strong>
+                                    <span style="font-size:12px;color:#9ca3af">${escHtml(r.created_at)}</span>
+                                </div>
+                                <div style="font-size:13px;color:#374151">${escHtml(r.address || r.lead_id)} ${r.city ? '· ' + escHtml(r.city) : ''}</div>
+                                <div style="font-size:13px;color:#111827;margin-top:6px;white-space:pre-wrap">${escHtml(r.details || 'Sin detalles')}</div>
+                                <div style="font-size:12px;color:#6b7280;margin-top:6px">${escHtml(r.email || r.full_name || 'Usuario')}</div>
+                            </div>
+                        `).join('');
+                    }
+                }
                 const resp = await fetch('/api/admin/feedback?page=1', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const data = await resp.json();
                 document.getElementById('feedbackCount').textContent = `${data.total} comentarios`;

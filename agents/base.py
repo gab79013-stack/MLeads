@@ -11,6 +11,7 @@ Clase base para todos los agentes.
 """
 
 import logging
+import os
 from abc import ABC, abstractmethod
 from utils.db import is_sent, mark_sent
 from utils.telegram import send_message, send_message_to
@@ -46,6 +47,7 @@ try:
     from utils.gc_detector import enrich_lead_with_gc_detection as _gc_detect
     _GC_DETECTOR_AVAILABLE = True
 except Exception:
+    _gc_detect = None
     _GC_DETECTOR_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
@@ -189,6 +191,14 @@ class BaseAgent(ABC):
                         except:
                             lat = lon = None
                         
+                        primary_service_type = lead.get('primary_service_type', lead.get('_trade', ''))
+                        try:
+                            from utils.opportunity_rules import current_opportunity_services
+                            opportunity_services = current_opportunity_services(lead, self.agent_key)
+                        except Exception:
+                            opportunity_services = {primary_service_type} if primary_service_type else set()
+                        is_dead_lead = bool(lead.get('_is_gc_self_pull') and not opportunity_services)
+
                         cur.execute("""
                             INSERT INTO consolidated_leads (
                                 address_key, address, city, agent_sources,
@@ -203,7 +213,7 @@ class BaseAgent(ABC):
                                 %s, %s, %s, %s,
                                 NOW(), NOW(), %s,
                                 %s, %s, %s,
-                                FALSE, FALSE,
+                                %s, FALSE,
                                 %s, %s, %s,
                                 %s, %s,
                                 %s, %s,
@@ -212,15 +222,20 @@ class BaseAgent(ABC):
                             ON CONFLICT (address_key) DO UPDATE SET
                                 last_updated = NOW(),
                                 lead_data = EXCLUDED.lead_data,
+                                primary_service_type = EXCLUDED.primary_service_type,
+                                has_contact = EXCLUDED.has_contact,
+                                has_phone = EXCLUDED.has_phone,
+                                is_dead_lead = EXCLUDED.is_dead_lead,
                                 gc_score = EXCLUDED.gc_score,
                                 subcontractor_score = EXCLUDED.subcontractor_score,
                                 insurance_score = EXCLUDED.insurance_score
                         """, (
                             str(lead_id), address, city, agent_sources,
                             _json.dumps(lead, default=str),
-                            lead.get('primary_service_type', lead.get('_trade', '')),
+                            primary_service_type,
                             bool(lead.get('contact_phone') or lead.get('contact_email')),
                             bool(lead.get('contact_phone')),
+                            is_dead_lead,
                             sub_score, gc_score, ins_score,
                             year_built, lead.get('property_roof_material'),
                             lead.get('property_value'), lead.get('property_sqft'),
@@ -277,6 +292,16 @@ class BaseAgent(ABC):
                 except Exception as e:
                     logger.debug(f"[{self.agent_key}] AI classify error: {e}")
 
+        # Paso 3b-ii: Detectar contractor self-pull ("lead tomado")
+        # Debe correr DESPUÉS de la clasificación AI y ANTES de scoring/routing,
+        # para que scores, CRM y fanout usen el trade de oportunidad real.
+        if _GC_DETECTOR_AVAILABLE and _gc_detect:
+            for lead in new_leads:
+                try:
+                    _gc_detect(lead)
+                except Exception as e:
+                    logger.debug(f"[{self.agent_key}] GC detect error: {e}")
+
         # Paso 3b-0: Enriquecer con Property DNA (year built, roof, value, flood zone)
         try:
             from utils.property_dna import get_property_dna
@@ -300,6 +325,16 @@ class BaseAgent(ABC):
             pass
         except Exception as e:
             logger.debug(f"[{self.agent_key}] Tripartite scoring error: {e}")
+
+        # Paso 3b-1b: Refresh SQLite consolidated row after AI/gc/scoring.
+        # register_lead() wrote the row before classification; without this,
+        # web filters can use stale primary_service_type/is_dead_lead and leak
+        # taken same-trade permits back into subcontractor feeds.
+        for lead in new_leads:
+            try:
+                dedup.refresh_consolidated_lead(lead, self.agent_key)
+            except Exception as e:
+                logger.debug(f"[{self.agent_key}] Consolidated refresh error: {e}")
 
         # Paso 3b-2: Route leads to GCs and Subs
         try:
@@ -339,16 +374,6 @@ class BaseAgent(ABC):
             self._sync_to_postgres(new_leads)
         except Exception as e:
             logger.debug(f"[{self.agent_key}] PG sync error: {e}")
-
-        # Paso 3b-ii: Detectar GC self-pull ("lead muerto")
-        # Debe correr DESPUÉS de la clasificación AI para tener _trade disponible
-        if _GC_DETECTOR_AVAILABLE:
-            for lead in new_leads:
-                if lead.get("contractor") or lead.get("gc_name"):
-                    try:
-                        _gc_detect(lead)
-                    except Exception as e:
-                        logger.debug(f"[{self.agent_key}] GC detect error: {e}")
 
         # Paso 3c: Validate contractor licenses on leads that have them
         if _LICENSE_VALIDATOR_AVAILABLE:

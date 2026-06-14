@@ -11,6 +11,7 @@ REST API endpoints for:
 import os
 import json
 import logging
+import hashlib
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, g, send_file
 from flask_cors import CORS
@@ -33,6 +34,14 @@ from workers.inspection_scheduler import (
 from workers.telegram_bot import start_bot_worker
 from utils import bot_users as bu
 from utils import billing
+from web.helpers.service_filter import build_service_category_filter
+from web.helpers.gc_interest import (
+    build_gc_insight,
+    build_gc_interest_sql_filter,
+    build_public_real_lead_sql_filter,
+    is_gc_interesting_lead,
+    is_placeholder_or_demo_lead,
+)
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -82,6 +91,58 @@ def log_audit(user_id, action, resource_type, resource_id, details=""):
         conn.close()
     except Exception as e:
         logger.warning(f"Failed to log audit: {e}")
+
+
+def _clean_text(value, max_len=300):
+    """Normalize user-submitted text into a bounded plain string."""
+    return " ".join(str(value or "").strip().split())[:max_len]
+
+
+def _normalize_phone(value):
+    digits = "".join(ch for ch in str(value or "") if ch.isdigit())
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) != 10:
+        return ""
+    return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+
+
+def _homeowner_budget_value(budget_range):
+    values = {
+        "under_25k": 15000,
+        "25_75k": 50000,
+        "75_150k": 110000,
+        "150_300k": 225000,
+        "300k_plus": 375000,
+        "unsure": 0,
+    }
+    return values.get((budget_range or "").strip(), 0)
+
+
+def _homeowner_lead_score(has_email, budget_value, timeline, description):
+    score = 82
+    reasons = [
+        "Homeowner directo pide contacto antes de buscar GC.",
+        "Teléfono validado por formulario de intención.",
+    ]
+    if has_email:
+        score += 3
+        reasons.append("Incluye email para seguimiento.")
+    if budget_value >= 75000:
+        score += 6
+        reasons.append("Presupuesto indicado sugiere proyecto vendible para GC.")
+    if timeline in {"asap", "0_30", "1_3_months"}:
+        score += 5
+        reasons.append("Timeline cercano aumenta probabilidad de cierre.")
+    if len(description or "") >= 80:
+        score += 3
+        reasons.append("Descripción suficiente para calificar alcance inicial.")
+    score = min(score, 98)
+    return {
+        "score": score,
+        "grade": "HOT" if score >= 90 else "WARM",
+        "reasons": reasons,
+    }
 
 
 # ─────────────────────────────────────────────────────────
@@ -144,6 +205,154 @@ def swipe_page():
     html = html.replace('__FACEBOOK_APP_ID__', os.getenv('FACEBOOK_APP_ID', ''))
     html = html.replace('__GOOGLE_MAPS_API_KEY__', os.getenv('GOOGLE_MAPS_API_KEY', ''))
     return html
+
+
+@app.route('/homeowner-intake', methods=['GET'])
+@app.route('/homeowner-intake.html', methods=['GET'])
+def homeowner_intake_page():
+    """Serve the public homeowner project intake page."""
+    intake_path = os.path.join(os.path.dirname(__file__), 'templates', 'homeowner_intake.html')
+    try:
+        with open(intake_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return jsonify({"error": "Homeowner intake page not found"}), 404
+
+
+@app.route('/pipeline', methods=['GET'])
+@app.route('/pipeline.html', methods=['GET'])
+def pipeline_page():
+    """Serve the Kanban pipeline page for swiped/right leads."""
+    pipeline_path = os.path.join(os.path.dirname(__file__), 'templates', 'pipeline.html')
+    try:
+        with open(pipeline_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return jsonify({"error": "Pipeline page not found"}), 404
+
+
+@app.route('/api/homeowner-intake', methods=['POST'])
+@limiter.limit("12 per minute")
+def homeowner_intake_submit():
+    """
+    Capture a direct homeowner project request and publish it as a GC-ready lead.
+
+    This channel targets owners who are still planning an addition/remodel and
+    have not yet selected a GC, making the lead valuable before permits appear.
+    """
+    data = request.get_json(silent=True) or {}
+    full_name = _clean_text(data.get("full_name"), 120)
+    phone = _normalize_phone(data.get("phone"))
+    email = _clean_text(data.get("email"), 160).lower()
+    address = _clean_text(data.get("address"), 180)
+    city = _clean_text(data.get("city"), 80)
+    state = _clean_text(data.get("state"), 20).upper()
+    zip_code = _clean_text(data.get("zip"), 20)
+    project_type = _clean_text(data.get("project_type"), 80)
+    timeline = _clean_text(data.get("timeline"), 40)
+    budget_range = _clean_text(data.get("budget_range"), 40)
+    best_time = _clean_text(data.get("best_time"), 120)
+    description = _clean_text(data.get("description"), 1200)
+
+    missing = []
+    for field_name, value in [
+        ("full_name", full_name),
+        ("phone", phone),
+        ("address", address),
+        ("city", city),
+        ("project_type", project_type),
+        ("timeline", timeline),
+        ("description", description),
+    ]:
+        if not value:
+            missing.append(field_name)
+    if missing:
+        return jsonify({"error": "missing_required_fields", "fields": missing}), 400
+
+    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    identity = "|".join([address.lower(), city.lower(), state.lower(), phone, email])
+    digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()[:16]
+    lead_id = f"homeowner_{digest}"
+    source_base = os.getenv('BASE_URL', request.host_url).rstrip('/')
+    source_url = f"{source_base}/homeowner-intake"
+    budget_value = _homeowner_budget_value(budget_range)
+    scoring = _homeowner_lead_score(bool(email), budget_value, timeline, description)
+    project_label = project_type.replace("_", " ")
+    summary = (
+        f"Homeowner planea {project_label} y quiere hablar con un GC antes de iniciar permisos. "
+        f"Timeline: {timeline}. Presupuesto: {budget_range or 'unsure'}."
+    )
+
+    lead_data = {
+        "id": lead_id,
+        "source": "homeowner_intake",
+        "source_label": "Homeowner request",
+        "source_url": source_url,
+        "primary_service_type": "remodel",
+        "service_type": "remodel",
+        "address": address,
+        "city": city,
+        "state": state,
+        "zip": zip_code,
+        "owner": full_name,
+        "homeowner_name": full_name,
+        "contact_phone": phone,
+        "contact_email": email,
+        "contractor": "NONE",
+        "permit_type": "Homeowner GC request",
+        "description": f"Homeowner is planning {project_label}. {description}",
+        "project_type": project_type,
+        "timeline": timeline,
+        "budget_range": budget_range,
+        "best_time": best_time,
+        "value_float": budget_value,
+        "_scoring": scoring,
+        "_trade": "GENERAL_CONTRACTOR",
+        "_urgency": "HIGH" if timeline in {"asap", "0_30", "1_3_months"} else "MEDIUM",
+        "_ai_summary": summary,
+        "_is_residential": True,
+        "_project_phase": "planning",
+        "_decision_maker": "homeowner",
+        "_owner_type": "HOMEOWNER",
+        "_services": [project_type],
+        "_key_pain_point": "Needs GC estimate before permitting",
+        "_upsell_opportunity": "Design-build, permit help, addition/remodel package",
+        "_lead_channel": "homeowner_intake",
+    }
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO homeowner_project_intakes (
+            lead_id, full_name, phone, email, address, city, state, zip_code,
+            project_type, timeline, budget_range, description, best_time, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)
+    """, (
+        lead_id, full_name, phone, email, address, city, state, zip_code,
+        project_type, timeline, budget_range, description, best_time, now,
+    ))
+    c.execute("""
+        INSERT OR REPLACE INTO consolidated_leads (
+            address_key, address, city, agent_sources, first_seen, last_updated,
+            lead_data, notified, primary_service_type, has_contact, has_phone, is_dead_lead
+        ) VALUES (
+            ?, ?, ?, 'homeowner_intake',
+            COALESCE((SELECT first_seen FROM consolidated_leads WHERE address_key = ?), ?),
+            ?, ?, 0, 'remodel', 1, 1, 0
+        )
+    """, (
+        lead_id, address, city, lead_id, now, now, json.dumps(lead_data, ensure_ascii=False),
+    ))
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "ok": True,
+        "lead_id": lead_id,
+        "score": scoring["score"],
+        "grade": scoring["grade"],
+        "message": "project_request_received",
+    }), 201
 
 
 @app.route('/<path:filename>', methods=['GET'])
@@ -2242,14 +2451,14 @@ def bot_users_stats():
 def create_payment_checkout():
     """
     Create a Stripe Checkout session for the authenticated web user.
-    Body: {"tier": "pro" | "premium"}
+    Body: {"tier": "pro" | "premium" | "elite"}
     Returns: {"checkout_url": "https://checkout.stripe.com/..."}
     Requires STRIPE_API_KEY and STRIPE_PRICE_ID_PRO / STRIPE_PRICE_ID_PREMIUM in env.
     """
     data = request.get_json(silent=True) or {}
     tier = (data.get('tier') or 'pro').lower()
-    if tier not in ('pro', 'premium'):
-        return jsonify({"error": "Tier must be 'pro' or 'premium'"}), 400
+    if tier not in ('pro', 'premium', 'elite'):
+        return jsonify({"error": "Tier must be 'pro', 'premium' or 'elite'"}), 400
 
     stripe_key = os.getenv('STRIPE_API_KEY', '')
     price_id   = os.getenv(f'STRIPE_PRICE_ID_{tier.upper()}', os.getenv('STRIPE_PRICE_ID', ''))
@@ -2267,6 +2476,7 @@ def create_payment_checkout():
         conn.close()
 
         base_url = os.getenv('BASE_URL', 'http://104.42.252.241:5000')
+        checkout_metadata = {'user_id': str(g.user_id), 'tier': tier}
         session = _stripe.checkout.Session.create(
             mode='subscription',
             line_items=[{'price': price_id, 'quantity': 1}],
@@ -2274,7 +2484,8 @@ def create_payment_checkout():
             cancel_url=f"{base_url}/swipe?payment=cancel",
             customer_email=user['email'] if user else None,
             client_reference_id=str(g.user_id),
-            metadata={'user_id': str(g.user_id), 'tier': tier},
+            metadata=checkout_metadata,
+            subscription_data={'metadata': checkout_metadata},
         )
         return jsonify({"checkout_url": session.url, "session_id": session.id}), 200
     except Exception as e:
@@ -2294,10 +2505,9 @@ def stripe_webhook():
     if not event:
         return jsonify({"error": "invalid signature or billing not configured"}), 400
     try:
-        # Check if this event is for a web user (has user_id in metadata)
+        # Check if this event is for a web user (metadata first, stored Stripe ids second).
         data_obj  = (event.get('data') or {}).get('object') or {}
-        meta      = data_obj.get('metadata') or {}
-        web_user_id = meta.get('user_id') or data_obj.get('client_reference_id')
+        web_user_id = _resolve_web_user_id_from_stripe_object(data_obj)
 
         if web_user_id:
             handled = _handle_web_user_stripe_event(event, web_user_id)
@@ -2320,6 +2530,9 @@ def _handle_web_user_stripe_event(event: dict, web_user_id: str) -> bool:
     try:
         if event_type in ('checkout.session.completed', 'invoice.paid', 'invoice.payment_succeeded'):
             stripe_customer = data_obj.get('customer')
+            stripe_subscription = data_obj.get('subscription') or data_obj.get('id')
+            metadata = data_obj.get('metadata') or {}
+            tier = (metadata.get('tier') or _get_existing_subscription_tier(web_user_id) or 'premium').lower()
             # Get period end from invoice lines if available
             period_end = None
             try:
@@ -2334,23 +2547,33 @@ def _handle_web_user_stripe_event(event: dict, web_user_id: str) -> bool:
                 (datetime.utcnow() + timedelta(days=31)).strftime('%Y-%m-%d %H:%M:%S')
             )
             c.execute("""
-                UPDATE users
+               UPDATE users
                    SET is_paid = 1,
+                       subscription_tier = ?,
+                       paid_until = ?,
+                       stripe_customer_id = COALESCE(?, stripe_customer_id),
+                       stripe_subscription_id = COALESCE(?, stripe_subscription_id),
                        paid_since = COALESCE(paid_since, CURRENT_TIMESTAMP),
                        updated_at = CURRENT_TIMESTAMP
                  WHERE id = ?
-            """, (int(web_user_id),))
+            """, (tier, paid_until, stripe_customer, stripe_subscription, int(web_user_id)))
             conn.commit()
             logger.info(f"[webhook] web user {web_user_id} marked paid until {paid_until}")
             return True
 
         if event_type in ('customer.subscription.deleted', 'customer.subscription.paused'):
+            stripe_customer = data_obj.get('customer')
+            stripe_subscription = data_obj.get('id') or data_obj.get('subscription')
             c.execute("""
-                UPDATE users
+               UPDATE users
                    SET is_paid = 0,
+                       subscription_tier = 'free',
+                       paid_until = CURRENT_TIMESTAMP,
+                       stripe_customer_id = COALESCE(?, stripe_customer_id),
+                       stripe_subscription_id = COALESCE(?, stripe_subscription_id),
                        updated_at = CURRENT_TIMESTAMP
                  WHERE id = ?
-            """, (int(web_user_id),))
+            """, (stripe_customer, stripe_subscription, int(web_user_id)))
             conn.commit()
             logger.info(f"[webhook] web user {web_user_id} subscription ended")
             return True
@@ -2358,6 +2581,47 @@ def _handle_web_user_stripe_event(event: dict, web_user_id: str) -> bool:
         conn.close()
 
     return False
+
+
+def _resolve_web_user_id_from_stripe_object(data_obj: dict) -> str | None:
+    meta = data_obj.get('metadata') or {}
+    web_user_id = meta.get('user_id') or data_obj.get('client_reference_id')
+    if web_user_id:
+        return str(web_user_id)
+
+    stripe_customer = data_obj.get('customer')
+    stripe_subscription = data_obj.get('subscription') or data_obj.get('id')
+    if not stripe_customer and not stripe_subscription:
+        return None
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        if stripe_subscription:
+            c.execute("SELECT id FROM users WHERE stripe_subscription_id = ? LIMIT 1", (stripe_subscription,))
+            row = c.fetchone()
+            if row:
+                return str(row[0])
+        if stripe_customer:
+            c.execute("SELECT id FROM users WHERE stripe_customer_id = ? LIMIT 1", (stripe_customer,))
+            row = c.fetchone()
+            if row:
+                return str(row[0])
+    finally:
+        conn.close()
+    return None
+
+
+def _get_existing_subscription_tier(web_user_id: str) -> str | None:
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT subscription_tier FROM users WHERE id = ?", (int(web_user_id),))
+        row = c.fetchone()
+        tier = (row[0] if row else None) or None
+        return str(tier).lower() if tier and tier != 'free' else None
+    finally:
+        conn.close()
 
 
 # ─────────────────────────────────────────────────────────
@@ -2370,7 +2634,44 @@ ANON_LEAD_LIMIT = int(os.getenv("SWIPE_ANON_LIMIT", "10"))
 FREE_USER_LEAD_LIMIT = int(os.getenv("SWIPE_FREE_LIMIT", "40"))
 REQUIRE_CONTACT = os.getenv("SWIPE_REQUIRE_CONTACT", "false").lower() in ("true", "1", "yes")
 PRO_LEAD_LIMIT = int(os.getenv("SWIPE_PRO_LIMIT", "200"))   # $29/mo tier
+ELITE_LEAD_LIMIT = int(os.getenv("SWIPE_ELITE_LIMIT", "80")) # $500/mo curated tier
+ELITE_CLAIM_DAYS = int(os.getenv("SWIPE_ELITE_CLAIM_DAYS", "14"))
 # PREMIUM = is_paid flag + no limit ($99/mo)
+
+
+def _get_web_subscription(user_id) -> tuple[bool, str]:
+    if not user_id:
+        return False, "free"
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT COALESCE(is_paid, 0), COALESCE(subscription_tier, 'free'), paid_until FROM users WHERE id = ?", (user_id,))
+        row = c.fetchone()
+        is_paid = bool(row and row[0])
+        tier = str((row[1] if row and len(row) > 1 else "free") or "free").lower()
+        paid_until = row[2] if row and len(row) > 2 else None
+        if is_paid and paid_until:
+            try:
+                is_paid = datetime.strptime(str(paid_until)[:19], "%Y-%m-%d %H:%M:%S") > datetime.utcnow()
+            except Exception:
+                pass
+        if is_paid and tier == "free":
+            tier = "premium"
+        if not is_paid:
+            tier = "free"
+        return is_paid, tier
+    finally:
+        conn.close()
+
+
+def _tier_lead_limit(tier: str, is_paid: bool) -> int | None:
+    if not is_paid:
+        return FREE_USER_LEAD_LIMIT
+    if tier == "pro":
+        return PRO_LEAD_LIMIT
+    if tier == "elite":
+        return ELITE_LEAD_LIMIT
+    return None
 
 
 def _resolve_swipe_identity():
@@ -2402,17 +2703,17 @@ def _resolve_swipe_identity():
 
 
 def _count_swipes(user_id, anon_id) -> int:
-    """Count only right-swipes (likes) — dislikes don't consume quota."""
+    """Count every viewed/swiped lead for quota and counter consistency."""
     conn = get_db_connection()
     c = conn.cursor()
     if user_id:
         c.execute(
-            "SELECT COUNT(*) FROM swipe_actions WHERE user_id = ? AND action = 'like'",
+            "SELECT COUNT(*) FROM swipe_actions WHERE user_id = ?",
             (user_id,),
         )
     elif anon_id:
         c.execute(
-            "SELECT COUNT(*) FROM swipe_actions WHERE anon_id = ? AND action = 'like'",
+            "SELECT COUNT(*) FROM swipe_actions WHERE anon_id = ?",
             (anon_id,),
         )
     else:
@@ -2442,6 +2743,311 @@ def _already_swiped_ids(user_id, anon_id) -> set:
     ids = {row[0] for row in c.fetchall()}
     conn.close()
     return ids
+
+
+def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scoring: dict, inspection_date: str = "") -> tuple[int, list[str], bool]:
+    """Score evidence that can justify high-ticket curated leads."""
+    score = int(scoring.get("score") or 0)
+    points = 0
+    checks: list[str] = []
+    if gc_insight.get("confidence") == "verified":
+        points += 30
+        checks.append("Fuente oficial verificada")
+    if gc_insight.get("source_url"):
+        points += 15
+        checks.append("Link de fuente auditable")
+    if (lead_data.get("contact_phone") or "").strip():
+        points += 20
+        checks.append("Teléfono disponible")
+    if score >= 90:
+        points += 15
+        checks.append("Score HOT 90+")
+    if lead_data.get("value_float"):
+        points += 10
+        checks.append("Valor de proyecto detectado")
+    if inspection_date:
+        points += 10
+        checks.append("Ventana de visita/inspección")
+    if str(service_type or "").lower() in {"weather", "flood", "disaster"}:
+        checks.append("Oportunidad sensible al tiempo")
+    return min(points, 100), checks[:5], points >= 70
+
+
+def _is_elite_lead_record(row_dict: dict, lead_data: dict | None = None) -> tuple[bool, int, list[str]]:
+    try:
+        lead_data = lead_data if lead_data is not None else json.loads(row_dict.get("lead_data") or "{}")
+    except Exception:
+        lead_data = {}
+    service_type = (row_dict.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+    if not service_type or not is_gc_interesting_lead(lead_data, service_type):
+        return False, 0, []
+    gc_insight = build_gc_insight(lead_data, service_type)
+    if not gc_insight.get("source_url"):
+        return False, 0, []
+    scoring = lead_data.get("_scoring", {}) or {}
+    inspection_date = (
+        lead_data.get("inspection_date")
+        or lead_data.get("next_inspection_date")
+        or lead_data.get("next_scheduled_inspection_date")
+        or ""
+    )
+    q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, str(inspection_date).strip()[:10])
+    return is_elite, q_score, q_checks
+
+
+def _active_elite_claim(c, lead_id: str):
+    c.execute("""
+        SELECT user_id, expires_at
+        FROM elite_lead_claims
+        WHERE lead_id = ?
+          AND status = 'active'
+          AND datetime(expires_at) > datetime('now')
+        LIMIT 1
+    """, (lead_id,))
+    return c.fetchone()
+
+
+def _claim_elite_lead(conn, c, user_id: int, lead_id: str, claim_type: str = "like") -> dict:
+    claim = _active_elite_claim(c, lead_id)
+    if claim and int(claim["user_id"]) != int(user_id):
+        return {"claimed": False, "blocked": True, "expires_at": claim["expires_at"]}
+
+    expires_at = (datetime.utcnow() + timedelta(days=ELITE_CLAIM_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+    c.execute("""
+        INSERT INTO elite_lead_claims (lead_id, user_id, claim_type, status, claimed_at, expires_at)
+        VALUES (?, ?, ?, 'active', CURRENT_TIMESTAMP, ?)
+        ON CONFLICT(lead_id) DO UPDATE SET
+            user_id = excluded.user_id,
+            claim_type = excluded.claim_type,
+            status = 'active',
+            claimed_at = CURRENT_TIMESTAMP,
+            expires_at = excluded.expires_at
+    """, (lead_id, int(user_id), claim_type, expires_at))
+    conn.commit()
+    return {"claimed": True, "blocked": False, "expires_at": expires_at}
+
+
+def _elite_inventory_payload(city_filter: str = "", service_filter: str = "") -> dict:
+    """Return non-sensitive inventory counts for selling/operating Elite."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    conditions = [
+        build_public_real_lead_sql_filter(),
+        build_gc_interest_sql_filter(),
+    ]
+    params: list = []
+    if city_filter:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+    if service_filter:
+        cats = [x.strip().lower() for x in service_filter.split(",") if x.strip()]
+        service_sql, service_params = build_service_category_filter(cats, _TRADE_SERVICE_TO_AI, _SERVICE_TYPE_CATS)
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
+
+    where_sql = "WHERE " + " AND ".join(conditions)
+    c.execute(f"""
+        SELECT address_key, address, city, lead_data, primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY first_seen DESC
+        LIMIT 2500
+    """, params)
+    rows = c.fetchall()
+    conn.close()
+
+    by_city: dict[str, int] = {}
+    by_service: dict[str, int] = {}
+    samples: list[dict] = []
+    total = 0
+    quality_sum = 0
+
+    for row in rows:
+        rd = dict(row)
+        try:
+            lead_data = json.loads(rd.get("lead_data") or "{}")
+        except Exception:
+            continue
+        service_type = (rd.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if not service_type or not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        gc_insight = build_gc_insight(lead_data, service_type)
+        if not gc_insight.get("source_url"):
+            continue
+        scoring = lead_data.get("_scoring", {}) or {}
+        q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring)
+        if not is_elite:
+            continue
+        total += 1
+        quality_sum += q_score
+        city = rd.get("city") or "Unknown"
+        by_city[city] = by_city.get(city, 0) + 1
+        by_service[service_type] = by_service.get(service_type, 0) + 1
+        if len(samples) < 8:
+            samples.append({
+                "city": city,
+                "service_type": service_type,
+                "score": int(scoring.get("score") or 0),
+                "quality_score": q_score,
+                "checks": q_checks,
+                "value": lead_data.get("value_float") or 0,
+                "source_label": gc_insight.get("source_label", ""),
+            })
+
+    return {
+        "total_elite_leads": total,
+        "average_quality_score": round(quality_sum / total, 1) if total else 0,
+        "by_city": dict(sorted(by_city.items(), key=lambda kv: (-kv[1], kv[0]))[:25]),
+        "by_service": dict(sorted(by_service.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "top_markets": [
+            {"city": city, "elite_leads": count}
+            for city, count in sorted(by_city.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
+        ],
+        "samples": samples,
+        "filters": {"city": city_filter, "service": service_filter},
+    }
+
+
+def _elite_quality_report_payload(city_filter: str = "", service_filter: str = "") -> dict:
+    """Operational QA report for deciding whether Elite inventory is sellable."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    conditions = [
+        build_public_real_lead_sql_filter(),
+        build_gc_interest_sql_filter(),
+    ]
+    params: list = []
+    if city_filter:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+    if service_filter:
+        cats = [x.strip().lower() for x in service_filter.split(",") if x.strip()]
+        service_sql, service_params = build_service_category_filter(cats, _TRADE_SERVICE_TO_AI, _SERVICE_TYPE_CATS)
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
+
+    where_sql = "WHERE " + " AND ".join(conditions)
+    c.execute(f"""
+        SELECT address_key, address, city, lead_data, primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY first_seen DESC
+        LIMIT 2500
+    """, params)
+    rows = c.fetchall()
+    conn.close()
+
+    report = {
+        "filters": {"city": city_filter, "service": service_filter},
+        "candidate_leads": 0,
+        "elite_leads": 0,
+        "average_quality_score": 0,
+        "coverage": {
+            "official_source": 0,
+            "phone": 0,
+            "project_value": 0,
+            "hot_score_90": 0,
+            "inspection_window": 0,
+        },
+        "rejection_reasons": {
+            "not_gc_relevant": 0,
+            "missing_source_url": 0,
+            "below_elite_threshold": 0,
+            "invalid_json": 0,
+        },
+        "top_markets": [],
+        "top_services": [],
+        "audit_samples": [],
+        "sellability": "needs_inventory",
+        "alerts": [],
+    }
+    by_city: dict[str, int] = {}
+    by_service: dict[str, int] = {}
+    quality_sum = 0
+
+    for row in rows:
+        rd = dict(row)
+        try:
+            lead_data = json.loads(rd.get("lead_data") or "{}")
+        except Exception:
+            report["rejection_reasons"]["invalid_json"] += 1
+            continue
+        service_type = (rd.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if not service_type or not is_gc_interesting_lead(lead_data, service_type):
+            report["rejection_reasons"]["not_gc_relevant"] += 1
+            continue
+        report["candidate_leads"] += 1
+        gc_insight = build_gc_insight(lead_data, service_type)
+        if not gc_insight.get("source_url"):
+            report["rejection_reasons"]["missing_source_url"] += 1
+            continue
+        scoring = lead_data.get("_scoring", {}) or {}
+        inspection_date = (lead_data.get("inspection_date") or lead_data.get("next_inspection_date") or "").strip()[:10]
+        q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, inspection_date)
+        if not is_elite:
+            report["rejection_reasons"]["below_elite_threshold"] += 1
+            continue
+
+        report["elite_leads"] += 1
+        quality_sum += q_score
+        city = rd.get("city") or "Unknown"
+        by_city[city] = by_city.get(city, 0) + 1
+        by_service[service_type] = by_service.get(service_type, 0) + 1
+        if gc_insight.get("source_url"):
+            report["coverage"]["official_source"] += 1
+        if (lead_data.get("contact_phone") or "").strip():
+            report["coverage"]["phone"] += 1
+        if lead_data.get("value_float"):
+            report["coverage"]["project_value"] += 1
+        if int(scoring.get("score") or 0) >= 90:
+            report["coverage"]["hot_score_90"] += 1
+        if inspection_date:
+            report["coverage"]["inspection_window"] += 1
+        if len(report["audit_samples"]) < 12:
+            report["audit_samples"].append({
+                "lead_id": rd.get("address_key"),
+                "city": city,
+                "service_type": service_type,
+                "score": int(scoring.get("score") or 0),
+                "quality_score": q_score,
+                "checks": q_checks,
+                "source_label": gc_insight.get("source_label", ""),
+                "first_seen": rd.get("first_seen", ""),
+                "has_phone": bool((lead_data.get("contact_phone") or "").strip()),
+                "has_value": bool(lead_data.get("value_float")),
+            })
+
+    elite_total = report["elite_leads"]
+    if elite_total:
+        report["average_quality_score"] = round(quality_sum / elite_total, 1)
+        for key, value in list(report["coverage"].items()):
+            report["coverage"][key] = {
+                "count": value,
+                "pct": round(value * 100 / elite_total, 1),
+            }
+    report["top_markets"] = [
+        {"city": city, "elite_leads": count}
+        for city, count in sorted(by_city.items(), key=lambda kv: (-kv[1], kv[0]))[:10]
+    ]
+    report["top_services"] = [
+        {"service_type": service_type, "elite_leads": count}
+        for service_type, count in sorted(by_service.items(), key=lambda kv: (-kv[1], kv[0]))[:10]
+    ]
+
+    if elite_total >= 50 and report["average_quality_score"] >= 80:
+        report["sellability"] = "ready_for_elite"
+    elif elite_total >= 15:
+        report["sellability"] = "pilot_market"
+    if elite_total < 15:
+        report["alerts"].append("Menos de 15 leads Elite: vender como piloto o ampliar mercado.")
+    if elite_total and isinstance(report["coverage"]["phone"], dict) and report["coverage"]["phone"]["pct"] < 70:
+        report["alerts"].append("Cobertura de teléfono bajo 70%: reforzar enriquecimiento antes de vender a $500.")
+    if elite_total and isinstance(report["coverage"]["project_value"], dict) and report["coverage"]["project_value"]["pct"] < 50:
+        report["alerts"].append("Valor de proyecto bajo 50%: mostrar ROI puede ser más difícil.")
+
+    return report
 
 
 # ── City coordinates for radius filtering ─────────────────────────────────────
@@ -2544,7 +3150,27 @@ _SERVICE_CAT_KEYWORDS: dict[str, list[str]] = {
     "remodel":     ["remodel", "renovation", "kitchen remodel", "bathroom remodel", "addition", "adu", "accessory dwelling", "tenant improvement", "interior alteration", "room addition"],
 }
 # These map directly to primary_service_type column
-_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "energy", "rodents", "deconstruction", "remodel", "crossdata"}
+_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "weather", "disaster", "energy", "rodents", "deconstruction", "remodel", "crossdata"}
+
+# Subcontractor categories must use the post-classification opportunity trade,
+# not raw permit keywords. Example: a REROOF permit pulled by a CCC roofer is
+# reclassified to DRYWALL/PAINT/INSULATION; it must not appear for roofing users
+# just because the description still says "REROOF".
+_TRADE_SERVICE_TO_AI = {
+    "roofing": "ROOFING",
+    "drywall": "DRYWALL",
+    "paint": "PAINTING",
+    "electrical": "ELECTRICAL",
+    "plumbing": "PLUMBING",
+    "hvac": "HVAC",
+    "flooring": "FLOORING",
+    "concrete": "CONCRETE",
+    "framing": "FRAMING",
+    "windows": "WINDOWS",
+    "landscaping": "LANDSCAPING",
+    "deconstruction": "DEMOLITION",
+    "insulation": "INSULATION",
+}
 
 
 @app.route('/api/swipe/feed', methods=['GET'])
@@ -2562,11 +3188,10 @@ def swipe_feed():
       - max_value:     maximum project value in USD (0 = no limit)
       - city:          filter by city name (partial match)
       - radius_miles:  miles radius from city (requires city param)
-      - service_cats:  comma-separated list of categories
-                       subcontractor: roofing, drywall, paint, electrical,
-                         plumbing, hvac, flooring, concrete, framing, windows, landscaping
-                       lead type: solar, permits, construction, realestate,
-                         flood, energy, rodents, deconstruction, remodel
+      - service_cats:  comma-separated GC opportunity categories:
+                       weather/flood, permits, remodel, deconstruction, realestate,
+                       crossdata, construction (construction is shown only when
+                       pre-award / no GC is confirmed)
 
     Anonymous visitors can view up to ANON_LEAD_LIMIT leads total.
     """
@@ -2603,6 +3228,7 @@ def swipe_feed():
 
     raw_cats = (request.args.get("service_cats") or "").strip()
     selected_cats = [c.strip().lower() for c in raw_cats.split(",") if c.strip()] if raw_cats else []
+    elite_only = request.args.get("elite_only", "0") == "1"
 
     # Pre-compute origin coords for radius filtering
     origin_coords = _city_coords(city_filter) if (city_filter and radius_miles > 0) else None
@@ -2615,6 +3241,16 @@ def swipe_feed():
     if not user_id:
         if not anon_id:
             return jsonify({"error": "anon_id required for anonymous browsing"}), 400
+        if elite_only:
+            return jsonify({
+                "leads":        [],
+                "auth_required": True,
+                "auth_mode":    "register",
+                "required_tier": "elite",
+                "anon_limit":   ANON_LEAD_LIMIT,
+                "swipes_count": swipes_count,
+                "remaining":    0,
+            }), 200
 
         remaining = max(ANON_LEAD_LIMIT - swipes_count, 0)
         if remaining == 0:
@@ -2629,18 +3265,27 @@ def swipe_feed():
         limit = min(limit, remaining)
     else:
         # Check free-tier quota for authenticated non-paid users
-        conn2 = get_db_connection()
-        c2 = conn2.cursor()
-        c2.execute("SELECT COALESCE(is_paid, 0) FROM users WHERE id = ?", (user_id,))
-        row2 = c2.fetchone()
-        conn2.close()
-        is_paid = bool(row2 and row2[0])
-        if not is_paid and swipes_count >= FREE_USER_LEAD_LIMIT:
+        is_paid, subscription_tier = _get_web_subscription(user_id)
+        if elite_only and subscription_tier != "elite":
+            return jsonify({
+                "leads":        [],
+                "auth_required": True,
+                "auth_mode":    "upgrade",
+                "required_tier": "elite",
+                "swipes_count": swipes_count,
+                "remaining":    0,
+            }), 200
+        if subscription_tier == "elite":
+            elite_only = True
+        tier_limit = _tier_lead_limit(subscription_tier, is_paid)
+        if tier_limit is not None and swipes_count >= tier_limit:
             return jsonify({
                 "leads":        [],
                 "auth_required": True,
                 "auth_mode":    "upgrade",
                 "free_limit":   FREE_USER_LEAD_LIMIT,
+                "tier_limit":   tier_limit,
+                "tier":         subscription_tier,
                 "swipes_count": swipes_count,
                 "remaining":    0,
             }), 200
@@ -2664,8 +3309,12 @@ def swipe_feed():
         params.append(min_score)
 
     if min_value > 0:
+        # Storm/disaster leads are verified impact-zone/property candidates. Many
+        # do not have a project value yet, so the default permit-value floor must
+        # not hide them or make the storm-damage pill look unavailable.
         conditions.append(
-            "CAST(COALESCE(json_extract(lead_data, '$.value_float'), 0) AS REAL) >= ?"
+            "(primary_service_type IN ('weather', 'flood', 'disaster') OR "
+            "CAST(COALESCE(json_extract(lead_data, '$.value_float'), 0) AS REAL) >= ?)"
         )
         params.append(min_value)
 
@@ -2675,52 +3324,52 @@ def swipe_feed():
         )
         params.append(max_value)
 
-    # Phone filter — always required: only leads with a phone number are shown.
-    # has_phone is a pre-computed indexed column (set at insert time in dedup.py
-    # and re-synced at startup in web_db.py) so this is a fast index scan.
-    conditions.append("has_phone = 1")
+    # Phone filter — direct-contact leads need phone, but storm/disaster leads
+    # are sold as verified impact-zone/property candidates before owner-contact
+    # enrichment. Do not fabricate phones just to make them visible.
+    conditions.append("(has_phone = 1 OR primary_service_type IN ('weather', 'flood', 'disaster'))")
 
     # Dead-lead filter — exclude GC self-pull leads (contractor pulling own permit).
     # is_dead_lead is a pre-computed indexed column set by gc_detector.py via base.py.
     conditions.append("COALESCE(is_dead_lead, 0) = 0")
+
+    # Public integrity filter — never show synthetic/demo/placeholders in the
+    # public feed. Python validation below is authoritative for stale rows.
+    conditions.append(build_public_real_lead_sql_filter())
+
+    # GC buyer-intent filter — the public swipe feed is now GC-only. Exclude
+    # already-awarded jobs and non-GC opportunity types before fetching a pool.
+    conditions.append(build_gc_interest_sql_filter())
 
     # City filter: without radius → simple LIKE; with radius → post-process
     if city_filter and not do_radius:
         conditions.append("LOWER(city) LIKE LOWER(?)")
         params.append(f"%{city_filter}%")
 
+    # Capture the verified, GC-eligible inventory before applying the selected
+    # service filter so the UI can disable zero-inventory filter pills instead of
+    # letting users get trapped in an empty state.
+    availability_conditions = list(conditions)
+    availability_params = list(params)
+
     # ── Service category filter ────────────────────────────────────────────────
-    # Subcontractor types are matched against specific JSON fields only:
-    #   $.description  — permit work description
-    #   $.permit_type  — permit type name
-    #   $._trade       — Qwen AI trade classification
-    # This avoids false positives from searching the entire JSON blob
-    # (e.g. "floor" matching floor drain plumbing leads, "tile" matching
-    # tile-roof leads when user filters for flooring, etc.)
+    # For subcontractor trades, match the CURRENT opportunity trade only.
+    # Do not match raw description/permit_type here: a taken REROOF permit still
+    # says "roof" in the description, but after self-pull detection it is no
+    # longer a roofing opportunity.
     if selected_cats:
-        cat_parts: list[str] = []
-        for cat in selected_cats:
-            if cat in _SERVICE_CAT_KEYWORDS:
-                kws = _SERVICE_CAT_KEYWORDS[cat]
-                field_parts = []
-                for field in ("$.description", "$.permit_type", "$._trade"):
-                    fld_sql = " OR ".join(
-                        [f"LOWER(COALESCE(json_extract(lead_data, '{field}'), '')) LIKE ?" for _ in kws]
-                    )
-                    field_parts.append(f"({fld_sql})")
-                    params.extend(f"%{k}%" for k in kws)
-                cat_parts.append("(" + " OR ".join(field_parts) + ")")
-            elif cat in _SERVICE_TYPE_CATS:
-                cat_parts.append("primary_service_type = ?")
-                params.append(cat)
-        if cat_parts:
-            conditions.append("(" + " OR ".join(cat_parts) + ")")
+        service_sql, service_params = build_service_category_filter(
+            selected_cats, _TRADE_SERVICE_TO_AI, _SERVICE_TYPE_CATS
+        )
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
 
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     # Fetch a large pool for diversity, then apply city round-robin
     # This prevents any single city from monopolizing the feed
-    fetch_limit = max(limit * 30, 300) if not do_radius else limit * 10
+    fetch_limit = max(limit * 50, 500) if not do_radius else limit * 20
 
     query = f"""
         SELECT address_key, address, city, agent_sources, lead_data,
@@ -2787,7 +3436,38 @@ def swipe_feed():
         except Exception as ie:
             logger.debug(f"Inspection batch lookup failed: {ie}")
 
-    conn.close()
+    available_service_counts: dict[str, int] = {}
+    try:
+        availability_where = (
+            "WHERE " + " AND ".join(availability_conditions)
+            if availability_conditions else ""
+        )
+        c.execute(f"""
+            SELECT primary_service_type, lead_data
+            FROM consolidated_leads
+            {availability_where}
+            LIMIT 1000
+        """, availability_params)
+        for ar in c.fetchall():
+            ard = dict(ar)
+            try:
+                ald = json.loads(ard.get("lead_data") or "{}")
+            except Exception:
+                ald = {}
+            ast = (ard.get("primary_service_type") or ald.get("primary_service_type") or "").strip().lower()
+            if not ast:
+                continue
+            if is_placeholder_or_demo_lead(ald):
+                continue
+            if ast not in {"weather", "flood", "disaster"} and not (ald.get("contact_phone") or ald.get("phone")):
+                continue
+            if not is_gc_interesting_lead(ald, ast):
+                continue
+            if not build_gc_insight(ald, ast).get("source_url"):
+                continue
+            available_service_counts[ast] = available_service_counts.get(ast, 0) + 1
+    except Exception as ae:
+        logger.debug(f"Availability lookup failed: {ae}")
 
     leads = []
     for row in rows:
@@ -2797,11 +3477,17 @@ def swipe_feed():
         except Exception:
             lead_data = {}
 
+        # ── Public data integrity guard ───────────────────────────────────────
+        # Skip synthetic/demo placeholders even if they are already in a local DB.
+        if is_placeholder_or_demo_lead(lead_data, row_dict.get("address_key")):
+            continue
+
         # ── Phone guard (belt-and-suspenders after DB filter) ─────────────────
-        # The WHERE clause already filters has_phone=1, but lead_data may have
-        # been updated after the column was computed. Skip stale rows.
+        # Direct-contact leads need a phone. Storm/disaster rows are allowed as
+        # impact-zone/property candidates without fabricated contact data.
         phone_check = (lead_data.get("contact_phone") or "").strip()
-        if not phone_check:
+        service_type_for_phone = (row_dict.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if service_type_for_phone not in {"weather", "flood", "disaster"} and not phone_check:
             continue
 
         # ── Radius filter (post-process) ───────────────────────────────────────
@@ -2840,6 +3526,13 @@ def swipe_feed():
             or (row_dict["agent_sources"].split(",")[0]
                 if row_dict.get("agent_sources") else None)
         )
+        if not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        gc_insight = build_gc_insight(lead_data, service_type)
+        # User-facing swipe leads must be independently verifiable. If we cannot
+        # build or store a working official source URL, do not show the row.
+        if not gc_insight.get("source_url"):
+            continue
         service_info = service_types_map.get(service_type, {})
 
         desc = (lead_data.get("description") or lead_data.get("desc") or "")[:300]
@@ -2851,6 +3544,8 @@ def swipe_feed():
         issued_date = (lead_data.get("issued_date") or lead_data.get("issue_date") or "").strip()[:10]
         lic_number  = (lead_data.get("lic_number") or lead_data.get("license") or "").strip()
         permit_id   = (lead_data.get("permit_id") or lead_data.get("id") or "").strip()
+        state       = (lead_data.get("state") or lead_data.get("property_state") or lead_data.get("site_state") or "").strip()
+        zip_code    = (lead_data.get("zip") or lead_data.get("zipcode") or lead_data.get("postal_code") or lead_data.get("site_zip") or "").strip()
 
         # Inspection data: prefer calendar table, fall back to lead_data predictor
         insp = insp_map.get(row_dict.get("address"), {})
@@ -2868,11 +3563,27 @@ def swipe_feed():
         time_window       = f"{tw_start} – {tw_end}" if tw_start and tw_end else tw_start or tw_end
         inspection_source = (lead_data.get("inspection_source") or "").strip()
         gc_probability    = insp.get("gc_presence_probability") or lead_data.get("_gc_presence_probability") or 0
+        premium_quality_score, premium_quality_checks, is_elite_quality = _premium_quality(
+            lead_data, gc_insight, service_type, scoring, inspection_date
+        )
+        if elite_only and not is_elite_quality:
+            continue
+        elite_claimed_by_me = False
+        elite_claim_expires_at = ""
+        if is_elite_quality:
+            claim = _active_elite_claim(c, row_dict["address_key"])
+            if claim:
+                if not user_id or int(claim["user_id"]) != int(user_id):
+                    continue
+                elite_claimed_by_me = True
+                elite_claim_expires_at = claim["expires_at"] or ""
 
         leads.append({
             "id":               row_dict["address_key"],
             "address":          row_dict["address"],
             "city":             row_dict["city"],
+            "state":            state,
+            "zip":              zip_code,
             "description":      desc,
             "value":            lead_data.get("value_float") or 0,
             "score":            scoring.get("score", 0),
@@ -2882,6 +3593,11 @@ def swipe_feed():
             "service_type":     service_type,
             "service_label":    service_info.get("label", ""),
             "service_emoji":    service_info.get("emoji", ""),
+            "gc_insight":       gc_insight,
+            "gc_confidence":    gc_insight.get("confidence", ""),
+            "gc_badges":        gc_insight.get("badges", []),
+            "source_url":       gc_insight.get("source_url", ""),
+            "source_label":     gc_insight.get("source_label", ""),
             "contractor":       contractor,
             "owner":            owner,
             "phone":            phone,
@@ -2896,6 +3612,11 @@ def swipe_feed():
             "time_window":      time_window,
             "inspection_source":inspection_source,
             "gc_probability":   round(float(gc_probability or 0), 2),
+            "premium_quality_score": premium_quality_score,
+            "premium_quality_checks": premium_quality_checks,
+            "is_elite_quality": is_elite_quality,
+            "elite_claimed_by_me": elite_claimed_by_me,
+            "elite_claim_expires_at": elite_claim_expires_at,
             "created_at":       row_dict.get("first_seen", ""),
             # AI classification fields (Qwen)
             "ai_trade":         lead_data.get("_trade", ""),
@@ -2914,6 +3635,8 @@ def swipe_feed():
         if len(leads) >= limit:
             break
 
+    conn.close()
+
     # Smart sort: leads with imminent inspections get priority over raw score
     from datetime import date as _date
     _today = _date.today()
@@ -2928,7 +3651,7 @@ def swipe_feed():
                 elif days <= 7:      urgency = 100
             except Exception:
                 pass
-        return -(int(ld.get("score", 0)) + urgency)
+        return -(int(ld.get("score", 0)) + int(ld.get("premium_quality_score", 0)) + urgency)
     leads.sort(key=_sort_key)
 
     response = {
@@ -2936,8 +3659,14 @@ def swipe_feed():
         "auth_required": False,
         "anon_limit":    ANON_LEAD_LIMIT,
         "free_limit":    FREE_USER_LEAD_LIMIT,
+        "pro_limit":     PRO_LEAD_LIMIT,
+        "elite_limit":   ELITE_LEAD_LIMIT,
         "swipes_count":  swipes_count,
         "is_paid":       locals().get('is_paid', False) if user_id else None,
+        "tier":          locals().get('subscription_tier', "free") if user_id else "anon",
+        "elite_only":    elite_only,
+        "available_service_counts": available_service_counts,
+        "available_service_types": sorted(available_service_counts.keys()),
     }
     if remaining is not None:
         response["remaining"] = remaining
@@ -2978,31 +3707,71 @@ def swipe_action():
                 "remaining": 0,
             }), 200
     else:
-        # Check free-tier quota for authenticated non-paid users
-        _conn = get_db_connection()
-        _c = _conn.cursor()
-        _c.execute("SELECT COALESCE(is_paid, 0) FROM users WHERE id = ?", (user_id,))
-        _row = _c.fetchone()
-        _conn.close()
-        _is_paid = bool(_row and _row[0])
+        # Check quota by subscription tier.
+        _is_paid, _tier = _get_web_subscription(user_id)
         _current = _count_swipes(user_id, None)
-        if not _is_paid and _current >= FREE_USER_LEAD_LIMIT:
+        _limit = _tier_lead_limit(_tier, _is_paid)
+        if _limit is not None and _current >= _limit:
             return jsonify({
                 "ok": False,
                 "auth_required": True,
                 "auth_mode":    "upgrade",
                 "free_limit":   FREE_USER_LEAD_LIMIT,
+                "tier_limit":   _limit,
+                "tier":         _tier,
                 "swipes_count": _current,
                 "remaining":    0,
             }), 200
 
     conn = get_db_connection()
     c = conn.cursor()
+    claim_result = None
     try:
+        if action == 'like' and user_id:
+            c.execute("""
+                SELECT address_key, lead_data, primary_service_type
+                FROM consolidated_leads
+                WHERE address_key = ?
+                LIMIT 1
+            """, (lead_id,))
+            lead_row = c.fetchone()
+            if lead_row:
+                is_elite_lead, _, _ = _is_elite_lead_record(dict(lead_row))
+                if is_elite_lead:
+                    _, user_tier = _get_web_subscription(user_id)
+                    if user_tier != "elite":
+                        conn.close()
+                        return jsonify({
+                            "ok": False,
+                            "auth_required": True,
+                            "auth_mode": "upgrade",
+                            "required_tier": "elite",
+                            "message": "Este lead Elite requiere plan Elite para reservarlo.",
+                        }), 200
+                    claim_result = _claim_elite_lead(conn, c, int(user_id), lead_id, "like")
+                    if claim_result.get("blocked"):
+                        conn.close()
+                        return jsonify({
+                            "ok": False,
+                            "exclusive_unavailable": True,
+                            "message": "Este lead Elite ya fue reservado por otro contratista.",
+                            "expires_at": claim_result.get("expires_at", ""),
+                        }), 409
+
         c.execute("""
             INSERT INTO swipe_actions (user_id, anon_id, lead_id, action)
             VALUES (?, ?, ?, ?)
         """, (user_id, anon_id, lead_id, action))
+        # If a caller likes a lead, put it in the lightweight Kanban pipeline.
+        # Anonymous likes can be reviewed in the browser; registered likes can
+        # continue into contact/estimate/invoice preparation.
+        if action == 'like':
+            pipeline_uid = str(user_id or anon_id)
+            if pipeline_uid:
+                c.execute("""
+                    INSERT OR IGNORE INTO lead_pipeline (user_id, lead_id, status, notes)
+                    VALUES (?, ?, 'Nuevo', '')
+                """, (pipeline_uid, lead_id))
         # If an authenticated user liked the lead, also log it as a contact
         if action == 'like' and user_id:
             try:
@@ -3040,6 +3809,7 @@ def swipe_action():
         "anon_limit":    ANON_LEAD_LIMIT,
         "swipes_count":  swipes_count,
         "remaining":     remaining,
+        "elite_claim":    claim_result,
     }), 200
 
 
@@ -3084,24 +3854,242 @@ def swipe_upgrade_info():
     user_id, _ = _resolve_swipe_identity()
     if not user_id:
         return jsonify({"anon": True, "limit": ANON_LEAD_LIMIT}), 200
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("SELECT COALESCE(is_paid, 0) FROM users WHERE id = ?", (user_id,))
-    row = c.fetchone()
-    conn.close()
-    is_paid = bool(row and row[0])
+    is_paid, tier = _get_web_subscription(user_id)
     swipes = _count_swipes(user_id, None)
+    tier_limit = _tier_lead_limit(str(tier).lower(), is_paid)
     return jsonify({
         "is_paid":     is_paid,
+        "tier":        tier,
         "swipes":      swipes,
         "free_limit":  FREE_USER_LEAD_LIMIT,
         "pro_limit":   PRO_LEAD_LIMIT,
-        "remaining":   None if is_paid else max(FREE_USER_LEAD_LIMIT - swipes, 0),
+        "elite_limit": ELITE_LEAD_LIMIT,
+        "remaining":   None if tier_limit is None else max(tier_limit - swipes, 0),
         "tiers": [
             {"id": "pro",     "price": 29,  "limit": PRO_LEAD_LIMIT, "label": "Pro"},
             {"id": "premium", "price": 99,  "limit": None,           "label": "Premium"},
+            {"id": "elite",   "price": 500, "limit": ELITE_LEAD_LIMIT, "label": "Elite", "curated": True},
         ],
     }), 200
+
+
+@app.route('/api/swipe/elite-inventory', methods=['GET'])
+def swipe_elite_inventory():
+    """Non-sensitive inventory counts for Elite plan sales/ops."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    return jsonify(_elite_inventory_payload(city, service)), 200
+
+
+@app.route('/api/admin/elite-quality-report', methods=['GET'])
+@require_admin
+def admin_elite_quality_report():
+    """Admin QA report for deciding where Elite is ready to sell."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    return jsonify(_elite_quality_report_payload(city, service)), 200
+
+
+PIPELINE_STATUSES = ["Nuevo", "Contactado", "Propuesta", "Negociación", "Ganado", "Perdido"]
+
+
+def _pipeline_uid(user_id, anon_id):
+    return str(user_id or anon_id) if (user_id or anon_id) else None
+
+
+def _pipeline_lead_payload(row):
+    rd = dict(row)
+    try:
+        ld = json.loads(rd.get('lead_data') or '{}')
+    except Exception:
+        ld = {}
+    scoring = ld.get('_scoring', {}) or {}
+    return {
+        "id": rd.get("lead_id"),
+        "address": rd.get("address") or rd.get("lead_id") or "",
+        "city": rd.get("city") or "",
+        "status": rd.get("status") or "Nuevo",
+        "notes": rd.get("notes") or "",
+        "created_at": rd.get("created_at") or "",
+        "updated_at": rd.get("updated_at") or "",
+        "service_type": rd.get("primary_service_type") or ld.get("primary_service_type") or "",
+        "trade": ld.get("_trade") or ld.get("trade") or "",
+        "contractor": ld.get("contractor") or ld.get("gc_name") or "",
+        "phone": (ld.get("contact_phone") or "").strip(),
+        "email": (ld.get("contact_email") or "").strip(),
+        "value": ld.get("value_float") or ld.get("permit_value") or 0,
+        "score": scoring.get("score") or ld.get("score") or 0,
+        "urgency": ld.get("_urgency") or "",
+        "pain_point": ld.get("_key_pain_point") or "",
+        "upsell": ld.get("_upsell_opportunity") or "",
+        "best_time": ld.get("_best_contact_time") or "",
+        "project_scope": ld.get("_project_scope") or "",
+        "decision_maker": ld.get("_decision_maker") or "",
+        "ai_summary": ld.get("_ai_summary") or "",
+    }
+
+
+@app.route('/api/pipeline', methods=['GET'])
+def api_pipeline():
+    """Return liked leads grouped by Kanban status for the current user/session."""
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = _pipeline_uid(user_id, anon_id)
+    columns = {s: [] for s in PIPELINE_STATUSES}
+    if not uid:
+        return jsonify(columns), 200
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            SELECT p.lead_id, p.status, p.notes, p.created_at, p.updated_at,
+                   l.address, l.city, l.primary_service_type, l.lead_data
+            FROM lead_pipeline p
+            LEFT JOIN consolidated_leads l ON l.address_key = p.lead_id
+            WHERE p.user_id = ?
+            ORDER BY p.updated_at DESC
+        """, (uid,))
+        for row in c.fetchall():
+            lead = _pipeline_lead_payload(row)
+            status = lead["status"] if lead["status"] in columns else "Nuevo"
+            columns[status].append(lead)
+    finally:
+        conn.close()
+    return jsonify(columns), 200
+
+
+@app.route('/api/pipeline/move', methods=['POST'])
+def api_pipeline_move():
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    new_status = (data.get("status") or "").strip()
+    if not lead_id or new_status not in PIPELINE_STATUSES:
+        return jsonify({"error": "lead_id and valid status required"}), 400
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = _pipeline_uid(user_id, anon_id)
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    conn = get_db_connection(); c = conn.cursor()
+    c.execute("UPDATE lead_pipeline SET status=?, updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=?", (new_status, lead_id, uid))
+    conn.commit(); ok = c.rowcount > 0; conn.close()
+    return jsonify({"ok": ok, "status": new_status}), 200
+
+
+@app.route('/api/pipeline/notes', methods=['POST'])
+def api_pipeline_notes():
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    notes = (data.get("notes") or "")[:4000]
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = _pipeline_uid(user_id, anon_id)
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    conn = get_db_connection(); c = conn.cursor()
+    c.execute("UPDATE lead_pipeline SET notes=?, updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=?", (notes, lead_id, uid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True}), 200
+
+
+@app.route('/api/pipeline/remove', methods=['POST'])
+def api_pipeline_remove():
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = _pipeline_uid(user_id, anon_id)
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    conn = get_db_connection(); c = conn.cursor()
+    c.execute("DELETE FROM lead_pipeline WHERE lead_id=? AND user_id=?", (lead_id, uid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True}), 200
+
+
+@app.route('/api/pipeline/contact', methods=['POST'])
+def api_pipeline_contact():
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    contact_type = data.get("contact_type", "call")
+    outcome = (data.get("outcome") or "")[:500]
+    notes = (data.get("notes") or "")[:2000]
+    if not lead_id or contact_type not in ("call", "sms", "email", "visit", "other"):
+        return jsonify({"error": "lead_id and valid contact_type required"}), 400
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = _pipeline_uid(user_id, anon_id)
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    conn = get_db_connection(); c = conn.cursor()
+    c.execute("INSERT INTO lead_contacts_log (lead_id, user_id, contact_type, outcome, notes) VALUES (?, ?, ?, ?, ?)", (lead_id, uid, contact_type, outcome, notes))
+    c.execute("UPDATE lead_pipeline SET status='Contactado', updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=? AND status='Nuevo'", (lead_id, uid))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True}), 200
+
+
+@app.route('/api/pipeline/estimate', methods=['POST'])
+def api_pipeline_estimate():
+    """Create a draft estimate and advance the lead to Propuesta."""
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    amount = float(data.get("amount") or 0)
+    description = (data.get("description") or "")[:4000]
+    user_id, _ = _resolve_swipe_identity()
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    if not user_id:
+        return jsonify({"error": "registration_required", "message": "Regístrate para preparar estimados/invoices"}), 401
+    conn = get_db_connection(); c = conn.cursor()
+    c.execute("INSERT INTO lead_estimates (lead_id, user_id, amount, description, status) VALUES (?, ?, ?, ?, 'draft')", (lead_id, user_id, amount, description))
+    estimate_id = c.lastrowid
+    c.execute("INSERT OR IGNORE INTO lead_pipeline (user_id, lead_id, status, notes) VALUES (?, ?, 'Nuevo', '')", (str(user_id), lead_id))
+    c.execute("UPDATE lead_pipeline SET status='Propuesta', updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=?", (lead_id, str(user_id)))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True, "estimate_id": estimate_id, "amount": amount, "status": "draft"}), 200
+
+
+@app.route('/api/pipeline/invoice', methods=['POST'])
+def api_pipeline_invoice():
+    """Prepare a draft invoice for a liked lead; this does not charge the customer."""
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    amount = float(data.get("amount") or 0)
+    description = (data.get("description") or "")[:4000]
+    user_id, _ = _resolve_swipe_identity()
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    if not user_id:
+        return jsonify({"error": "registration_required", "message": "Regístrate para preparar invoices"}), 401
+    conn = get_db_connection(); c = conn.cursor()
+    c.execute("INSERT INTO lead_invoices (lead_id, user_id, amount, description, status) VALUES (?, ?, ?, ?, 'draft')", (lead_id, user_id, amount, description))
+    invoice_id = c.lastrowid
+    c.execute("INSERT OR IGNORE INTO lead_pipeline (user_id, lead_id, status, notes) VALUES (?, ?, 'Nuevo', '')", (str(user_id), lead_id))
+    c.execute("UPDATE lead_pipeline SET status='Propuesta', updated_at=CURRENT_TIMESTAMP WHERE lead_id=? AND user_id=?", (lead_id, str(user_id)))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True, "invoice_id": invoice_id, "amount": amount, "status": "draft", "prepared": True}), 200
+
+
+@app.route('/api/pipeline/activity/<path:lead_id>', methods=['GET'])
+def api_pipeline_activity(lead_id):
+    user_id, anon_id = _resolve_swipe_identity()
+    uid = _pipeline_uid(user_id, anon_id)
+    if not uid:
+        return jsonify([]), 200
+    conn = get_db_connection(); c = conn.cursor(); timeline = []
+    c.execute("SELECT contact_type, outcome, notes, created_at FROM lead_contacts_log WHERE lead_id=? AND user_id=? ORDER BY created_at DESC", (lead_id, uid))
+    for row in c.fetchall():
+        timeline.append({"type": "contact", "contact_type": row[0], "outcome": row[1], "notes": row[2], "date": row[3]})
+    if user_id:
+        c.execute("SELECT amount, description, status, created_at FROM lead_estimates WHERE lead_id=? AND user_id=? ORDER BY created_at DESC", (lead_id, user_id))
+        for row in c.fetchall():
+            timeline.append({"type": "estimate", "amount": row[0], "description": row[1], "estimate_status": row[2], "date": row[3]})
+        c.execute("SELECT amount, description, status, prepared_at FROM lead_invoices WHERE lead_id=? AND user_id=? ORDER BY prepared_at DESC", (lead_id, user_id))
+        for row in c.fetchall():
+            timeline.append({"type": "invoice", "amount": row[0], "description": row[1], "invoice_status": row[2], "date": row[3]})
+    conn.close()
+    timeline.sort(key=lambda x: x.get("date") or "", reverse=True)
+    return jsonify(timeline), 200
 
 
 # ─────────────────────────────────────────────────────────
@@ -3395,6 +4383,66 @@ def swipe_feedback():
     return jsonify({"ok": True}), 200
 
 
+@app.route('/api/swipe/report-lead', methods=['POST'])
+@require_auth
+def swipe_report_lead_quality():
+    """Let users report bad leads so Elite inventory can be replaced/improved."""
+    user_id = g.user_id
+    data = request.get_json(silent=True) or {}
+    lead_id = (data.get("lead_id") or "").strip()
+    reason = (data.get("reason") or "other").strip().lower()
+    details = (data.get("details") or "").strip()[:1000]
+    allowed_reasons = {"no_contact", "wrong_number", "already_taken", "not_interested", "bad_source", "duplicate", "other"}
+    if not lead_id:
+        return jsonify({"error": "lead_id required"}), 400
+    if reason not in allowed_reasons:
+        reason = "other"
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            SELECT address_key, lead_data, primary_service_type
+            FROM consolidated_leads
+            WHERE address_key = ?
+            LIMIT 1
+        """, (lead_id,))
+        lead_row = c.fetchone()
+        if not lead_row:
+            return jsonify({"error": "lead not found"}), 404
+        is_elite_lead, _, _ = _is_elite_lead_record(dict(lead_row))
+        c.execute("""
+            INSERT INTO lead_quality_reports (lead_id, user_id, reason, details, is_elite, status)
+            VALUES (?, ?, ?, ?, ?, 'open')
+            ON CONFLICT(user_id, lead_id, reason) DO UPDATE SET
+                details = excluded.details,
+                is_elite = excluded.is_elite,
+                status = 'open',
+                updated_at = CURRENT_TIMESTAMP
+        """, (lead_id, int(user_id), reason, details, 1 if is_elite_lead else 0))
+        if is_elite_lead:
+            c.execute("""
+                UPDATE elite_lead_claims
+                   SET status = 'reported',
+                       expires_at = CURRENT_TIMESTAMP
+                 WHERE lead_id = ? AND user_id = ?
+            """, (lead_id, int(user_id)))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logger.warning(f"lead quality report failed: {e}")
+        return jsonify({"error": "failed to report lead"}), 500
+    finally:
+        conn.close()
+
+    return jsonify({
+        "ok": True,
+        "is_elite": is_elite_lead,
+        "replacement_review": bool(is_elite_lead),
+        "message": "Gracias. Revisaremos este lead para reemplazo/mejora de calidad.",
+    }), 200
+
+
 @app.route('/api/swipe/my-contacts', methods=['GET'])
 def swipe_my_contacts():
     """Return leads the authenticated user has swiped right on (liked)."""
@@ -3454,7 +4502,26 @@ def swipe_log_contact():
         return jsonify({"error": "lead_id required"}), 400
     conn = get_db_connection()
     c = conn.cursor()
+    claim_result = None
     try:
+        c.execute("""
+            SELECT address_key, lead_data, primary_service_type
+            FROM consolidated_leads
+            WHERE address_key = ?
+            LIMIT 1
+        """, (lead_id,))
+        lead_row = c.fetchone()
+        if lead_row:
+            is_elite_lead, _, _ = _is_elite_lead_record(dict(lead_row))
+            if is_elite_lead:
+                _, user_tier = _get_web_subscription(user_id)
+                if user_tier != "elite":
+                    conn.close()
+                    return jsonify({"ok": False, "auth_required": True, "auth_mode": "upgrade", "required_tier": "elite"}), 200
+                claim_result = _claim_elite_lead(conn, c, int(user_id), lead_id, contact_type)
+                if claim_result.get("blocked"):
+                    conn.close()
+                    return jsonify({"ok": False, "exclusive_unavailable": True, "expires_at": claim_result.get("expires_at", "")}), 409
         c.execute("""
             INSERT OR IGNORE INTO lead_contacts (user_id, lead_id, contact_type, notes)
             VALUES (?, ?, ?, '')
@@ -3463,7 +4530,7 @@ def swipe_log_contact():
     except Exception as e:
         logger.debug(f"swipe_log_contact failed: {e}")
     conn.close()
-    return jsonify({"ok": True}), 200
+    return jsonify({"ok": True, "elite_claim": claim_result}), 200
 
 
 @app.route('/api/swipe/pulse', methods=['GET'])
@@ -3496,6 +4563,49 @@ def swipe_pulse():
         "latest_update": latest,
         "server_time": datetime.utcnow().isoformat(),
     }), 200
+
+
+@app.route('/api/admin/lead-quality-reports', methods=['GET'])
+@require_admin
+def admin_lead_quality_reports():
+    """List user-reported lead quality issues for Elite QA operations."""
+    status = (request.args.get("status") or "open").strip().lower()
+    if status not in {"open", "reviewing", "resolved", "dismissed", "all"}:
+        status = "open"
+    params: list = []
+    where = ""
+    if status != "all":
+        where = "WHERE r.status = ?"
+        params.append(status)
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute(f"SELECT COUNT(*) FROM lead_quality_reports r {where}", params)
+        total = c.fetchone()[0]
+        c.execute(f"""
+            SELECT r.id, r.lead_id, r.user_id, u.email, u.full_name,
+                   r.reason, r.details, r.is_elite, r.status, r.resolution,
+                   r.created_at, r.updated_at,
+                   l.address, l.city, l.primary_service_type
+            FROM lead_quality_reports r
+            LEFT JOIN users u ON u.id = r.user_id
+            LEFT JOIN consolidated_leads l ON l.address_key = r.lead_id
+            {where}
+            ORDER BY r.created_at DESC
+            LIMIT 100
+        """, params)
+        reports = [dict(row) for row in c.fetchall()]
+        c.execute("""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open_count,
+                SUM(CASE WHEN is_elite = 1 THEN 1 ELSE 0 END) AS elite_count
+            FROM lead_quality_reports
+        """)
+        summary = dict(c.fetchone())
+    finally:
+        conn.close()
+    return jsonify({"reports": reports, "total": total, "summary": summary, "status": status}), 200
 
 
 @app.route('/api/admin/feedback', methods=['GET'])

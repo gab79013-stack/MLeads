@@ -20,19 +20,25 @@ El producto necesita monetización. El freemium atrae usuarios y el tier de pago
 - Enviar estimados
 - Login: Google OAuth, Facebook OAuth, email/password
 
-### Pro ($99/mes) — NO implementado aún
-- Likes ilimitados
-- 3 ciudades
-- AI recommendations
-- Export CSV
-- API access
+### Pro ($29/mes)
+- 200 leads/mes
+- Todos los filtros
+- Contacto completo
+- Pipeline
 
-### Elite ($249/mes) — NO implementado aún
-- Todo en Pro
-- Todas las ciudades
-- Exclusividad por zona
-- Multi-user
-- API con rate limits generosos
+### Premium ($99/mes)
+- Leads ilimitados
+- Señales HOT priorizadas
+- Inspecciones en tiempo real
+- Soporte prioritario
+
+### Elite ($500/mes)
+- Leads curados de alta evidencia
+- `premium_quality_score >= 70`
+- Fuente oficial auditable
+- Contacto disponible cuando aplica
+- Score HOT o ventana clara de acción
+- Pensado para GCs donde un cierre de $10k+ paga el servicio
 
 ## Storm leads (para GCs) — NO implementado aún
 | Tier | Precio | Incluye |
@@ -57,7 +63,7 @@ El producto necesita monetización. El freemium atrae usuarios y el tier de pago
 | POST | `/api/swipe/claim-anon` | Merge anon swipes to registered user |
 
 ## Pendiente
-- [ ] Stripe/PayPal para cobrar
-- [ ] Gating real por tier (ahora todos son basicamente free)
+- [x] Stripe Checkout para Pro/Premium/Elite
+- [ ] Gating completo por tier en todas las superficies
 - [ ] JWT refresh token rotation
 - [ ] Email verification

@@ -104,6 +104,10 @@ def init_web_db():
     for col, ddl in [
         ("is_paid",    "ALTER TABLE users ADD COLUMN is_paid BOOLEAN DEFAULT 0"),
         ("paid_since", "ALTER TABLE users ADD COLUMN paid_since TIMESTAMP"),
+        ("paid_until", "ALTER TABLE users ADD COLUMN paid_until TIMESTAMP"),
+        ("stripe_customer_id", "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT"),
+        ("stripe_subscription_id", "ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT"),
+        ("subscription_tier", "ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free'"),
     ]:
         try:
             c.execute(f"SELECT {col} FROM users LIMIT 1")
@@ -288,6 +292,111 @@ def init_web_db():
     """)
 
     # ─────────────────────────────────────────────────────
+    # Swipe Pipeline & Invoice Prep
+    # ─────────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_pipeline (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            lead_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Nuevo',
+            notes TEXT DEFAULT '',
+            close_reason TEXT,
+            closed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, lead_id)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_lead_pipeline_user_status ON lead_pipeline(user_id, status, updated_at)")
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_contacts_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            contact_type TEXT NOT NULL,
+            outcome TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS elite_lead_claims (
+            lead_id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            claim_type TEXT NOT NULL DEFAULT 'like',
+            status TEXT NOT NULL DEFAULT 'active',
+            claimed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_elite_lead_claims_user ON elite_lead_claims(user_id, status, expires_at)")
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_quality_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            details TEXT DEFAULT '',
+            is_elite INTEGER DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'open',
+            resolution TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            UNIQUE(user_id, lead_id, reason)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_lead_quality_reports_status ON lead_quality_reports(status, created_at)")
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_followups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            due_at TIMESTAMP NOT NULL,
+            followup_type TEXT DEFAULT 'call',
+            notes TEXT DEFAULT '',
+            completed INTEGER DEFAULT 0,
+            completed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_estimates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
+            description TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'draft',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lead_invoices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
+            description TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'draft',
+            prepared_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    # ─────────────────────────────────────────────────────
     # Lead Notes (internal notes on leads)
     # ─────────────────────────────────────────────────────
     c.execute("""
@@ -384,6 +493,37 @@ def init_web_db():
         c.execute("SELECT is_dead_lead FROM consolidated_leads LIMIT 1")
     except sqlite3.OperationalError:
         c.execute("ALTER TABLE consolidated_leads ADD COLUMN is_dead_lead INTEGER DEFAULT 0")
+
+    # Direct homeowner requests captured before they have searched for a GC.
+    # These rows are also published into consolidated_leads as remodel/GC leads.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS homeowner_project_intakes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id TEXT NOT NULL,
+            full_name TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            email TEXT,
+            address TEXT NOT NULL,
+            city TEXT NOT NULL,
+            state TEXT,
+            zip_code TEXT,
+            project_type TEXT NOT NULL,
+            timeline TEXT NOT NULL,
+            budget_range TEXT,
+            description TEXT NOT NULL,
+            best_time TEXT,
+            status TEXT DEFAULT 'new',
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_homeowner_project_intakes_lead
+        ON homeowner_project_intakes(lead_id)
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_homeowner_project_intakes_city_status
+        ON homeowner_project_intakes(city, status)
+    """)
 
     # Always re-sync has_contact and has_phone from lead_data JSON
     # has_contact = phone OR email present  (backwards compat)
