@@ -1329,6 +1329,21 @@
                         </div>
                     </div>
 
+                    <div class="elite-quality-card" id="eliteClaimsCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Elite reservations</div>
+                            <div class="stat-value" id="eliteClaimsTotal">0</div>
+                            <span class="elite-quality-status warn" id="eliteClaimsStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="eliteClaimsContractors">0</strong><span>Contractors</span></div>
+                            <div><strong id="eliteClaimsReported">0</strong><span>Reported</span></div>
+                            <div><strong id="eliteClaimsExpired">0</strong><span>Expired</span></div>
+                            <div class="elite-quality-alert" id="eliteClaimsAlerts">Checking active Elite reservations...</div>
+                            <div class="market-readiness-list" id="eliteClaimsList"></div>
+                        </div>
+                    </div>
+
                     <div class="elite-quality-card" id="marketReadinessCard">
                         <div class="elite-quality-kpi">
                             <div class="stat-label">Market readiness</div>
@@ -2025,6 +2040,7 @@
         async function loadDashboard() {
             try {
                 loadEliteQualityReport();
+                loadEliteClaims();
                 loadMarketReadiness();
                 loadElitePilotDemand();
                 const response = await fetch('/api/leads', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
@@ -2085,6 +2101,43 @@
                 statusEl.textContent = 'Unavailable';
                 statusEl.classList.add('danger');
                 document.getElementById('eliteQaAlerts').textContent = 'Elite QA report could not be loaded.';
+            }
+        }
+
+        async function loadEliteClaims() {
+            const statusEl = document.getElementById('eliteClaimsStatus');
+            const listEl = document.getElementById('eliteClaimsList');
+            if (!statusEl || !listEl) return;
+            try {
+                const response = await fetch('/api/admin/elite-claims?status=active', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('elite claims unavailable');
+                const data = await response.json();
+                const summary = data.summary || {};
+                const claims = data.claims || [];
+                document.getElementById('eliteClaimsTotal').textContent = summary.active_claims || 0;
+                document.getElementById('eliteClaimsContractors').textContent = summary.active_contractors || 0;
+                document.getElementById('eliteClaimsReported').textContent = summary.reported_claims || 0;
+                document.getElementById('eliteClaimsExpired').textContent = summary.expired_claims || 0;
+                statusEl.textContent = (summary.active_claims || 0) > 0 ? 'Reserved' : 'No active';
+                statusEl.classList.toggle('warn', (summary.active_claims || 0) > 0);
+                statusEl.classList.toggle('danger', false);
+                document.getElementById('eliteClaimsAlerts').textContent = (summary.active_claims || 0) > 0
+                    ? 'Active Elite leads are reserved exclusively by contractor until their claim window expires.'
+                    : 'No active Elite reservations right now.';
+                listEl.innerHTML = claims.slice(0, 6).map(c => `
+                    <div class="market-readiness-row">
+                        <strong>${escHtml(c.email || c.full_name || 'Unknown GC')}</strong>
+                        <span>${escHtml(c.city || 'Unknown')} · ${escHtml(c.primary_service_type || 'lead')} · ${escHtml(c.status || '')}</span>
+                        <span class="market-readiness-price">${escHtml(String(c.expires_at || '').slice(0, 10))}</span>
+                    </div>
+                `).join('') || '<div class="elite-quality-alert">No active reservations yet.</div>';
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('eliteClaimsAlerts').textContent = 'Elite reservations could not be loaded.';
+                listEl.innerHTML = '';
             }
         }
 

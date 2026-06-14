@@ -2540,6 +2540,59 @@ def admin_update_elite_pilot_request(request_id):
         conn.close()
 
 
+@app.route('/api/admin/elite-claims', methods=['GET'])
+@require_admin
+def admin_elite_claims():
+    """Audit Elite lead exclusivity reservations by contractor and lead."""
+    status = (request.args.get("status") or "active").strip().lower()
+    if status not in {"active", "reported", "expired", "all"}:
+        return jsonify({"error": "Invalid status"}), 400
+
+    params: list = []
+    if status == "active":
+        where = "WHERE c.status = 'active' AND datetime(c.expires_at) > datetime('now')"
+    elif status == "expired":
+        where = "WHERE c.status = 'active' AND datetime(c.expires_at) <= datetime('now')"
+    elif status == "reported":
+        where = "WHERE c.status = 'reported'"
+    else:
+        where = ""
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute(f"""
+            SELECT c.lead_id, c.user_id, u.email, u.full_name,
+                   c.claim_type, c.status, c.claimed_at, c.expires_at,
+                   l.address, l.city, l.primary_service_type
+              FROM elite_lead_claims c
+              LEFT JOIN users u ON u.id = c.user_id
+              LEFT JOIN consolidated_leads l ON l.address_key = c.lead_id
+              {where}
+             ORDER BY datetime(c.expires_at) ASC, datetime(c.claimed_at) DESC
+             LIMIT 200
+        """, params)
+        claims = [dict(row) for row in c.fetchall()]
+
+        c.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN status = 'active' AND datetime(expires_at) > datetime('now') THEN 1 ELSE 0 END), 0) AS active_claims,
+                COALESCE(SUM(CASE WHEN status = 'reported' THEN 1 ELSE 0 END), 0) AS reported_claims,
+                COALESCE(SUM(CASE WHEN status = 'active' AND datetime(expires_at) <= datetime('now') THEN 1 ELSE 0 END), 0) AS expired_claims,
+                COUNT(DISTINCT CASE WHEN status = 'active' AND datetime(expires_at) > datetime('now') THEN user_id END) AS active_contractors
+            FROM elite_lead_claims
+        """)
+        summary = dict(c.fetchone())
+    finally:
+        conn.close()
+
+    return jsonify({
+        "claims": claims,
+        "summary": summary,
+        "status": status,
+    }), 200
+
+
 # ─────────────────────────────────────────────────────────
 # Stripe — checkout + webhook
 # ─────────────────────────────────────────────────────────

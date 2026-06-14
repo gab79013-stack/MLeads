@@ -238,6 +238,11 @@ def test_admin_dashboard_surfaces_elite_quality_report():
     assert "Needs inventory" in html
     assert 'id="eliteQaPhone"' in html
     assert 'id="eliteQaValue"' in html
+    assert 'id="eliteClaimsCard"' in html
+    assert 'id="eliteClaimsTotal"' in html
+    assert "loadEliteClaims()" in html
+    assert "/api/admin/elite-claims?status=active" in html
+    assert "Active Elite leads are reserved exclusively" in html
     assert 'id="elitePilotDemandCard"' in html
     assert 'id="elitePilotTotal"' in html
     assert 'id="elitePilotMarkets"' in html
@@ -258,6 +263,9 @@ def test_elite_leads_are_exclusive_claims_for_500_plan():
 
     assert "CREATE TABLE IF NOT EXISTS elite_lead_claims" in db_src
     assert "SWIPE_ELITE_CLAIM_DAYS" in app_src
+    assert "@app.route('/api/admin/elite-claims'" in app_src
+    assert "def admin_elite_claims" in app_src
+    assert "active_contractors" in app_src
     assert "def _claim_elite_lead" in app_src
     assert "def _elite_certificate" in app_src
     assert "elite_certificate" in app_src
