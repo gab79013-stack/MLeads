@@ -938,6 +938,24 @@ def swipe_market_readiness():
     }), 200
 
 
+@bp.route('/swipe/elite-sales-proof', methods=['GET'])
+def swipe_elite_sales_proof():
+    """Return public-safe proof points for selling the Elite tier."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    payload_fn = _get_app_const("_elite_sales_proof_payload")
+    if callable(payload_fn):
+        return jsonify(payload_fn(city, service)), 200
+    return jsonify({
+        "status": "needs_inventory",
+        "recommended_price": 0,
+        "headline": "Elite sales proof unavailable.",
+        "proof_points": [],
+        "market": None,
+        "readiness": {},
+    }), 200
+
+
 @bp.route('/swipe/filter-options', methods=['GET'])
 def swipe_filter_options():
     """Return live inventory counts for the Swipe filter drawer."""

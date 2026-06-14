@@ -185,6 +185,24 @@ def test_swipe_exposes_market_readiness_for_elite_sales():
     assert "market-readiness API" in readme
 
 
+def test_swipe_exposes_elite_sales_proof_for_500_pricing():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    script_src = (TEMPLATE.parents[1].parents[0] / "scripts" / "audit_elite_real_data.py").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+
+    assert "@app.route('/api/swipe/elite-sales-proof'" in app_src
+    assert "@bp.route('/swipe/elite-sales-proof'" in route_src
+    assert "def _elite_sales_proof_payload" in app_src
+    assert "proof_points" in app_src
+    assert "estimated_pipeline_value" in app_src
+    assert "break_even_months_per_close" in app_src
+    assert "conservative_close_rate" in app_src
+    assert "/api/swipe/elite-sales-proof" in script_src
+    assert "sales_proof" in script_src
+    assert "sales-proof API" in readme
+
+
 def test_admin_elite_quality_report_supports_sellability_audit():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
 

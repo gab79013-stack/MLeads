@@ -47,6 +47,17 @@ def readiness_url(base_url: str, city: str, service: str) -> str:
     return f"{base_url.rstrip('/')}/api/swipe/market-readiness{suffix}"
 
 
+def sales_proof_url(base_url: str, city: str, service: str) -> str:
+    params = {}
+    if city:
+        params["city"] = city
+    if service:
+        params["service"] = service
+    query = urllib.parse.urlencode(params)
+    suffix = f"?{query}" if query else ""
+    return f"{base_url.rstrip('/')}/api/swipe/elite-sales-proof{suffix}"
+
+
 def elite_score(lead: dict) -> int:
     points = 0
     insight = lead.get("gc_insight") or {}
@@ -70,6 +81,10 @@ def audit_market(base_url: str, city: str, service: str, limit: int) -> dict:
         readiness = fetch_json(readiness_url(base_url, city, service))
         markets = readiness.get("markets") or []
         if markets:
+            try:
+                proof = fetch_json(sales_proof_url(base_url, city, service))
+            except Exception:
+                proof = {}
             return {
                 "city": city or "All",
                 "service": service or "all",
@@ -77,6 +92,12 @@ def audit_market(base_url: str, city: str, service: str, limit: int) -> dict:
                 "summary": readiness.get("summary", {}),
                 "thresholds": readiness.get("thresholds", {}),
                 "markets": markets[:5],
+                "sales_proof": {
+                    "headline": proof.get("headline"),
+                    "recommended_price": proof.get("recommended_price"),
+                    "proof_points": proof.get("proof_points", []),
+                    "roi": proof.get("roi", {}),
+                } if proof else {},
                 "sellability": markets[0].get("status", "needs_inventory"),
             }
     except Exception:

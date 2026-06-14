@@ -3259,6 +3259,85 @@ def _elite_market_readiness_payload(city_filter: str = "", service_filter: str =
     }
 
 
+def _elite_sales_proof_payload(city_filter: str = "", service_filter: str = "") -> dict:
+    """Public-safe proof points for explaining Elite pricing to contractors."""
+    readiness = _elite_market_readiness_payload(city_filter, service_filter)
+    markets = readiness.get("markets") or []
+    target = None
+    for market in markets:
+        if market.get("status") == "ready_for_elite":
+            target = market
+            break
+    if target is None and markets:
+        target = markets[0]
+
+    if not target:
+        return {
+            "status": "needs_inventory",
+            "recommended_price": 0,
+            "headline": "Elite no está listo para vender en este mercado todavía.",
+            "proof_points": ["Aumentar inventario y cobertura de teléfono antes de vender."],
+            "market": None,
+            "readiness": readiness,
+        }
+
+    price = int(target.get("recommended_price") or 0)
+    elite_count = int(target.get("elite_leads") or 0)
+    coverage = target.get("coverage") or {}
+    avg_quality = float(target.get("average_quality_score") or 0)
+    avg_project_value = 0
+    try:
+        inventory = _elite_inventory_payload(target.get("city") or city_filter, service_filter)
+        sample_values = [
+            float(sample.get("value") or 0)
+            for sample in inventory.get("samples", [])
+            if float(sample.get("value") or 0) > 0
+        ]
+        avg_project_value = round(sum(sample_values) / len(sample_values)) if sample_values else 0
+    except Exception:
+        inventory = {}
+
+    conservative_close_rate = 0.05
+    expected_jobs = round(elite_count * conservative_close_rate, 1)
+    estimated_pipeline_value = round(avg_project_value * expected_jobs) if avg_project_value else 0
+    break_even_months = round(avg_project_value / price, 1) if price and avg_project_value else 0
+    headline = (
+        f"{target.get('city')} está listo para Elite a ${price}/mes."
+        if target.get("status") == "ready_for_elite"
+        else f"{target.get('city')} conviene venderlo como piloto antes de Elite."
+    )
+    proof_points = [
+        f"{elite_count} leads Elite disponibles con calidad promedio {avg_quality}/100.",
+        f"{coverage.get('phone_pct', 0)}% con teléfono y {coverage.get('project_value_pct', 0)}% con valor de proyecto.",
+        f"Señales frescas: {coverage.get('fresh_signal_pct', 0)}% del inventario Elite.",
+    ]
+    if avg_project_value:
+        proof_points.append(
+            f"Valor promedio de muestra: ${avg_project_value:,.0f}; un cierre puede cubrir {break_even_months} meses de Elite."
+        )
+    if estimated_pipeline_value:
+        proof_points.append(
+            f"Con cierre conservador de 5%, pipeline estimado: ${estimated_pipeline_value:,.0f}."
+        )
+
+    return {
+        "status": target.get("status"),
+        "recommended_price": price,
+        "headline": headline,
+        "proof_points": proof_points,
+        "roi": {
+            "average_sample_project_value": avg_project_value,
+            "conservative_close_rate": conservative_close_rate,
+            "estimated_jobs": expected_jobs,
+            "estimated_pipeline_value": estimated_pipeline_value,
+            "break_even_months_per_close": break_even_months,
+        },
+        "market": target,
+        "readiness": readiness,
+        "inventory_sample_count": len((inventory or {}).get("samples", [])),
+    }
+
+
 # ── City coordinates for radius filtering ─────────────────────────────────────
 import math as _math
 
@@ -4331,6 +4410,14 @@ def swipe_market_readiness():
     city = (request.args.get("city") or "").strip()
     service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
     return jsonify(_elite_market_readiness_payload(city, service)), 200
+
+
+@app.route('/api/swipe/elite-sales-proof', methods=['GET'])
+def swipe_elite_sales_proof():
+    """Public-safe proof points for selling the Elite tier."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    return jsonify(_elite_sales_proof_payload(city, service)), 200
 
 
 @app.route('/api/admin/elite-quality-report', methods=['GET'])
