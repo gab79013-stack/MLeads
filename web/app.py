@@ -3125,6 +3125,140 @@ def _elite_quality_report_payload(city_filter: str = "", service_filter: str = "
     return report
 
 
+def _elite_market_readiness_payload(city_filter: str = "", service_filter: str = "") -> dict:
+    """Public-safe market readiness summary for selling Elite subscriptions."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    conditions = [
+        build_public_real_lead_sql_filter(),
+        build_gc_interest_sql_filter(),
+    ]
+    params: list = []
+    if city_filter:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+    if service_filter:
+        cats = [x.strip().lower() for x in service_filter.split(",") if x.strip()]
+        service_sql, service_params = build_service_category_filter(cats, _TRADE_SERVICE_TO_AI, _SERVICE_TYPE_CATS)
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
+
+    where_sql = "WHERE " + " AND ".join(conditions)
+    c.execute(f"""
+        SELECT address_key, address, city, lead_data, primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY first_seen DESC
+        LIMIT 5000
+    """, params)
+    rows = c.fetchall()
+    conn.close()
+
+    markets: dict[str, dict] = {}
+    total_candidates = 0
+    total_elite = 0
+    for row in rows:
+        rd = dict(row)
+        try:
+            lead_data = json.loads(rd.get("lead_data") or "{}")
+        except Exception:
+            continue
+        service_type = (rd.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if not service_type or not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        gc_insight = build_gc_insight(lead_data, service_type)
+        if not gc_insight.get("source_url"):
+            continue
+        total_candidates += 1
+        city = rd.get("city") or "Unknown"
+        market = markets.setdefault(city, {
+            "city": city,
+            "candidate_leads": 0,
+            "elite_leads": 0,
+            "quality_sum": 0,
+            "phone_count": 0,
+            "value_count": 0,
+            "hot_count": 0,
+            "services": {},
+        })
+        market["candidate_leads"] += 1
+        scoring = lead_data.get("_scoring", {}) or {}
+        q_score, _, is_elite = _premium_quality(
+            lead_data,
+            gc_insight,
+            service_type,
+            scoring,
+            str(lead_data.get("inspection_date") or lead_data.get("next_inspection_date") or "")[:10],
+            rd.get("first_seen", ""),
+        )
+        if not is_elite:
+            continue
+        total_elite += 1
+        market["elite_leads"] += 1
+        market["quality_sum"] += q_score
+        market["services"][service_type] = market["services"].get(service_type, 0) + 1
+        if (lead_data.get("contact_phone") or "").strip():
+            market["phone_count"] += 1
+        if lead_data.get("value_float"):
+            market["value_count"] += 1
+        if int(scoring.get("score") or 0) >= 90:
+            market["hot_count"] += 1
+
+    readiness = []
+    for city, market in markets.items():
+        elite = int(market["elite_leads"])
+        avg_quality = round(market["quality_sum"] / elite, 1) if elite else 0
+        phone_pct = round(market["phone_count"] * 100 / elite, 1) if elite else 0
+        value_pct = round(market["value_count"] * 100 / elite, 1) if elite else 0
+        hot_pct = round(market["hot_count"] * 100 / elite, 1) if elite else 0
+        if elite >= 50 and avg_quality >= 80 and phone_pct >= 90:
+            status = "ready_for_elite"
+            recommended_price = 500
+        elif elite >= 15 and phone_pct >= 80:
+            status = "pilot_market"
+            recommended_price = 250
+        else:
+            status = "needs_inventory"
+            recommended_price = 0
+        readiness.append({
+            "city": city,
+            "status": status,
+            "recommended_price": recommended_price,
+            "candidate_leads": int(market["candidate_leads"]),
+            "elite_leads": elite,
+            "average_quality_score": avg_quality,
+            "coverage": {
+                "phone_pct": phone_pct,
+                "project_value_pct": value_pct,
+                "hot_score_pct": hot_pct,
+                "fresh_signal_pct": 100 if elite else 0,
+            },
+            "top_services": [
+                {"service_type": service, "elite_leads": count}
+                for service, count in sorted(market["services"].items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+            ],
+        })
+
+    readiness.sort(key=lambda m: (m["status"] != "ready_for_elite", m["status"] != "pilot_market", -m["elite_leads"], m["city"]))
+    summary = {
+        "ready_markets": sum(1 for m in readiness if m["status"] == "ready_for_elite"),
+        "pilot_markets": sum(1 for m in readiness if m["status"] == "pilot_market"),
+        "needs_inventory_markets": sum(1 for m in readiness if m["status"] == "needs_inventory"),
+        "total_candidate_leads": total_candidates,
+        "total_elite_leads": total_elite,
+    }
+    return {
+        "summary": summary,
+        "markets": readiness[:50],
+        "filters": {"city": city_filter, "service": service_filter},
+        "thresholds": {
+            "ready_for_elite": {"elite_leads": 50, "average_quality_score": 80, "phone_pct": 90, "price": 500},
+            "pilot_market": {"elite_leads": 15, "phone_pct": 80, "price": 250},
+        },
+    }
+
+
 # ── City coordinates for radius filtering ─────────────────────────────────────
 import math as _math
 
@@ -4189,6 +4323,14 @@ def swipe_elite_inventory():
     city = (request.args.get("city") or "").strip()
     service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
     return jsonify(_elite_inventory_payload(city, service)), 200
+
+
+@app.route('/api/swipe/market-readiness', methods=['GET'])
+def swipe_market_readiness():
+    """Public-safe market readiness summary for selling Elite."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    return jsonify(_elite_market_readiness_payload(city, service)), 200
 
 
 @app.route('/api/admin/elite-quality-report', methods=['GET'])

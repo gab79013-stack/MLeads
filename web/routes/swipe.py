@@ -916,6 +916,28 @@ def swipe_elite_inventory():
     return jsonify(_elite_inventory_payload(city, service)), 200
 
 
+@bp.route('/swipe/market-readiness', methods=['GET'])
+def swipe_market_readiness():
+    """Return public-safe readiness by market for selling Elite."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    payload_fn = _get_app_const("_elite_market_readiness_payload")
+    if callable(payload_fn):
+        return jsonify(payload_fn(city, service)), 200
+    return jsonify({
+        "summary": {
+            "ready_markets": 0,
+            "pilot_markets": 0,
+            "needs_inventory_markets": 0,
+            "total_candidate_leads": 0,
+            "total_elite_leads": 0,
+        },
+        "markets": [],
+        "filters": {"city": city, "service": service},
+        "thresholds": {},
+    }), 200
+
+
 @bp.route('/swipe/filter-options', methods=['GET'])
 def swipe_filter_options():
     """Return live inventory counts for the Swipe filter drawer."""

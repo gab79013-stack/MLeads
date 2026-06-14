@@ -80,6 +80,7 @@ MLeads/
 - Like = auto-add to pipeline
 - GC-focused routing prioritizes storm/weather, open owner/GC opportunities, and independently verifiable official sources
 - Elite-only filter for curated, high-confidence leads
+- Public market-readiness API reports which cities are ready for Elite, pilot-only, or need more inventory
 
 ### Premium Monetization
 - Free preview and authenticated free quota

@@ -36,6 +36,17 @@ def feed_url(base_url: str, city: str, service: str, limit: int) -> str:
     return f"{base_url.rstrip('/')}/api/swipe/feed?{urllib.parse.urlencode(params)}"
 
 
+def readiness_url(base_url: str, city: str, service: str) -> str:
+    params = {}
+    if city:
+        params["city"] = city
+    if service:
+        params["service"] = service
+    query = urllib.parse.urlencode(params)
+    suffix = f"?{query}" if query else ""
+    return f"{base_url.rstrip('/')}/api/swipe/market-readiness{suffix}"
+
+
 def elite_score(lead: dict) -> int:
     points = 0
     insight = lead.get("gc_insight") or {}
@@ -55,6 +66,22 @@ def elite_score(lead: dict) -> int:
 
 
 def audit_market(base_url: str, city: str, service: str, limit: int) -> dict:
+    try:
+        readiness = fetch_json(readiness_url(base_url, city, service))
+        markets = readiness.get("markets") or []
+        if markets:
+            return {
+                "city": city or "All",
+                "service": service or "all",
+                "source": "market-readiness",
+                "summary": readiness.get("summary", {}),
+                "thresholds": readiness.get("thresholds", {}),
+                "markets": markets[:5],
+                "sellability": markets[0].get("status", "needs_inventory"),
+            }
+    except Exception:
+        pass
+
     data = fetch_json(feed_url(base_url, city, service, limit))
     leads = data.get("leads") or []
     q_scores = [elite_score(lead) for lead in leads]

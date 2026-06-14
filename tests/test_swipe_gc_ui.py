@@ -161,6 +161,24 @@ def test_swipe_exposes_elite_inventory_for_sales_proof():
     assert "samples" in app_src
 
 
+def test_swipe_exposes_market_readiness_for_elite_sales():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    script_src = (TEMPLATE.parents[1].parents[0] / "scripts" / "audit_elite_real_data.py").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+
+    assert "@app.route('/api/swipe/market-readiness'" in app_src
+    assert "@bp.route('/swipe/market-readiness'" in route_src
+    assert "def _elite_market_readiness_payload" in app_src
+    assert "recommended_price" in app_src
+    assert '"ready_for_elite": {"elite_leads": 50' in app_src
+    assert '"pilot_market": {"elite_leads": 15' in app_src
+    assert "fresh_signal_pct" in app_src
+    assert "/api/swipe/market-readiness" in script_src
+    assert "source\": \"market-readiness\"" in script_src
+    assert "market-readiness API" in readme
+
+
 def test_admin_elite_quality_report_supports_sellability_audit():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
 
