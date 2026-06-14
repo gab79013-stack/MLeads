@@ -97,6 +97,7 @@ MLeads/
 - Admins can mark Elite pilot requests as contacted or closed after sales follow-up
 - Contractors can report bad Elite leads from Swipe; eligible reports auto-grant replacement credits that extend the effective Elite quota
 - Replacement credits reduce Elite billable swipe counts in both feed access and swipe actions
+- Replacement credits are marked redeemed when an Elite user consumes quota beyond the base Elite limit
 - Admin quality reports summarize open replacement-credit liability for Elite guarantee operations
 
 ### Homeowner Intake (`/homeowner-intake`)

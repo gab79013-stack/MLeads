@@ -2957,6 +2957,22 @@ def _grant_elite_replacement_credit(c, user_id: int, lead_id: str, reason: str, 
     return c.rowcount > 0
 
 
+def _redeem_elite_replacement_credit(c, user_id: int) -> bool:
+    c.execute("""
+        UPDATE elite_replacement_credits
+           SET status = 'redeemed',
+               redeemed_at = CURRENT_TIMESTAMP
+         WHERE id = (
+               SELECT id
+                 FROM elite_replacement_credits
+                WHERE user_id = ? AND status = 'open'
+                ORDER BY granted_at ASC
+                LIMIT 1
+         )
+    """, (int(user_id),))
+    return c.rowcount > 0
+
+
 def _lead_age_days(lead_data: dict, fallback_date: str = "") -> int | None:
     for field in ("issued_date", "issue_date", "event_date", "created_at", "last_updated", "_first_seen"):
         raw = (lead_data.get(field) or "").strip() if isinstance(lead_data.get(field), str) else lead_data.get(field)
@@ -4475,6 +4491,8 @@ def swipe_action():
     if not user_id and not anon_id:
         return jsonify({"error": "anon_id or auth required"}), 400
 
+    redeem_replacement_after_swipe = False
+    replacement_credit_redeemed = False
     if not user_id:
         current = _count_swipes(None, anon_id)
         if current >= ANON_LEAD_LIMIT:
@@ -4506,6 +4524,12 @@ def swipe_action():
                 "replacement_credits": _replacement_credits,
                 "remaining":    0,
             }), 200
+        redeem_replacement_after_swipe = (
+            _tier == "elite"
+            and _limit is not None
+            and _current >= _limit
+            and _replacement_credits > 0
+        )
 
     conn = get_db_connection()
     c = conn.cursor()
@@ -4565,6 +4589,8 @@ def swipe_action():
                 """, (user_id, lead_id))
             except Exception as log_err:
                 logger.debug(f"lead_contacts log failed: {log_err}")
+        if redeem_replacement_after_swipe and user_id:
+            replacement_credit_redeemed = _redeem_elite_replacement_credit(c, int(user_id))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -4603,6 +4629,7 @@ def swipe_action():
         "swipes_count":  swipes_count,
         "billable_swipes_count": billable_swipes_count,
         "replacement_credits": replacement_credits,
+        "replacement_credit_redeemed": replacement_credit_redeemed,
         "remaining":     remaining,
         "elite_claim":    claim_result,
     }), 200

@@ -306,6 +306,10 @@ def test_elite_reports_auto_grant_replacement_credits_for_guarantee():
     assert "idx_elite_replacement_credits_user_status" in db_src
     assert "def _elite_replacement_credit_count" in app_src
     assert "def _grant_elite_replacement_credit" in app_src
+    assert "def _redeem_elite_replacement_credit" in app_src
+    assert "def _redeem_elite_replacement_credit" in route_src
+    assert "replacement_credit_redeemed" in app_src
+    assert "replacement_credit_redeemed" in route_src
     assert "replacement_credit_granted" in app_src
     assert "replacement_credits" in app_src
     assert "billable_swipes" in app_src

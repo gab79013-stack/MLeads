@@ -232,6 +232,13 @@ def _claim_elite_lead(conn, c, user_id: int, lead_id: str, claim_type: str = "li
     return {"claimed": True, "blocked": False, "expires_at": expires_at}
 
 
+def _redeem_elite_replacement_credit(c, user_id: int) -> bool:
+    redeem_fn = _get_app_const("_redeem_elite_replacement_credit")
+    if callable(redeem_fn):
+        return bool(redeem_fn(c, user_id))
+    return False
+
+
 def _elite_inventory_payload(city_filter: str = "", service_filter: str = "") -> dict:
     conn = get_db_connection()
     c = conn.cursor()
@@ -815,6 +822,8 @@ def swipe_action():
     if not user_id and not anon_id:
         return jsonify({"error": "anon_id or auth required"}), 400
 
+    redeem_replacement_after_swipe = False
+    replacement_credit_redeemed = False
     if not user_id:
         current = _count_swipes(None, anon_id)
         if current >= ANON_LEAD_LIMIT:
@@ -846,6 +855,12 @@ def swipe_action():
                 "replacement_credits": _replacement_credits,
                 "remaining":    0,
             }), 200
+        redeem_replacement_after_swipe = (
+            _tier == "elite"
+            and _limit is not None
+            and _current >= _limit
+            and _replacement_credits > 0
+        )
 
     conn = get_db_connection()
     c = conn.cursor()
@@ -906,6 +921,8 @@ def swipe_action():
                     )
                 except Exception as pl_err:
                     logger.debug(f"pipeline insert failed: {pl_err}")
+        if redeem_replacement_after_swipe and user_id:
+            replacement_credit_redeemed = _redeem_elite_replacement_credit(c, int(user_id))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -945,6 +962,7 @@ def swipe_action():
         "swipes_count":  swipes_count,
         "billable_swipes_count": billable_swipes_count,
         "replacement_credits": replacement_credits,
+        "replacement_credit_redeemed": replacement_credit_redeemed,
         "remaining":     remaining,
         "elite_claim":    claim_result,
     }), 200
