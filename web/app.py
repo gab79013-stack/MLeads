@@ -5393,7 +5393,7 @@ def swipe_my_contacts():
     c = conn.cursor()
     c.execute("""
         SELECT sa.lead_id, MAX(sa.created_at) as contacted_at,
-               cl.address, cl.city, cl.lead_data
+               cl.address, cl.city, cl.lead_data, cl.primary_service_type, cl.first_seen
         FROM swipe_actions sa
         JOIN consolidated_leads cl ON cl.address_key = sa.lead_id
         WHERE sa.user_id = ? AND sa.action = 'like'
@@ -5412,6 +5412,16 @@ def swipe_my_contacts():
         except Exception:
             ld = {}
         scoring = ld.get('_scoring', {}) or {}
+        service_type = (rd.get('primary_service_type') or ld.get('primary_service_type') or '').strip().lower()
+        gc_insight = build_gc_insight(ld, service_type) if service_type else {}
+        is_elite_quality = False
+        premium_quality_score = 0
+        premium_quality_checks = []
+        if service_type:
+            is_elite_quality, premium_quality_score, premium_quality_checks = _is_elite_lead_record(rd, ld)
+        claim = _active_elite_claim(c, rd['lead_id']) if is_elite_quality else None
+        elite_claimed_by_me = bool(claim and int(claim['user_id']) == int(user_id))
+        elite_claim_expires_at = claim['expires_at'] if elite_claimed_by_me else ''
         contacts.append({
             'id':           rd['lead_id'],
             'address':      rd['address'],
@@ -5422,6 +5432,24 @@ def swipe_my_contacts():
             'phone':        (ld.get('contact_phone') or '').strip(),
             'email':        (ld.get('contact_email') or '').strip(),
             'value':        ld.get('value_float', 0),
+            'service_type':  service_type,
+            'source_url':    gc_insight.get('source_url', ''),
+            'source_label':  gc_insight.get('source_label', ''),
+            'is_elite_quality': is_elite_quality,
+            'premium_quality_score': premium_quality_score,
+            'elite_claimed_by_me': elite_claimed_by_me,
+            'elite_claim_expires_at': elite_claim_expires_at,
+            'elite_certificate': _elite_certificate(
+                ld,
+                gc_insight,
+                premium_quality_score,
+                premium_quality_checks,
+                is_elite_quality,
+                '',
+                rd.get('first_seen', ''),
+                elite_claimed_by_me,
+                elite_claim_expires_at,
+            ),
         })
     return jsonify({'contacts': contacts}), 200
 

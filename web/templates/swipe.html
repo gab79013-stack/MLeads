@@ -2400,6 +2400,16 @@ function renderContacts(list) {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
                 </svg>${esc(c.email.length > 22 ? c.email.slice(0,22)+'…' : c.email)}</a>` : '';
+        const cert = c.elite_certificate || {};
+        const evidence = Array.isArray(cert.evidence) ? cert.evidence.slice(0, 3) : [];
+        const eliteHtml = c.is_elite_quality
+            ? `<div style="background:#ecfdf5;border:1px solid #86efac;border-radius:9px;padding:8px 9px;margin-top:8px;color:#065f46">
+                <strong style="display:block;font-size:12px">${CURRENT_LANG === 'es' ? 'Lead certificado Elite' : 'Elite-certified lead'} · ${Number(c.premium_quality_score || cert.quality_score || 0)}/100</strong>
+                <div style="font-size:11.5px;margin-top:3px">${evidence.map(e => `${esc(e.label || '')}: ${esc(e.value || '')}`).join(' · ')}</div>
+                ${c.elite_claimed_by_me ? `<div style="font-size:11.5px;font-weight:800;margin-top:4px">${CURRENT_LANG === 'es' ? 'Reservado hasta' : 'Reserved until'} ${esc(String(c.elite_claim_expires_at || '').slice(0, 10))}</div>` : ''}
+                ${c.source_url ? `<a href="${esc(c.source_url)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:5px;font-size:11.5px;color:#047857;font-weight:800">${CURRENT_LANG === 'es' ? 'Ver fuente' : 'View source'}</a>` : ''}
+            </div>`
+            : '';
 
         const div = document.createElement('div');
         div.className = 'cl-item';
@@ -2411,6 +2421,7 @@ function renderContacts(list) {
                 ${date ? `<span class="cl-date">${date}</span>` : ''}
             </div>
             ${(phoneHtml || emailHtml) ? `<div class="cl-actions">${phoneHtml}${emailHtml}</div>` : ''}
+            ${eliteHtml}
         `;
         $contactsBody.appendChild(div);
     });

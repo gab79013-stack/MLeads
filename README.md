@@ -94,6 +94,7 @@ MLeads/
 - Elite qualification requires a verified source, phone contact, high score, fresh signal, and either project value, action window, or direct homeowner intent
 - Swipe feed returns an `elite_certificate` for buyer-facing proof of source, contact, freshness, value and exclusivity evidence
 - Swipe shows Elite users billable usage, remaining quota and available replacement credits
+- Contacted-leads history keeps Elite certificate, source and reservation evidence for post-sale follow-up
 - Admin quality report shows sellability, contact coverage, source coverage, project value coverage and market readiness
 - Admin dashboard surfaces blocked Elite checkout demand by market/service for follow-up and inventory prioritization
 - Admins can mark Elite pilot requests as contacted or closed after sales follow-up

@@ -273,14 +273,19 @@ def test_elite_leads_are_exclusive_claims_for_500_plan():
     assert "def _elite_certificate" in app_src
     assert "elite_certificate" in app_src
     assert "def _active_elite_claim" in app_src
+    assert "source_url" in app_src
+    assert "'elite_certificate': _elite_certificate" in app_src
     assert "exclusive_unavailable" in app_src
     assert "elite_claimed_by_me" in app_src
     assert "elite_claim_expires_at" in app_src
     assert "def _claim_elite_lead" in route_src
     assert "def _elite_certificate" in route_src
     assert "elite_certificate" in route_src
+    assert "'elite_certificate': _elite_certificate" in route_src
     assert "exclusive_unavailable" in route_src
     assert "Reservado para tu empresa" in html
+    assert "Reserved until" in html
+    assert "View source" in html
     assert "Lead Elite reservado para ti" in html
 
 
