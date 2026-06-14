@@ -1030,6 +1030,29 @@ async function loadEliteInventory() {
     } catch (e) {}
 }
 
+async function loadFilterOptions() {
+    try {
+        const url = new URL('/api/swipe/filter-options', location.origin);
+        if (!S.authed) url.searchParams.set('anon_id', getAnonId());
+        if (F.hotOnly) url.searchParams.set('hot_only', '1');
+        if (F.eliteOnly || S.tier === 'elite') url.searchParams.set('elite_only', '1');
+        if (F.minVal > 0) url.searchParams.set('min_value', F.minVal);
+        if (F.maxVal > 0) url.searchParams.set('max_value', F.maxVal);
+        if (F.city) {
+            url.searchParams.set('city', F.city);
+            if (F.radius > 0) url.searchParams.set('radius_miles', F.radius);
+        }
+        const res = await fetch(url, { headers: authHdrs() });
+        if (!res.ok) return;
+        const data = await res.json();
+        S.availableServiceCounts = data.available_service_counts || {};
+        S.filterOptions = data;
+        syncAvailableLeadTypePills();
+    } catch (e) {
+        console.debug('Filter options unavailable', e);
+    }
+}
+
 async function refreshSubscriptionStatus(retries = 0) {
     if (!S.authed) return;
     try {
@@ -1603,6 +1626,7 @@ const $backdrop = document.getElementById('backdrop');
 
 document.getElementById('filterBtn').addEventListener('click', () => {
     syncDrawer();
+    loadFilterOptions();
     $backdrop.classList.add('open');
 });
 $backdrop.addEventListener('click', e => { if (e.target === $backdrop) $backdrop.classList.remove('open'); });
@@ -1718,9 +1742,10 @@ document.getElementById('btnReset').addEventListener('click', () => {
     F.hotOnly = false; F.eliteOnly = false; F.subCats.clear(); F.leadTypes.clear();
     F.city = ''; F.radius = 25; F.minVal = 0; F.maxVal = 0;
     syncDrawer();
+    loadFilterOptions();
 });
 
-function applyFilters() { saveFilters(); renderChips(); loadEliteInventory(); S.queue = []; fetchFeed(); }
+function applyFilters() { saveFilters(); renderChips(); loadFilterOptions(); loadEliteInventory(); S.queue = []; fetchFeed(); }
 
 // ── First-run onboarding ──────────────────────────────────────────────────────
 const $onboarding = document.getElementById('onboarding');
@@ -2404,6 +2429,7 @@ loadFilters();   // restore saved filters before first render
 applyLang();
 syncContactsBtn();
 renderChips();
+loadFilterOptions();
 loadEliteInventory();
 if (shouldShowOnboarding()) showOnboarding();
 else fetchFeed();

@@ -263,6 +263,38 @@ def test_swipe_actions_rerender_remaining_queue_after_each_card():
     assert "S.queue.shift(); restack();" not in html
 
 
+def test_swipe_filter_drawer_uses_live_filter_options_api():
+    html = _html()
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    helper_src = (TEMPLATE.parents[1] / "helpers" / "service_filter.py").read_text(encoding="utf-8")
+
+    assert "/api/swipe/filter-options" in html
+    assert "function loadFilterOptions()" in html
+    assert "S.availableServiceCounts = data.available_service_counts || {};" in html
+    assert "loadFilterOptions();" in html
+    assert "@app.route('/api/swipe/filter-options'" in app_src
+    assert "@bp.route('/swipe/filter-options'" in route_src
+    assert "def _swipe_filter_options_payload" in app_src
+    assert '"weather": {"weather", "flood", "disaster"}' in app_src
+    assert "DEFAULT_SERVICE_CATEGORY_ALIASES" in helper_src
+    assert '"weather", "flood", "disaster"' in helper_src
+    assert "filter_categories" in app_src
+    assert "raw_service_counts" in app_src
+    assert "top_cities" in app_src
+
+
+def test_swipe_city_autocomplete_uses_live_inventory_not_only_static_coords():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+
+    assert "FROM consolidated_leads" in app_src
+    assert "FROM consolidated_leads" in route_src
+    assert "city_set.update" in app_src
+    assert "city_set.update" in route_src
+    assert "City autocomplete DB lookup failed" in app_src
+
+
 def test_homeowner_intake_channel_captures_pre_gc_addition_leads():
     html = _homeowner_html()
     swipe_html = _html()

@@ -858,6 +858,25 @@ def swipe_elite_inventory():
     return jsonify(_elite_inventory_payload(city, service)), 200
 
 
+@bp.route('/swipe/filter-options', methods=['GET'])
+def swipe_filter_options():
+    """Return live inventory counts for the Swipe filter drawer."""
+    payload_fn = _get_app_const("_swipe_filter_options_payload")
+    if callable(payload_fn):
+        return jsonify(payload_fn(request.args)), 200
+    return jsonify({
+        "total_available": 0,
+        "available_service_counts": {},
+        "raw_service_counts": {},
+        "filter_categories": [],
+        "available_service_types": [],
+        "top_cities": [],
+        "score_buckets": {},
+        "value_buckets": {},
+        "filters": {},
+    }), 200
+
+
 
 
 @bp.route('/swipe/claim-anon', methods=['POST'])
@@ -918,9 +937,37 @@ def swipe_claim_anon():
 
 @bp.route('/swipe/cities', methods=['GET'])
 def swipe_cities():
-    """Return a list of known city names for autocomplete (no auth required)."""
+    """Return known city names from live inventory plus geocode fallbacks."""
     q = (request.args.get('q') or '').strip().lower()
-    cities = sorted(CITY_COORDS.keys())
+    city_set = set(CITY_COORDS.keys())
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        if q:
+            c.execute("""
+                SELECT city, COUNT(*) AS n
+                FROM consolidated_leads
+                WHERE TRIM(COALESCE(city, '')) != ''
+                  AND LOWER(city) LIKE LOWER(?)
+                GROUP BY city
+                ORDER BY n DESC, city ASC
+                LIMIT 80
+            """, (f"%{q}%",))
+        else:
+            c.execute("""
+                SELECT city, COUNT(*) AS n
+                FROM consolidated_leads
+                WHERE TRIM(COALESCE(city, '')) != ''
+                GROUP BY city
+                ORDER BY n DESC, city ASC
+                LIMIT 80
+            """)
+        city_set.update(str(row[0]).strip().lower() for row in c.fetchall() if row[0])
+        conn.close()
+    except Exception as e:
+        logger.debug(f"City autocomplete DB lookup failed: {e}")
+
+    cities = sorted(city_set)
     if q:
         # Prefix matches first, then contains matches
         prefix = [c for c in cities if c.startswith(q)]

@@ -3172,6 +3172,229 @@ _TRADE_SERVICE_TO_AI = {
     "insulation": "INSULATION",
 }
 
+_SWIPE_FILTER_CATEGORY_LABELS = {
+    "weather": "Daño por tormenta",
+    "permits": "Permisos listos",
+    "construction": "Proyecto sin GC confirmado",
+    "remodel": "Remodelación / reparación",
+    "deconstruction": "Demolición / rebuild",
+    "realestate": "Venta de propiedad",
+    "crossdata": "Cross-data verificado",
+}
+
+_SWIPE_FILTER_SERVICE_ALIASES = {
+    "weather": {"weather", "flood", "disaster"},
+    "permits": {"permits"},
+    "construction": {"construction"},
+    "remodel": {"remodel"},
+    "deconstruction": {"deconstruction"},
+    "realestate": {"realestate"},
+    "crossdata": {"crossdata"},
+}
+
+
+def _service_count_keys(service_type: str) -> list[str]:
+    service = (service_type or "").strip().lower()
+    keys = [service] if service else []
+    for category, aliases in _SWIPE_FILTER_SERVICE_ALIASES.items():
+        if service in aliases and category not in keys:
+            keys.append(category)
+    return keys
+
+
+def _add_service_count(counts: dict[str, int], service_type: str) -> None:
+    for key in _service_count_keys(service_type):
+        counts[key] = counts.get(key, 0) + 1
+
+
+def _matches_city_radius(row_dict: dict, lead_data: dict, city_filter: str, radius_miles: float) -> bool:
+    city_filter = (city_filter or "").strip()
+    if not city_filter:
+        return True
+    lead_city = (row_dict.get("city") or lead_data.get("city") or "").strip()
+    if radius_miles <= 0:
+        return city_filter.lower() in lead_city.lower()
+
+    origin = _city_coords(city_filter)
+    if not origin:
+        return city_filter.lower() in lead_city.lower()
+
+    lead_lat = lead_data.get("lat")
+    lead_lon = lead_data.get("lon")
+    try:
+        if lead_lat and lead_lon:
+            return _haversine_miles(origin[0], origin[1], float(lead_lat), float(lead_lon)) <= radius_miles
+    except (TypeError, ValueError):
+        pass
+
+    lead_coords = _city_coords(lead_city)
+    if lead_coords:
+        return _haversine_miles(origin[0], origin[1], lead_coords[0], lead_coords[1]) <= radius_miles
+    return city_filter.lower() in lead_city.lower()
+
+
+def _parse_swipe_filter_args(args) -> dict:
+    hot_only = args.get("hot_only", "0") == "1"
+    try:
+        min_score = int(args.get("min_score", 0))
+    except (TypeError, ValueError):
+        min_score = 0
+    if hot_only:
+        min_score = max(min_score, 90)
+    try:
+        min_value = float(args.get("min_value", 0))
+    except (TypeError, ValueError):
+        min_value = 0.0
+    try:
+        max_value = float(args.get("max_value", 0))
+    except (TypeError, ValueError):
+        max_value = 0.0
+    try:
+        radius_miles = float(args.get("radius_miles", 0))
+    except (TypeError, ValueError):
+        radius_miles = 0.0
+    return {
+        "hot_only": hot_only,
+        "min_score": min_score,
+        "min_value": min_value,
+        "max_value": max_value,
+        "city": (args.get("city") or "").strip(),
+        "radius_miles": radius_miles,
+        "elite_only": args.get("elite_only", "0") == "1",
+    }
+
+
+def _swipe_filter_options_payload(args) -> dict:
+    filters = _parse_swipe_filter_args(args)
+    city_filter = filters["city"]
+    radius_miles = filters["radius_miles"]
+    do_radius = bool(city_filter and radius_miles > 0)
+
+    conditions = [
+        "(has_phone = 1 OR primary_service_type IN ('weather', 'flood', 'disaster'))",
+        "COALESCE(is_dead_lead, 0) = 0",
+        build_public_real_lead_sql_filter(),
+        build_gc_interest_sql_filter(),
+    ]
+    params: list = []
+
+    if filters["min_score"] > 0:
+        conditions.append("CAST(json_extract(lead_data, '$._scoring.score') AS INTEGER) >= ?")
+        params.append(filters["min_score"])
+    if filters["min_value"] > 0:
+        conditions.append(
+            "(primary_service_type IN ('weather', 'flood', 'disaster') OR "
+            "CAST(COALESCE(json_extract(lead_data, '$.value_float'), 0) AS REAL) >= ?)"
+        )
+        params.append(filters["min_value"])
+    if filters["max_value"] > 0:
+        conditions.append("CAST(COALESCE(json_extract(lead_data, '$.value_float'), 0) AS REAL) <= ?")
+        params.append(filters["max_value"])
+    if city_filter and not do_radius:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+
+    where_sql = "WHERE " + " AND ".join(conditions)
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute(f"""
+        SELECT address_key, address, city, lead_data, primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY first_seen DESC
+        LIMIT 5000
+    """, params)
+    rows = c.fetchall()
+    conn.close()
+
+    service_counts: dict[str, int] = {}
+    raw_service_counts: dict[str, int] = {}
+    by_city: dict[str, int] = {}
+    score_buckets = {"hot_90": 0, "warm_70": 0, "all": 0}
+    value_buckets = {"under_100k": 0, "100k_500k": 0, "over_500k": 0, "unknown": 0}
+    total = 0
+
+    for row in rows:
+        rd = dict(row)
+        try:
+            lead_data = json.loads(rd.get("lead_data") or "{}")
+        except Exception:
+            continue
+        if is_placeholder_or_demo_lead(lead_data, rd.get("address_key")):
+            continue
+        service_type = (rd.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if not service_type:
+            continue
+        if service_type not in {"weather", "flood", "disaster"} and not (lead_data.get("contact_phone") or lead_data.get("phone")):
+            continue
+        if not _matches_city_radius(rd, lead_data, city_filter, radius_miles):
+            continue
+        if not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        gc_insight = build_gc_insight(lead_data, service_type)
+        if not gc_insight.get("source_url"):
+            continue
+
+        scoring = lead_data.get("_scoring", {}) or {}
+        q_score, _, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring)
+        if filters["elite_only"] and not is_elite:
+            continue
+
+        total += 1
+        raw_service_counts[service_type] = raw_service_counts.get(service_type, 0) + 1
+        _add_service_count(service_counts, service_type)
+        city = rd.get("city") or "Unknown"
+        by_city[city] = by_city.get(city, 0) + 1
+
+        score = int(scoring.get("score") or 0)
+        score_buckets["all"] += 1
+        if score >= 90:
+            score_buckets["hot_90"] += 1
+        if score >= 70:
+            score_buckets["warm_70"] += 1
+
+        value = float(lead_data.get("value_float") or 0)
+        if value <= 0:
+            value_buckets["unknown"] += 1
+        elif value < 100000:
+            value_buckets["under_100k"] += 1
+        elif value <= 500000:
+            value_buckets["100k_500k"] += 1
+        else:
+            value_buckets["over_500k"] += 1
+
+    categories = [
+        {
+            "id": category,
+            "label": label,
+            "count": int(service_counts.get(category, 0)),
+            "available": int(service_counts.get(category, 0)) > 0,
+        }
+        for category, label in _SWIPE_FILTER_CATEGORY_LABELS.items()
+    ]
+
+    return {
+        "total_available": total,
+        "available_service_counts": service_counts,
+        "raw_service_counts": raw_service_counts,
+        "filter_categories": categories,
+        "available_service_types": sorted(k for k, v in service_counts.items() if v > 0),
+        "top_cities": [
+            {"city": city, "count": count}
+            for city, count in sorted(by_city.items(), key=lambda kv: (-kv[1], kv[0]))[:25]
+        ],
+        "score_buckets": score_buckets,
+        "value_buckets": value_buckets,
+        "filters": filters,
+    }
+
+
+@app.route('/api/swipe/filter-options', methods=['GET'])
+@limiter.limit("60 per minute")
+def swipe_filter_options():
+    """Return live inventory counts for the Swipe filter drawer."""
+    return jsonify(_swipe_filter_options_payload(request.args)), 200
+
 
 @app.route('/api/swipe/feed', methods=['GET'])
 @limiter.limit("60 per minute")
@@ -3461,11 +3684,13 @@ def swipe_feed():
                 continue
             if ast not in {"weather", "flood", "disaster"} and not (ald.get("contact_phone") or ald.get("phone")):
                 continue
+            if not _matches_city_radius(ard, ald, city_filter, radius_miles):
+                continue
             if not is_gc_interesting_lead(ald, ast):
                 continue
             if not build_gc_insight(ald, ast).get("source_url"):
                 continue
-            available_service_counts[ast] = available_service_counts.get(ast, 0) + 1
+            _add_service_count(available_service_counts, ast)
     except Exception as ae:
         logger.debug(f"Availability lookup failed: {ae}")
 
@@ -4344,9 +4569,37 @@ def swipe_claim_anon():
 
 @app.route('/api/swipe/cities', methods=['GET'])
 def swipe_cities():
-    """Return a list of known city names for autocomplete (no auth required)."""
+    """Return known city names from live inventory plus geocode fallbacks."""
     q = (request.args.get('q') or '').strip().lower()
-    cities = sorted(_CITY_COORDS.keys())
+    city_set = set(_CITY_COORDS.keys())
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        if q:
+            c.execute("""
+                SELECT city, COUNT(*) AS n
+                FROM consolidated_leads
+                WHERE TRIM(COALESCE(city, '')) != ''
+                  AND LOWER(city) LIKE LOWER(?)
+                GROUP BY city
+                ORDER BY n DESC, city ASC
+                LIMIT 80
+            """, (f"%{q}%",))
+        else:
+            c.execute("""
+                SELECT city, COUNT(*) AS n
+                FROM consolidated_leads
+                WHERE TRIM(COALESCE(city, '')) != ''
+                GROUP BY city
+                ORDER BY n DESC, city ASC
+                LIMIT 80
+            """)
+        city_set.update(str(row[0]).strip().lower() for row in c.fetchall() if row[0])
+        conn.close()
+    except Exception as e:
+        logger.debug(f"City autocomplete DB lookup failed: {e}")
+
+    cities = sorted(city_set)
     if q:
         # Prefix matches first, then contains matches
         prefix = [c for c in cities if c.startswith(q)]

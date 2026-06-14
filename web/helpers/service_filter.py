@@ -26,11 +26,16 @@ DEFAULT_TRADE_SERVICE_TO_AI = {
     "insulation": "INSULATION",
 }
 
+DEFAULT_SERVICE_CATEGORY_ALIASES = {
+    "weather": {"weather", "flood", "disaster"},
+}
+
 
 def build_service_category_filter(
     selected_cats: list[str],
     trade_map: dict[str, str] | None = None,
     service_type_cats: set[str] | None = None,
+    service_aliases: dict[str, set[str]] | None = None,
 ) -> tuple[str | None, list]:
     """Return SQLite WHERE fragment + params for selected swipe categories."""
     if not selected_cats:
@@ -38,6 +43,7 @@ def build_service_category_filter(
 
     trade_map = trade_map or DEFAULT_TRADE_SERVICE_TO_AI
     service_type_cats = service_type_cats or set()
+    service_aliases = service_aliases or DEFAULT_SERVICE_CATEGORY_ALIASES
 
     parts: list[str] = []
     params: list = []
@@ -56,6 +62,11 @@ def build_service_category_filter(
                 ")"
             )
             params.extend([cat, ai_trade, f'%"{ai_trade}"%', ai_trade])
+        elif cat in service_aliases:
+            aliases = sorted(service_aliases.get(cat) or {cat})
+            placeholders = ",".join("?" * len(aliases))
+            parts.append(f"primary_service_type IN ({placeholders})")
+            params.extend(aliases)
         elif cat in service_type_cats:
             parts.append("primary_service_type = ?")
             params.append(cat)
