@@ -5508,6 +5508,47 @@ def admin_lead_quality_reports():
     return jsonify({"reports": reports, "total": total, "summary": summary, "status": status}), 200
 
 
+@app.route('/api/admin/lead-quality-reports/<int:report_id>', methods=['PATCH'])
+@require_admin
+def admin_update_lead_quality_report(report_id):
+    """Update QA report status after admin review."""
+    data = request.get_json(silent=True) or {}
+    status = (data.get("status") or "").strip().lower()
+    resolution = (data.get("resolution") or "").strip()[:1000]
+    if status not in {"open", "reviewing", "resolved", "dismissed"}:
+        return jsonify({"error": "Status must be open, reviewing, resolved or dismissed"}), 400
+
+    if status in {"resolved", "dismissed"} and not resolution:
+        resolution = "Closed by admin review"
+    elif status == "reviewing" and not resolution:
+        resolution = "Reviewing lead quality report"
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            UPDATE lead_quality_reports
+               SET status = ?,
+                   resolution = ?,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?
+        """, (status, resolution, report_id))
+        if c.rowcount == 0:
+            conn.rollback()
+            return jsonify({"error": "Lead quality report not found"}), 404
+        conn.commit()
+        c.execute("""
+            SELECT id, lead_id, user_id, reason, details, is_elite,
+                   status, resolution, created_at, updated_at
+              FROM lead_quality_reports
+             WHERE id = ?
+        """, (report_id,))
+        row = c.fetchone()
+        return jsonify({"ok": True, "report": dict(row) if row else {"id": report_id, "status": status}}), 200
+    finally:
+        conn.close()
+
+
 @app.route('/api/admin/feedback', methods=['GET'])
 @require_admin
 def list_feedback():

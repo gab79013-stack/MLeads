@@ -289,8 +289,14 @@ def test_elite_quality_guarantee_has_user_reports_and_admin_queue():
     assert "replacement_review" in app_src
     assert "lead_quality_reports" in app_src
     assert "@app.route('/api/admin/lead-quality-reports'" in app_src
+    assert "@app.route('/api/admin/lead-quality-reports/<int:report_id>', methods=['PATCH'])" in app_src
+    assert "def admin_update_lead_quality_report" in app_src
     assert 'id="qualityReportList"' in index_html
     assert "/api/admin/lead-quality-reports?status=open" in index_html
+    assert "/api/admin/lead-quality-reports/${id}" in index_html
+    assert "updateQualityReport" in index_html
+    assert "Resolved" in index_html
+    assert "Dismissed" in index_html
     assert "Reportes de calidad" in index_html
 
 

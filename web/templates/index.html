@@ -2805,6 +2805,11 @@
                                 <div style="font-size:13px;color:#374151">${escHtml(r.address || r.lead_id)} ${r.city ? '· ' + escHtml(r.city) : ''}</div>
                                 <div style="font-size:13px;color:#111827;margin-top:6px;white-space:pre-wrap">${escHtml(r.details || 'Sin detalles')}</div>
                                 <div style="font-size:12px;color:#6b7280;margin-top:6px">${escHtml(r.email || r.full_name || 'Usuario')}${r.replacement_credit_status ? ' · crédito ' + escHtml(r.replacement_credit_status) : ''}</div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+                                    <button class="btn btn-secondary" style="padding:5px 9px;font-size:11px" onclick="updateQualityReport(${Number(r.id || 0)}, 'reviewing')">Reviewing</button>
+                                    <button class="btn btn-secondary" style="padding:5px 9px;font-size:11px" onclick="updateQualityReport(${Number(r.id || 0)}, 'resolved')">Resolved</button>
+                                    <button class="btn btn-secondary" style="padding:5px 9px;font-size:11px" onclick="updateQualityReport(${Number(r.id || 0)}, 'dismissed')">Dismissed</button>
+                                </div>
                             </div>
                         `).join('');
                     }
@@ -2827,6 +2832,28 @@
                 list.innerHTML = '<p style="color:#ef4444">Error al cargar feedback.</p>';
             }
         }
+
+        async function updateQualityReport(id, status) {
+            if (!id) return;
+            const resolution = status === 'reviewing'
+                ? 'Reviewing lead quality report'
+                : (status === 'resolved' ? 'Resolved by admin QA review' : 'Dismissed by admin QA review');
+            try {
+                const response = await fetch(`/api/admin/lead-quality-reports/${id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentAccessToken}`
+                    },
+                    body: JSON.stringify({ status, resolution })
+                });
+                if (!response.ok) throw new Error('No se pudo actualizar el reporte');
+                await loadFeedback();
+            } catch (e) {
+                alert(e.message || 'No se pudo actualizar el reporte');
+            }
+        }
+
         async function deleteFeedback(id) {
             if (!confirm('¿Eliminar este comentario?')) return;
             await fetch(`/api/admin/feedback/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${currentAccessToken}` } });

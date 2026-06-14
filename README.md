@@ -99,6 +99,7 @@ MLeads/
 - Replacement credits reduce Elite billable swipe counts in both feed access and swipe actions
 - Replacement credits are marked redeemed when an Elite user consumes quota beyond the base Elite limit
 - Admin quality reports summarize open replacement-credit liability for Elite guarantee operations
+- Admins can mark lead-quality reports as reviewing, resolved or dismissed after QA review
 
 ### Homeowner Intake (`/homeowner-intake`)
 - Public form for homeowners planning an addition, ADU, garage conversion, kitchen remodel, bathroom remodel or whole-home remodel
