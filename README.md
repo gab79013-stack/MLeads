@@ -1,6 +1,6 @@
-# 0brix — Lead Generation Platform for Subcontractors
+# 0brix — Premium Lead Platform for General Contractors
 
-Lead generation platform for contractors: detects building permits, classifies AI-generated leads, and delivers them via a swipe feed + CRM pipeline.
+Lead generation platform for General Contractors: detects permit, weather, property and homeowner-intent signals, classifies sellable opportunities, and delivers them through a swipe feed + CRM pipeline.
 
 **Stack:** Python Flask + SQLite + Vue/JS frontend | **AI:** DeepSeek-V3.2-NVFP4 (free via Vultr Inference) | **Server:** 2.25.162.58
 
@@ -24,6 +24,7 @@ docker run --rm -p 5001:5001 -v "$PWD/data:/app/data" -v "$PWD/contacts:/app/con
 
 **Live URLs:**
 - Swipe feed: `http://2.25.162.58/swipe`
+- Homeowner intake: `http://2.25.162.58/homeowner-intake`
 - Pipeline CRM: `http://2.25.162.58/pipeline`
 - Dashboard: `http://2.25.162.58/`
 - Huly CRM: `http://2.25.162.58:8080`
@@ -46,6 +47,7 @@ MLeads/
 │   └── templates/
 │       ├── index.html      # Dashboard
 │       ├── swipe.html      # Tinder-style swipe feed
+│       ├── homeowner_intake.html # Public homeowner project intake
 │       └── pipeline.html   # Kanban CRM board
 ├── utils/
 │   ├── web_db.py           # Multi-user DB schema (1450 lines)
@@ -77,6 +79,22 @@ MLeads/
 - **Keyboard shortcuts:** `→` like | `←` dislike | `Q` qualify | `Esc` close
 - Like = auto-add to pipeline
 - GC-focused routing prioritizes storm/weather, open owner/GC opportunities, and independently verifiable official sources
+- Elite-only filter for curated, high-confidence leads
+
+### Premium Monetization
+- Free preview and authenticated free quota
+- Pro/Premium/Elite Stripe checkout support
+- Elite plan designed for `$500/month` positioning
+- Elite leads can be reserved exclusively per contractor for a configurable claim window
+- Admin quality report shows sellability, contact coverage, source coverage, project value coverage and market readiness
+- Contractors can report bad leads from Swipe for replacement/QA review
+
+### Homeowner Intake (`/homeowner-intake`)
+- Public form for homeowners planning an addition, ADU, garage conversion, kitchen remodel, bathroom remodel or whole-home remodel
+- Captures owners before they search for a GC or file permits
+- Requires phone and project context to keep lead quality high
+- Publishes submissions into `consolidated_leads` as `remodel` GC opportunities with `planning` phase, homeowner decision-maker metadata and HOT/WARM scoring
+- Keeps raw submissions in `homeowner_project_intakes` for audit, QA and follow-up
 
 ### Pipeline CRM (`/pipeline`)
 - 6-column Kanban: Nuevo → Contactado → Propuesta → Negociación → Ganado / Perdido
@@ -114,10 +132,33 @@ cd /opt/MLeads && python3 main.py --run permits  # single agent
 - **Path:** `/opt/MLeads/data/leads.db` (SQLite WAL mode)
 - **Key tables:**
   - `consolidated_leads` — main lead storage
+  - `homeowner_project_intakes` — raw homeowner project requests
   - `lead_pipeline` — CRM pipeline state
   - `swipe_actions` — swipe history
   - `users` — auth/users
-  - `swipe_actions` — swipe history
+  - `elite_lead_claims` — exclusive Elite lead reservations
+  - `lead_quality_reports` — user-reported lead quality issues
+
+---
+
+## Validation
+
+```bash
+python3 -m py_compile web/app.py web/routes/swipe.py web/routes/leads.py utils/web_db.py tests/test_swipe_gc_ui.py scripts/audit_elite_real_data.py
+python3 - <<'PY'
+import importlib.util
+from pathlib import Path
+p = Path('tests/test_swipe_gc_ui.py')
+spec = importlib.util.spec_from_file_location('test_swipe_gc_ui', p)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+for name in dir(mod):
+    if name.startswith('test_'):
+        getattr(mod, name)()
+        print(name, 'ok')
+PY
+python3 scripts/audit_elite_real_data.py --base-url http://2.25.162.58
+```
 
 ---
 

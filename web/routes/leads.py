@@ -1014,14 +1014,14 @@ def get_all_settings():
 def create_payment_checkout():
     """
     Create a Stripe Checkout session for the authenticated web user.
-    Body: {"tier": "pro" | "premium"}
+    Body: {"tier": "pro" | "premium" | "elite"}
     Returns: {"checkout_url": "https://checkout.stripe.com/..."}
-    Requires STRIPE_API_KEY and STRIPE_PRICE_ID_PRO / STRIPE_PRICE_ID_PREMIUM in env.
+    Requires STRIPE_API_KEY and STRIPE_PRICE_ID_PRO / STRIPE_PRICE_ID_PREMIUM / STRIPE_PRICE_ID_ELITE in env.
     """
     data = request.get_json(silent=True) or {}
     tier = (data.get('tier') or 'pro').lower()
-    if tier not in ('pro', 'premium'):
-        return jsonify({"error": "Tier must be 'pro' or 'premium'"}), 400
+    if tier not in ('pro', 'premium', 'elite'):
+        return jsonify({"error": "Tier must be 'pro', 'premium' or 'elite'"}), 400
 
     stripe_key = os.getenv('STRIPE_API_KEY', '')
     price_id   = os.getenv(f'STRIPE_PRICE_ID_{tier.upper()}', os.getenv('STRIPE_PRICE_ID', ''))
@@ -1039,6 +1039,7 @@ def create_payment_checkout():
         conn.close()
 
         base_url = os.getenv('BASE_URL', 'http://104.42.252.241:5000')
+        checkout_metadata = {'user_id': str(g.user_id), 'tier': tier}
         session = _stripe.checkout.Session.create(
             mode='subscription',
             line_items=[{'price': price_id, 'quantity': 1}],
@@ -1046,7 +1047,8 @@ def create_payment_checkout():
             cancel_url=f"{base_url}/swipe?payment=cancel",
             customer_email=user['email'] if user else None,
             client_reference_id=str(g.user_id),
-            metadata={'user_id': str(g.user_id), 'tier': tier},
+            metadata=checkout_metadata,
+            subscription_data={'metadata': checkout_metadata},
         )
         return jsonify({"checkout_url": session.url, "session_id": session.id}), 200
     except Exception as e:
