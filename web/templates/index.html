@@ -1344,6 +1344,20 @@
                         </div>
                     </div>
 
+                    <div class="elite-quality-card" id="elitePilotDemandCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Elite demand</div>
+                            <div class="stat-value" id="elitePilotTotal">0</div>
+                            <span class="elite-quality-status warn" id="elitePilotStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="elitePilotMarkets">0</strong><span>Markets waiting</span></div>
+                            <div><strong id="elitePilotLast">-</strong><span>Last request</span></div>
+                            <div class="elite-quality-alert" id="elitePilotAlerts">Checking blocked checkout demand...</div>
+                            <div class="market-readiness-list" id="elitePilotList"></div>
+                        </div>
+                    </div>
+
                     <div class="section-header">
                         <h3 class="section-title">Recent Leads</h3>
                     </div>
@@ -2012,6 +2026,7 @@
             try {
                 loadEliteQualityReport();
                 loadMarketReadiness();
+                loadElitePilotDemand();
                 const response = await fetch('/api/leads', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const data = await response.json();
                 document.getElementById('totalLeads').textContent = data.total || 0;
@@ -2107,6 +2122,46 @@
                 statusEl.textContent = 'Unavailable';
                 statusEl.classList.add('danger');
                 document.getElementById('marketReadinessAlerts').textContent = 'Market readiness could not be loaded.';
+                listEl.innerHTML = '';
+            }
+        }
+
+        async function loadElitePilotDemand() {
+            const statusEl = document.getElementById('elitePilotStatus');
+            const listEl = document.getElementById('elitePilotList');
+            if (!statusEl || !listEl) return;
+            try {
+                const response = await fetch('/api/admin/elite-pilot-requests?status=open', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('elite pilot demand unavailable');
+                const data = await response.json();
+                const summary = data.summary || {};
+                const markets = data.markets || [];
+                const requests = data.requests || [];
+                document.getElementById('elitePilotTotal').textContent = summary.total_requests || 0;
+                document.getElementById('elitePilotMarkets').textContent = summary.markets || 0;
+                document.getElementById('elitePilotLast').textContent = requests[0]?.updated_at
+                    ? String(requests[0].updated_at).slice(0, 10)
+                    : '-';
+                const hasDemand = (summary.total_requests || 0) > 0;
+                statusEl.textContent = hasDemand ? 'Follow up' : 'No demand';
+                statusEl.classList.toggle('warn', hasDemand);
+                statusEl.classList.toggle('danger', false);
+                document.getElementById('elitePilotAlerts').textContent = hasDemand
+                    ? 'Contractors tried to buy Elite in markets that need pilot pricing or more inventory.'
+                    : 'No blocked Elite checkout demand captured yet.';
+                listEl.innerHTML = markets.slice(0, 6).map(m => `
+                    <div class="market-readiness-row">
+                        <strong>${escHtml(m.city || 'Unspecified')}</strong>
+                        <span>${escHtml(m.service || 'all')} · ${escHtml(m.readiness_status || 'needs_inventory')}</span>
+                        <span class="market-readiness-price">${Number(m.requests || 0)} req</span>
+                    </div>
+                `).join('') || '<div class="elite-quality-alert">No pilot requests yet.</div>';
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('elitePilotAlerts').textContent = 'Elite pilot demand could not be loaded.';
                 listEl.innerHTML = '';
             }
         }

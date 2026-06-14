@@ -235,6 +235,12 @@ def test_admin_dashboard_surfaces_elite_quality_report():
     assert "Needs inventory" in html
     assert 'id="eliteQaPhone"' in html
     assert 'id="eliteQaValue"' in html
+    assert 'id="elitePilotDemandCard"' in html
+    assert 'id="elitePilotTotal"' in html
+    assert 'id="elitePilotMarkets"' in html
+    assert "loadElitePilotDemand()" in html
+    assert "/api/admin/elite-pilot-requests?status=open" in html
+    assert "Contractors tried to buy Elite" in html
 
 
 def test_elite_leads_are_exclusive_claims_for_500_plan():

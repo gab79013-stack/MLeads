@@ -92,6 +92,7 @@ MLeads/
 - Elite leads can be reserved exclusively per contractor for a configurable claim window
 - Elite qualification requires a verified source, phone contact, high score, fresh signal, and either project value, action window, or direct homeowner intent
 - Admin quality report shows sellability, contact coverage, source coverage, project value coverage and market readiness
+- Admin dashboard surfaces blocked Elite checkout demand by market/service for follow-up and inventory prioritization
 - Contractors can report bad Elite leads from Swipe; eligible reports auto-grant replacement credits that extend the effective Elite quota
 
 ### Homeowner Intake (`/homeowner-intake`)
