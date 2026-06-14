@@ -86,7 +86,7 @@ MLeads/
 - Pro/Premium/Elite Stripe checkout support
 - Elite plan designed for `$500/month` positioning
 - Elite leads can be reserved exclusively per contractor for a configurable claim window
-- Elite qualification requires a verified source, phone contact, high score, and either project value, action window, or direct homeowner intent
+- Elite qualification requires a verified source, phone contact, high score, fresh signal, and either project value, action window, or direct homeowner intent
 - Admin quality report shows sellability, contact coverage, source coverage, project value coverage and market readiness
 - Contractors can report bad Elite leads from Swipe; eligible reports auto-grant replacement credits that extend the effective Elite quota
 

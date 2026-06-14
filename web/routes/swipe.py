@@ -62,14 +62,36 @@ def _tier_lead_limit(tier: str, is_paid: bool) -> int | None:
     return None
 
 
-def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scoring: dict, inspection_date: str = "") -> tuple[int, list[str], bool]:
+def _lead_age_days(lead_data: dict, fallback_date: str = "") -> int | None:
+    for field in ("issued_date", "issue_date", "event_date", "created_at", "last_updated", "_first_seen"):
+        raw = (lead_data.get(field) or "").strip() if isinstance(lead_data.get(field), str) else lead_data.get(field)
+        if not raw:
+            continue
+        try:
+            text = str(raw).strip().replace("Z", "").replace("T", " ")
+            if len(text) >= 19:
+                dt = datetime.fromisoformat(text[:19])
+            else:
+                dt = datetime.fromisoformat(text[:10])
+            return max((datetime.utcnow() - dt).days, 0)
+        except Exception:
+            continue
+    if fallback_date:
+        return _lead_age_days({"_first_seen": fallback_date})
+    return None
+
+
+def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scoring: dict, inspection_date: str = "", first_seen: str = "") -> tuple[int, list[str], bool]:
     score = int(scoring.get("score") or 0)
     service = str(service_type or "").lower()
     has_source = bool(gc_insight.get("source_url"))
     has_phone = bool((lead_data.get("contact_phone") or "").strip())
     has_value = bool(lead_data.get("value_float"))
-    has_action_window = bool(inspection_date) or service in {"weather", "flood", "disaster"}
+    age_days = _lead_age_days(lead_data, first_seen)
+    has_action_window = bool(inspection_date)
     has_direct_owner_intent = str(lead_data.get("_lead_channel") or "") == "homeowner_intake"
+    fresh_limit_days = 21 if service in {"weather", "flood", "disaster"} else 45
+    has_recent_signal = has_direct_owner_intent or has_action_window or (age_days is not None and age_days <= fresh_limit_days)
     points = 0
     checks: list[str] = []
     if gc_insight.get("confidence") == "verified":
@@ -94,15 +116,20 @@ def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scori
         checks.append("Oportunidad sensible al tiempo")
     if has_direct_owner_intent:
         checks.append("Homeowner pidió GC directamente")
+    if age_days is not None and age_days <= fresh_limit_days:
+        checks.append(f"Señal fresca ({age_days} días)")
     is_elite = (
         points >= 70
         and has_source
         and has_phone
         and score >= 85
         and (has_value or has_action_window or has_direct_owner_intent)
+        and has_recent_signal
     )
     if not is_elite and not has_phone:
         checks.append("No Elite: falta teléfono")
+    if not is_elite and not has_recent_signal:
+        checks.append("No Elite: señal vieja o sin fecha")
     return min(points, 100), checks[:5], is_elite
 
 
@@ -124,7 +151,7 @@ def _is_elite_lead_record(row_dict: dict, lead_data: dict | None = None) -> tupl
         or lead_data.get("next_scheduled_inspection_date")
         or ""
     )
-    q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, str(inspection_date).strip()[:10])
+    q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, str(inspection_date).strip()[:10], row_dict.get("first_seen", ""))
     return is_elite, q_score, q_checks
 
 
@@ -206,7 +233,7 @@ def _elite_inventory_payload(city_filter: str = "", service_filter: str = "") ->
         if not gc_insight.get("source_url"):
             continue
         scoring = lead_data.get("_scoring", {}) or {}
-        q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring)
+        q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, "", rd.get("first_seen", ""))
         if not is_elite:
             continue
         total += 1
@@ -581,7 +608,7 @@ def swipe_feed():
         inspection_source = (lead_data.get("inspection_source") or "").strip()
         gc_probability    = insp.get("gc_presence_probability") or lead_data.get("_gc_presence_probability") or 0
         premium_quality_score, premium_quality_checks, is_elite_quality = _premium_quality(
-            lead_data, gc_insight, service_type, scoring, inspection_date
+            lead_data, gc_insight, service_type, scoring, inspection_date, row_dict.get("first_seen", "")
         )
         if elite_only and not is_elite_quality:
             continue
@@ -764,7 +791,7 @@ def swipe_action():
     try:
         if action == 'like' and user_id:
             c.execute("""
-                SELECT address_key, lead_data, primary_service_type
+                SELECT address_key, lead_data, primary_service_type, first_seen
                 FROM consolidated_leads
                 WHERE address_key = ?
                 LIMIT 1
@@ -1055,7 +1082,7 @@ def swipe_report_lead_quality():
     c = conn.cursor()
     try:
         c.execute("""
-            SELECT address_key, lead_data, primary_service_type
+            SELECT address_key, lead_data, primary_service_type, first_seen
             FROM consolidated_leads
             WHERE address_key = ?
             LIMIT 1
@@ -1261,7 +1288,7 @@ def swipe_log_contact():
     claim_result = None
     try:
         c.execute("""
-            SELECT address_key, lead_data, primary_service_type
+            SELECT address_key, lead_data, primary_service_type, first_seen
             FROM consolidated_leads
             WHERE address_key = ?
             LIMIT 1

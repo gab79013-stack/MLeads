@@ -1296,6 +1296,7 @@
                             <div><strong id="eliteQaAvg">0/100</strong><span>Avg quality</span></div>
                             <div><strong id="eliteQaPhone">0%</strong><span>Phone coverage</span></div>
                             <div><strong id="eliteQaValue">0%</strong><span>Project value</span></div>
+                            <div><strong id="eliteQaFresh">0%</strong><span>Fresh signal</span></div>
                             <div class="elite-quality-alert" id="eliteQaAlerts">Checking sellability...</div>
                         </div>
                     </div>
@@ -2003,10 +2004,12 @@
                 const data = await response.json();
                 const phonePct = data.coverage?.phone?.pct || 0;
                 const valuePct = data.coverage?.project_value?.pct || 0;
+                const freshPct = data.coverage?.fresh_signal?.pct || 0;
                 document.getElementById('eliteQaTotal').textContent = data.elite_leads || 0;
                 document.getElementById('eliteQaAvg').textContent = `${data.average_quality_score || 0}/100`;
                 document.getElementById('eliteQaPhone').textContent = `${phonePct}%`;
                 document.getElementById('eliteQaValue').textContent = `${valuePct}%`;
+                document.getElementById('eliteQaFresh').textContent = `${freshPct}%`;
                 const labels = {
                     ready_for_elite: 'Ready for Elite',
                     pilot_market: 'Pilot market',

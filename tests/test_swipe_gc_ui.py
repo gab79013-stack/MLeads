@@ -120,18 +120,27 @@ def test_swipe_supports_elite_500_plan_and_quality_evidence():
 def test_elite_quality_gate_requires_phone_source_score_and_action_signal():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
     route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    index_html = _index_html()
     readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
 
     for src in (app_src, route_src):
+        assert "def _lead_age_days" in src
         assert "has_source = bool(gc_insight.get(\"source_url\"))" in src
         assert "has_phone = bool((lead_data.get(\"contact_phone\") or \"\").strip())" in src
+        assert "fresh_limit_days = 21 if service in {\"weather\", \"flood\", \"disaster\"} else 45" in src
+        assert "has_recent_signal" in src
         assert "and has_source" in src
         assert "and has_phone" in src
         assert "and score >= 85" in src
         assert "has_value or has_action_window or has_direct_owner_intent" in src
+        assert "and has_recent_signal" in src
         assert "No Elite: falta teléfono" in src
+        assert "No Elite: señal vieja o sin fecha" in src
+        assert "first_seen" in src
 
-    assert "Elite qualification requires a verified source, phone contact, high score" in readme
+    assert 'id="eliteQaFresh"' in index_html
+    assert "fresh_signal" in app_src
+    assert "Elite qualification requires a verified source, phone contact, high score, fresh signal" in readme
 
 
 def test_swipe_exposes_elite_inventory_for_sales_proof():
