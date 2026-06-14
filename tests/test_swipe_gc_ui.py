@@ -318,6 +318,9 @@ def test_elite_reports_auto_grant_replacement_credits_for_guarantee():
     assert "billable_swipes" in route_src
     assert "Te agregamos 1 crédito de reemplazo Elite" in html
     assert "replacement_credit_status" in app_src
+    assert "open_replacement_credits" in app_src
+    assert "users_with_open_replacements" in app_src
+    assert "créditos abiertos" in index_html
     assert "crédito " in index_html
     assert "auto-grant replacement credits" in readme
 

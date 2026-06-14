@@ -5468,6 +5468,14 @@ def admin_lead_quality_reports():
             FROM lead_quality_reports
         """)
         summary = dict(c.fetchone())
+        c.execute("""
+            SELECT
+                COUNT(*) AS open_replacement_credits,
+                COUNT(DISTINCT user_id) AS users_with_open_replacements
+            FROM elite_replacement_credits
+            WHERE status = 'open'
+        """)
+        summary.update(dict(c.fetchone()))
     finally:
         conn.close()
     return jsonify({"reports": reports, "total": total, "summary": summary, "status": status}), 200

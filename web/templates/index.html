@@ -2792,7 +2792,7 @@
                 if (qualityResp.ok && qualityList) {
                     const qData = await qualityResp.json();
                     document.getElementById('qualityReportCount').textContent =
-                        `${qData.summary?.open_count || 0} abiertos · ${qData.summary?.elite_count || 0} Elite`;
+                        `${qData.summary?.open_count || 0} abiertos · ${qData.summary?.elite_count || 0} Elite · ${qData.summary?.open_replacement_credits || 0} créditos abiertos`;
                     if (!qData.reports.length) {
                         qualityList.innerHTML = '<p style="color:#6b7280">No hay reportes de calidad abiertos.</p>';
                     } else {
