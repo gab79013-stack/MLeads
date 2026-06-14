@@ -2644,7 +2644,7 @@
                                 </div>
                                 <div style="font-size:13px;color:#374151">${escHtml(r.address || r.lead_id)} ${r.city ? '· ' + escHtml(r.city) : ''}</div>
                                 <div style="font-size:13px;color:#111827;margin-top:6px;white-space:pre-wrap">${escHtml(r.details || 'Sin detalles')}</div>
-                                <div style="font-size:12px;color:#6b7280;margin-top:6px">${escHtml(r.email || r.full_name || 'Usuario')}</div>
+                                <div style="font-size:12px;color:#6b7280;margin-top:6px">${escHtml(r.email || r.full_name || 'Usuario')}${r.replacement_credit_status ? ' · crédito ' + escHtml(r.replacement_credit_status) : ''}</div>
                             </div>
                         `).join('');
                     }

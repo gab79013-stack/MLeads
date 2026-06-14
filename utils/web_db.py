@@ -354,6 +354,25 @@ def init_web_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_lead_quality_reports_status ON lead_quality_reports(status, created_at)")
 
     c.execute("""
+        CREATE TABLE IF NOT EXISTS elite_replacement_credits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            lead_id TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open',
+            granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            redeemed_at TIMESTAMP,
+            notes TEXT DEFAULT '',
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            UNIQUE(user_id, lead_id, reason)
+        )
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_elite_replacement_credits_user_status
+        ON elite_replacement_credits(user_id, status, granted_at)
+    """)
+
+    c.execute("""
         CREATE TABLE IF NOT EXISTS lead_followups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             lead_id TEXT NOT NULL,

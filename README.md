@@ -88,7 +88,7 @@ MLeads/
 - Elite leads can be reserved exclusively per contractor for a configurable claim window
 - Elite qualification requires a verified source, phone contact, high score, and either project value, action window, or direct homeowner intent
 - Admin quality report shows sellability, contact coverage, source coverage, project value coverage and market readiness
-- Contractors can report bad leads from Swipe for replacement/QA review
+- Contractors can report bad Elite leads from Swipe; eligible reports auto-grant replacement credits that extend the effective Elite quota
 
 ### Homeowner Intake (`/homeowner-intake`)
 - Public form for homeowners planning an addition, ADU, garage conversion, kitchen remodel, bathroom remodel or whole-home remodel
@@ -139,6 +139,7 @@ cd /opt/MLeads && python3 main.py --run permits  # single agent
   - `users` — auth/users
   - `elite_lead_claims` — exclusive Elite lead reservations
   - `lead_quality_reports` — user-reported lead quality issues
+  - `elite_replacement_credits` — replacement credits for reported Elite leads
 
 ---
 

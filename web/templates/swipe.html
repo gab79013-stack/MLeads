@@ -1100,8 +1100,11 @@ async function reportLeadQuality(leadId) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'report failed');
+        if (Number(data.replacement_credits || 0) > 0) S.replacementCredits = Number(data.replacement_credits || 0);
         toast(data.replacement_review
-            ? (CURRENT_LANG === 'es' ? 'Reporte recibido. Revisaremos reemplazo Elite.' : 'Report received. We will review Elite replacement.')
+            ? (data.replacement_credit_granted
+                ? (CURRENT_LANG === 'es' ? 'Reporte recibido. Te agregamos 1 crédito de reemplazo Elite.' : 'Report received. We added 1 Elite replacement credit.')
+                : (CURRENT_LANG === 'es' ? 'Reporte recibido. Revisaremos reemplazo Elite.' : 'Report received. We will review Elite replacement.'))
             : (CURRENT_LANG === 'es' ? 'Reporte recibido. Gracias.' : 'Report received. Thank you.'));
     } catch (e) {
         toast(CURRENT_LANG === 'es' ? 'No se pudo enviar el reporte' : 'Could not send report');

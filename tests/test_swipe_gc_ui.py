@@ -221,6 +221,30 @@ def test_elite_quality_guarantee_has_user_reports_and_admin_queue():
     assert "Reportes de calidad" in index_html
 
 
+def test_elite_reports_auto_grant_replacement_credits_for_guarantee():
+    html = _html()
+    index_html = _index_html()
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    db_src = (TEMPLATE.parents[1].parents[0] / "utils" / "web_db.py").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS elite_replacement_credits" in db_src
+    assert "idx_elite_replacement_credits_user_status" in db_src
+    assert "def _elite_replacement_credit_count" in app_src
+    assert "def _grant_elite_replacement_credit" in app_src
+    assert "replacement_credit_granted" in app_src
+    assert "replacement_credits" in app_src
+    assert "billable_swipes" in app_src
+    assert "billable_swipes_count" in app_src
+    assert "replacement_credit_granted" in route_src
+    assert "billable_swipes" in route_src
+    assert "Te agregamos 1 crédito de reemplazo Elite" in html
+    assert "replacement_credit_status" in app_src
+    assert "crédito " in index_html
+    assert "auto-grant replacement credits" in readme
+
+
 def test_real_data_elite_auditor_script_exists_for_sales_checks():
     script = (TEMPLATE.parents[1].parents[0] / "scripts" / "audit_elite_real_data.py").read_text(encoding="utf-8")
 

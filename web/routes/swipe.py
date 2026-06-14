@@ -30,6 +30,8 @@ def _get_web_subscription(user_id) -> tuple[bool, str]:
         return False, "free"
     conn = get_db_connection()
     c = conn.cursor()
+    credit_granted = False
+    replacement_credits = 0
     try:
         c.execute("SELECT COALESCE(is_paid, 0), COALESCE(subscription_tier, 'free'), paid_until FROM users WHERE id = ?", (user_id,))
         row = c.fetchone()
@@ -343,7 +345,10 @@ def swipe_feed():
         if subscription_tier == "elite":
             elite_only = True
         tier_limit = _tier_lead_limit(subscription_tier, is_paid)
-        if tier_limit is not None and swipes_count >= tier_limit:
+        credit_count_fn = _get_app_const("_elite_replacement_credit_count", lambda _user_id: 0)
+        replacement_credits = credit_count_fn(user_id) if subscription_tier == "elite" else 0
+        billable_swipes_count = max(swipes_count - replacement_credits, 0)
+        if tier_limit is not None and billable_swipes_count >= tier_limit:
             return jsonify({
                 "leads":        [],
                 "auth_required": True,
@@ -352,6 +357,8 @@ def swipe_feed():
                 "tier_limit":   tier_limit,
                 "tier":         subscription_tier,
                 "swipes_count": swipes_count,
+                "billable_swipes_count": billable_swipes_count,
+                "replacement_credits": replacement_credits,
                 "remaining":    0,
             }), 200
 
@@ -692,6 +699,8 @@ def swipe_feed():
         "is_paid":       locals().get('is_paid', False) if user_id else None,
         "tier":          locals().get('subscription_tier', "free") if user_id else "anon",
         "elite_only":    elite_only,
+        "billable_swipes_count": locals().get("billable_swipes_count", swipes_count),
+        "replacement_credits": locals().get("replacement_credits", 0),
         "anon_id":       anon_id if not user_id else None,
     }
     if remaining is not None:
@@ -851,14 +860,19 @@ def swipe_upgrade_info():
     is_paid, tier = _get_web_subscription(user_id)
     swipes = _count_swipes(user_id, None)
     tier_limit = _tier_lead_limit(str(tier).lower(), is_paid)
+    credit_count_fn = _get_app_const("_elite_replacement_credit_count", lambda _user_id: 0)
+    replacement_credits = credit_count_fn(user_id) if str(tier).lower() == "elite" else 0
+    billable_swipes = max(swipes - replacement_credits, 0)
     return jsonify({
         "is_paid":     is_paid,
         "tier":        tier,
         "swipes":      swipes,
+        "billable_swipes": billable_swipes,
+        "replacement_credits": replacement_credits,
         "free_limit":  _get_app_const("FREE_USER_LEAD_LIMIT", 40),
         "pro_limit":   _get_app_const("PRO_LEAD_LIMIT", 200),
         "elite_limit": _get_app_const("ELITE_LEAD_LIMIT", 80),
-        "remaining":   None if tier_limit is None else max(tier_limit - swipes, 0),
+        "remaining":   None if tier_limit is None else max(tier_limit - billable_swipes, 0),
         "tiers": [
             {"id": "pro",     "price": 29,  "limit": _get_app_const("PRO_LEAD_LIMIT", 200), "label": "Pro"},
             {"id": "premium", "price": 99,  "limit": None,           "label": "Premium"},
@@ -1066,6 +1080,22 @@ def swipe_report_lead_quality():
                        expires_at = CURRENT_TIMESTAMP
                  WHERE lead_id = ? AND user_id = ?
             """, (lead_id, int(user_id)))
+            grant_credit_fn = _get_app_const("_grant_elite_replacement_credit")
+            if callable(grant_credit_fn):
+                credit_granted = grant_credit_fn(
+                    c,
+                    int(user_id),
+                    lead_id,
+                    reason,
+                    "Auto-granted from Elite lead quality report",
+                )
+            c.execute("""
+                SELECT COUNT(*)
+                FROM elite_replacement_credits
+                WHERE user_id = ? AND status = 'open'
+            """, (int(user_id),))
+            row = c.fetchone()
+            replacement_credits = int(row[0]) if row else 0
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -1078,6 +1108,8 @@ def swipe_report_lead_quality():
         "ok": True,
         "is_elite": is_elite_lead,
         "replacement_review": bool(is_elite_lead),
+        "replacement_credit_granted": credit_granted,
+        "replacement_credits": replacement_credits,
         "message": "Gracias. Revisaremos este lead para reemplazo/mejora de calidad.",
     }), 200
 

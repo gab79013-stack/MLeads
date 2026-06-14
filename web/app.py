@@ -477,6 +477,8 @@ def register():
 
     conn = get_db_connection()
     c = conn.cursor()
+    credit_granted = False
+    replacement_credits = 0
     try:
         c.execute("SELECT id FROM users WHERE email = ?", (email,))
         if c.fetchone():
@@ -2724,6 +2726,33 @@ def _count_swipes(user_id, anon_id) -> int:
     return int(row[0]) if row else 0
 
 
+def _elite_replacement_credit_count(user_id) -> int:
+    if not user_id:
+        return 0
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            SELECT COUNT(*)
+            FROM elite_replacement_credits
+            WHERE user_id = ? AND status = 'open'
+        """, (int(user_id),))
+        row = c.fetchone()
+        return int(row[0]) if row else 0
+    except Exception:
+        return 0
+    finally:
+        conn.close()
+
+
+def _grant_elite_replacement_credit(c, user_id: int, lead_id: str, reason: str, notes: str = "") -> bool:
+    c.execute("""
+        INSERT OR IGNORE INTO elite_replacement_credits (user_id, lead_id, reason, status, notes)
+        VALUES (?, ?, ?, 'open', ?)
+    """, (int(user_id), lead_id, reason, notes[:500]))
+    return c.rowcount > 0
+
+
 def _already_swiped_ids(user_id, anon_id) -> set:
     conn = get_db_connection()
     c = conn.cursor()
@@ -3518,7 +3547,9 @@ def swipe_feed():
         if subscription_tier == "elite":
             elite_only = True
         tier_limit = _tier_lead_limit(subscription_tier, is_paid)
-        if tier_limit is not None and swipes_count >= tier_limit:
+        replacement_credits = _elite_replacement_credit_count(user_id) if subscription_tier == "elite" else 0
+        billable_swipes_count = max(swipes_count - replacement_credits, 0)
+        if tier_limit is not None and billable_swipes_count >= tier_limit:
             return jsonify({
                 "leads":        [],
                 "auth_required": True,
@@ -3527,6 +3558,8 @@ def swipe_feed():
                 "tier_limit":   tier_limit,
                 "tier":         subscription_tier,
                 "swipes_count": swipes_count,
+                "billable_swipes_count": billable_swipes_count,
+                "replacement_credits": replacement_credits,
                 "remaining":    0,
             }), 200
 
@@ -3907,6 +3940,8 @@ def swipe_feed():
         "is_paid":       locals().get('is_paid', False) if user_id else None,
         "tier":          locals().get('subscription_tier', "free") if user_id else "anon",
         "elite_only":    elite_only,
+        "billable_swipes_count": locals().get("billable_swipes_count", swipes_count),
+        "replacement_credits": locals().get("replacement_credits", 0),
         "available_service_counts": available_service_counts,
         "available_service_types": sorted(available_service_counts.keys()),
     }
@@ -4099,14 +4134,18 @@ def swipe_upgrade_info():
     is_paid, tier = _get_web_subscription(user_id)
     swipes = _count_swipes(user_id, None)
     tier_limit = _tier_lead_limit(str(tier).lower(), is_paid)
+    replacement_credits = _elite_replacement_credit_count(user_id) if str(tier).lower() == "elite" else 0
+    billable_swipes = max(swipes - replacement_credits, 0)
     return jsonify({
         "is_paid":     is_paid,
         "tier":        tier,
         "swipes":      swipes,
+        "billable_swipes": billable_swipes,
+        "replacement_credits": replacement_credits,
         "free_limit":  FREE_USER_LEAD_LIMIT,
         "pro_limit":   PRO_LEAD_LIMIT,
         "elite_limit": ELITE_LEAD_LIMIT,
-        "remaining":   None if tier_limit is None else max(tier_limit - swipes, 0),
+        "remaining":   None if tier_limit is None else max(tier_limit - billable_swipes, 0),
         "tiers": [
             {"id": "pro",     "price": 29,  "limit": PRO_LEAD_LIMIT, "label": "Pro"},
             {"id": "premium", "price": 99,  "limit": None,           "label": "Premium"},
@@ -4697,6 +4736,20 @@ def swipe_report_lead_quality():
                        expires_at = CURRENT_TIMESTAMP
                  WHERE lead_id = ? AND user_id = ?
             """, (lead_id, int(user_id)))
+            credit_granted = _grant_elite_replacement_credit(
+                c,
+                int(user_id),
+                lead_id,
+                reason,
+                "Auto-granted from Elite lead quality report",
+            )
+            c.execute("""
+                SELECT COUNT(*)
+                FROM elite_replacement_credits
+                WHERE user_id = ? AND status = 'open'
+            """, (int(user_id),))
+            row = c.fetchone()
+            replacement_credits = int(row[0]) if row else 0
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -4709,6 +4762,8 @@ def swipe_report_lead_quality():
         "ok": True,
         "is_elite": is_elite_lead,
         "replacement_review": bool(is_elite_lead),
+        "replacement_credit_granted": credit_granted,
+        "replacement_credits": replacement_credits,
         "message": "Gracias. Revisaremos este lead para reemplazo/mejora de calidad.",
     }), 200
 
@@ -4856,10 +4911,16 @@ def admin_lead_quality_reports():
             SELECT r.id, r.lead_id, r.user_id, u.email, u.full_name,
                    r.reason, r.details, r.is_elite, r.status, r.resolution,
                    r.created_at, r.updated_at,
-                   l.address, l.city, l.primary_service_type
+                   l.address, l.city, l.primary_service_type,
+                   erc.status AS replacement_credit_status,
+                   erc.granted_at AS replacement_credit_granted_at
             FROM lead_quality_reports r
             LEFT JOIN users u ON u.id = r.user_id
             LEFT JOIN consolidated_leads l ON l.address_key = r.lead_id
+            LEFT JOIN elite_replacement_credits erc
+              ON erc.user_id = r.user_id
+             AND erc.lead_id = r.lead_id
+             AND erc.reason = r.reason
             {where}
             ORDER BY r.created_at DESC
             LIMIT 100
