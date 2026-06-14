@@ -165,6 +165,7 @@ def test_swipe_exposes_market_readiness_for_elite_sales():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
     route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
     script_src = (TEMPLATE.parents[1].parents[0] / "scripts" / "audit_elite_real_data.py").read_text(encoding="utf-8")
+    index_html = _index_html()
     readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
 
     assert "@app.route('/api/swipe/market-readiness'" in app_src
@@ -176,6 +177,11 @@ def test_swipe_exposes_market_readiness_for_elite_sales():
     assert "fresh_signal_pct" in app_src
     assert "/api/swipe/market-readiness" in script_src
     assert "source\": \"market-readiness\"" in script_src
+    assert 'id="marketReadinessCard"' in index_html
+    assert "loadMarketReadiness()" in index_html
+    assert "/api/swipe/market-readiness" in index_html
+    assert 'id="marketReadinessList"' in index_html
+    assert "recommended_price" in index_html
     assert "market-readiness API" in readme
 
 

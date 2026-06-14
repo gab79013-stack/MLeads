@@ -421,6 +421,34 @@
             line-height: 1.4;
         }
 
+        .market-readiness-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .market-readiness-row {
+            display: grid;
+            grid-template-columns: minmax(120px, 1fr) auto auto;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg);
+            font-size: 12px;
+        }
+
+        .market-readiness-row strong {
+            font-size: 13px;
+            color: var(--fg);
+        }
+
+        .market-readiness-price {
+            font-weight: 800;
+            color: var(--green);
+        }
+
         /* ── SECTION HEADER ── */
         .section-header {
             display: flex;
@@ -1301,6 +1329,21 @@
                         </div>
                     </div>
 
+                    <div class="elite-quality-card" id="marketReadinessCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Market readiness</div>
+                            <div class="stat-value" id="marketReadyCount">0</div>
+                            <span class="elite-quality-status warn" id="marketReadinessStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="marketPilotCount">0</strong><span>Pilot markets</span></div>
+                            <div><strong id="marketNeedsCount">0</strong><span>Needs inventory</span></div>
+                            <div><strong id="marketEliteTotal">0</strong><span>Elite leads</span></div>
+                            <div class="elite-quality-alert" id="marketReadinessAlerts">Checking market sellability...</div>
+                            <div class="market-readiness-list" id="marketReadinessList"></div>
+                        </div>
+                    </div>
+
                     <div class="section-header">
                         <h3 class="section-title">Recent Leads</h3>
                     </div>
@@ -1968,6 +2011,7 @@
         async function loadDashboard() {
             try {
                 loadEliteQualityReport();
+                loadMarketReadiness();
                 const response = await fetch('/api/leads', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const data = await response.json();
                 document.getElementById('totalLeads').textContent = data.total || 0;
@@ -2026,6 +2070,44 @@
                 statusEl.textContent = 'Unavailable';
                 statusEl.classList.add('danger');
                 document.getElementById('eliteQaAlerts').textContent = 'Elite QA report could not be loaded.';
+            }
+        }
+
+        async function loadMarketReadiness() {
+            const statusEl = document.getElementById('marketReadinessStatus');
+            const listEl = document.getElementById('marketReadinessList');
+            if (!statusEl || !listEl) return;
+            try {
+                const response = await fetch('/api/swipe/market-readiness', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('market readiness unavailable');
+                const data = await response.json();
+                const summary = data.summary || {};
+                const markets = data.markets || [];
+                document.getElementById('marketReadyCount').textContent = summary.ready_markets || 0;
+                document.getElementById('marketPilotCount').textContent = summary.pilot_markets || 0;
+                document.getElementById('marketNeedsCount').textContent = summary.needs_inventory_markets || 0;
+                document.getElementById('marketEliteTotal').textContent = summary.total_elite_leads || 0;
+                statusEl.textContent = (summary.ready_markets || 0) > 0 ? 'Sell Elite' : ((summary.pilot_markets || 0) > 0 ? 'Pilot only' : 'Needs inventory');
+                statusEl.classList.toggle('danger', !(summary.ready_markets || 0) && !(summary.pilot_markets || 0));
+                statusEl.classList.toggle('warn', !(summary.ready_markets || 0) && (summary.pilot_markets || 0) > 0);
+                document.getElementById('marketReadinessAlerts').textContent =
+                    (summary.ready_markets || 0) > 0
+                        ? 'At least one market has enough quality inventory for Elite positioning.'
+                        : 'Use pilot pricing or expand inventory before selling Elite.';
+                listEl.innerHTML = markets.slice(0, 6).map(m => `
+                    <div class="market-readiness-row">
+                        <strong>${escHtml(m.city || 'Unknown')}</strong>
+                        <span>${escHtml(m.status || '')} · ${Number(m.elite_leads || 0)} Elite</span>
+                        <span class="market-readiness-price">${m.recommended_price ? '$' + Number(m.recommended_price).toLocaleString() + '/mo' : 'Hold'}</span>
+                    </div>
+                `).join('') || '<div class="elite-quality-alert">No market readiness data yet.</div>';
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('marketReadinessAlerts').textContent = 'Market readiness could not be loaded.';
+                listEl.innerHTML = '';
             }
         }
 
