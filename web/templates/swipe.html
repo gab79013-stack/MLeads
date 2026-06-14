@@ -787,7 +787,7 @@ function loadFilters() {
 }
 
 // ── App state ─────────────────────────────────────────────────────────────────
-const S = { queue:[], swipes:0, limit:10, loading:false, authed:!!getToken(), isPaid:false, tier:'free', availableServiceCounts:{}, onboardingOpen:false };
+const S = { queue:[], swipes:0, billableSwipes:0, remaining:null, replacementCredits:0, limit:10, loading:false, authed:!!getToken(), isPaid:false, tier:'free', availableServiceCounts:{}, onboardingOpen:false };
 const ONBOARDING_DONE_KEY = 'mleads_onboarding_done';
 
 // ── Progressive score reveal ──────────────────────────────────────────────────
@@ -989,6 +989,9 @@ async function fetchFeed() {
 
         S.limit  = data.anon_limit || 10;
         S.swipes = data.swipes_count || 0;
+        S.billableSwipes = Number(data.billable_swipes_count ?? data.billable_swipes ?? S.swipes);
+        S.remaining = data.remaining ?? null;
+        S.replacementCredits = Number(data.replacement_credits || 0);
         S.availableServiceCounts = data.available_service_counts || {};
         const selectedUnavailable = [...F.leadTypes].filter(cat =>
             Object.keys(S.availableServiceCounts).length > 0 && Number(S.availableServiceCounts[cat] || 0) <= 0
@@ -1104,6 +1107,10 @@ async function refreshSubscriptionStatus(retries = 0) {
         const data = await res.json();
         if (data.is_paid !== undefined) S.isPaid = !!data.is_paid;
         if (data.tier) S.tier = data.tier;
+        if (data.swipes !== undefined) S.swipes = Number(data.swipes || 0);
+        S.billableSwipes = Number(data.billable_swipes ?? data.billable_swipes_count ?? S.swipes);
+        S.remaining = data.remaining ?? null;
+        S.replacementCredits = Number(data.replacement_credits || 0);
         updateCounter();
         if (!S.isPaid && retries > 0) {
             setTimeout(() => refreshSubscriptionStatus(retries - 1), 1500);
@@ -1117,7 +1124,13 @@ async function postSwipe(leadId, action) {
         if (!S.authed) body.anon_id = getAnonId();
         const res  = await fetch('/api/swipe/action', { method:'POST', headers:authHdrs(), body:JSON.stringify(body) });
         const data = await res.json();
-        if (data.swipes_count !== undefined) { S.swipes = data.swipes_count; updateCounter(); }
+        if (data.swipes_count !== undefined) {
+            S.swipes = Number(data.swipes_count || 0);
+            S.billableSwipes = Number(data.billable_swipes_count ?? data.billable_swipes ?? S.swipes);
+            S.remaining = data.remaining ?? null;
+            S.replacementCredits = Number(data.replacement_credits || 0);
+            updateCounter();
+        }
         if (data.auth_required) showPaywall(data.auth_mode || 'register');
         if (data.exclusive_unavailable) {
             toast(data.message || (CURRENT_LANG === 'es' ? 'Este lead Elite ya fue reservado.' : 'This Elite lead has already been reserved.'));
@@ -1161,6 +1174,12 @@ function updateCounter() {
     const cnt = document.getElementById('counter');
     if (S.isPaid) {
         const label = S.tier === 'elite' ? 'Elite' : S.tier === 'premium' ? 'Premium' : 'Pro';
+        if (S.tier === 'elite') {
+            const remaining = S.remaining === null || S.remaining === undefined ? '-' : Number(S.remaining).toLocaleString();
+            const credits = Number(S.replacementCredits || 0);
+            cnt.innerHTML = `<strong style="color:var(--like)">Elite</strong><span id="eliteUsageText" style="color:var(--fg2)"> · ${Number(S.billableSwipes || 0).toLocaleString()} usados · ${remaining} restantes${credits ? ` · ${credits} créditos` : ''}</span>`;
+            return;
+        }
         cnt.innerHTML = `<strong style="color:var(--like)">${label}</strong> ✨`;
         return;
     }

@@ -110,6 +110,9 @@ def test_swipe_supports_elite_500_plan_and_quality_evidence():
     assert "premium_quality_score" in html
     assert "elite_certificate" in html
     assert "Lead certificado Elite" in html
+    assert "eliteUsageText" in html
+    assert "billableSwipes" in html
+    assert "replacementCredits" in html
     assert "elite_certificate" in readme
     assert "elite_only" in html
     assert 'url.searchParams.set("elite_only", "1")' in html or "url.searchParams.set('elite_only', '1')" in html
