@@ -224,10 +224,19 @@ def test_swipe_exposes_elite_sales_proof_for_500_pricing():
 
 def test_admin_elite_quality_report_supports_sellability_audit():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
 
     assert "@app.route('/api/admin/elite-quality-report'" in app_src
     assert "@require_admin" in app_src
     assert "def _elite_quality_report_payload" in app_src
+    assert "@app.route('/api/admin/elite-uplift-candidates'" in app_src
+    assert "def _elite_uplift_candidates_payload" in app_src
+    assert "def _elite_uplift_missing_requirements" in app_src
+    assert "missing_requirements" in app_src
+    assert "next_action" in app_src
+    assert "@bp.route('/admin/elite-uplift-candidates'" in route_src
+    assert "Admin access required" in route_src
     assert "sellability" in app_src
     assert "ready_for_elite" in app_src
     assert "pilot_market" in app_src
@@ -236,6 +245,7 @@ def test_admin_elite_quality_report_supports_sellability_audit():
     assert "project_value" in app_src
     assert "audit_samples" in app_src
     assert "alerts" in app_src
+    assert "Elite uplift queue" in readme
 
 
 def test_admin_dashboard_surfaces_elite_quality_report():
@@ -254,6 +264,11 @@ def test_admin_dashboard_surfaces_elite_quality_report():
     assert "loadEliteClaims()" in html
     assert "/api/admin/elite-claims?status=active" in html
     assert "Active Elite leads are reserved exclusively" in html
+    assert 'id="eliteUpliftCard"' in html
+    assert 'id="eliteUpliftList"' in html
+    assert "loadEliteUpliftCandidates()" in html
+    assert "/api/admin/elite-uplift-candidates?limit=8" in html
+    assert "Prioritize these leads" in html
     assert 'id="elitePilotDemandCard"' in html
     assert 'id="elitePilotTotal"' in html
     assert 'id="elitePilotMarkets"' in html

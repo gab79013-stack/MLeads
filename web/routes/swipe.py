@@ -25,6 +25,23 @@ def _get_app_const(name, default=None):
         return default
 
 
+def _current_user_is_admin() -> bool:
+    user_id = getattr(g, "user_id", None)
+    if not user_id:
+        return False
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            SELECT COUNT(*) FROM user_roles ur
+            JOIN roles r ON ur.role_id = r.id
+            WHERE ur.user_id = ? AND r.name = 'admin'
+        """, (user_id,))
+        return c.fetchone()[0] > 0
+    finally:
+        conn.close()
+
+
 def _get_web_subscription(user_id) -> tuple[bool, str]:
     if not user_id:
         return False, "free"
@@ -1048,6 +1065,24 @@ def swipe_elite_sales_proof():
         "market": None,
         "readiness": {},
     }), 200
+
+
+@bp.route('/admin/elite-uplift-candidates', methods=['GET'])
+@require_auth
+def admin_elite_uplift_candidates():
+    """Return near-Elite candidates when mounted through the modular blueprint."""
+    if not _current_user_is_admin():
+        return jsonify({"error": "Admin access required"}), 403
+    payload_fn = _get_app_const("_elite_uplift_candidates_payload")
+    if callable(payload_fn):
+        city = (request.args.get("city") or "").strip()
+        service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+        try:
+            limit = int(request.args.get("limit", 30))
+        except (TypeError, ValueError):
+            limit = 30
+        return jsonify(payload_fn(city, service, limit)), 200
+    return jsonify({"filters": {}, "scanned_candidates": 0, "returned": 0, "missing_counts": {}, "candidates": []}), 200
 
 
 @bp.route('/swipe/filter-options', methods=['GET'])

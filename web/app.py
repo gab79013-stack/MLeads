@@ -3649,6 +3649,138 @@ def _elite_market_readiness_payload(city_filter: str = "", service_filter: str =
     }
 
 
+def _elite_uplift_missing_requirements(lead_data: dict, gc_insight: dict, service_type: str, scoring: dict, inspection_date: str, first_seen: str) -> list[str]:
+    """Explain what a near-Elite lead still needs before it can be sold."""
+    missing: list[str] = []
+    score = int(scoring.get("score") or 0)
+    has_phone = bool((lead_data.get("contact_phone") or "").strip())
+    has_value = bool(lead_data.get("value_float"))
+    has_action_window = bool(inspection_date)
+    has_direct_owner_intent = str(lead_data.get("_lead_channel") or "") == "homeowner_intake"
+    age_days = _lead_age_days(lead_data, first_seen)
+    fresh_limit_days = 21 if str(service_type or "").lower() in {"weather", "flood", "disaster"} else 45
+    has_recent_signal = has_direct_owner_intent or has_action_window or (age_days is not None and age_days <= fresh_limit_days)
+
+    if not gc_insight.get("source_url"):
+        missing.append("official_source_url")
+    if gc_insight.get("confidence") != "verified":
+        missing.append("verified_source_confidence")
+    if not has_phone:
+        missing.append("phone")
+    if score < 85:
+        missing.append("score_85_plus")
+    if not (has_value or has_action_window or has_direct_owner_intent):
+        missing.append("project_value_or_action_window")
+    if not has_recent_signal:
+        missing.append("fresh_signal")
+    return missing
+
+
+def _elite_uplift_candidates_payload(city_filter: str = "", service_filter: str = "", limit: int = 30) -> dict:
+    """Admin queue of non-Elite leads closest to becoming sellable Elite inventory."""
+    limit = max(1, min(int(limit or 30), 100))
+    conn = get_db_connection()
+    c = conn.cursor()
+    conditions = [
+        build_public_real_lead_sql_filter(),
+        build_gc_interest_sql_filter(),
+    ]
+    params: list = []
+    if city_filter:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+    if service_filter:
+        cats = [x.strip().lower() for x in service_filter.split(",") if x.strip()]
+        service_sql, service_params = build_service_category_filter(cats, _TRADE_SERVICE_TO_AI, _SERVICE_TYPE_CATS)
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
+
+    where_sql = "WHERE " + " AND ".join(conditions)
+    c.execute(f"""
+        SELECT address_key, address, city, lead_data, primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY first_seen DESC
+        LIMIT 5000
+    """, params)
+    rows = c.fetchall()
+    conn.close()
+
+    candidates: list[dict] = []
+    missing_counts: dict[str, int] = {}
+    scanned = 0
+    for row in rows:
+        rd = dict(row)
+        try:
+            lead_data = json.loads(rd.get("lead_data") or "{}")
+        except Exception:
+            continue
+        service_type = (rd.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if not service_type or not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        scanned += 1
+        gc_insight = build_gc_insight(lead_data, service_type)
+        scoring = lead_data.get("_scoring", {}) or {}
+        inspection_date = str(lead_data.get("inspection_date") or lead_data.get("next_inspection_date") or "").strip()[:10]
+        q_score, q_checks, is_elite = _premium_quality(
+            lead_data,
+            gc_insight,
+            service_type,
+            scoring,
+            inspection_date,
+            rd.get("first_seen", ""),
+        )
+        if is_elite:
+            continue
+        missing = _elite_uplift_missing_requirements(lead_data, gc_insight, service_type, scoring, inspection_date, rd.get("first_seen", ""))
+        if not missing:
+            missing = ["quality_score_70_plus"]
+        for item in missing:
+            missing_counts[item] = missing_counts.get(item, 0) + 1
+        uplift_score = q_score - (len(missing) * 6)
+        candidates.append({
+            "lead_id": rd.get("address_key"),
+            "address": rd.get("address") or rd.get("address_key") or "",
+            "city": rd.get("city") or "Unknown",
+            "service_type": service_type,
+            "quality_score": q_score,
+            "uplift_score": uplift_score,
+            "score": int(scoring.get("score") or 0),
+            "missing_requirements": missing,
+            "next_action": _elite_uplift_next_action(missing),
+            "source_label": gc_insight.get("source_label", ""),
+            "source_url": gc_insight.get("source_url", ""),
+            "has_phone": bool((lead_data.get("contact_phone") or "").strip()),
+            "value": lead_data.get("value_float") or 0,
+            "first_seen": rd.get("first_seen", ""),
+            "checks": q_checks,
+        })
+
+    candidates.sort(key=lambda item: (-int(item["uplift_score"]), len(item["missing_requirements"]), item["city"], item["lead_id"]))
+    return {
+        "filters": {"city": city_filter, "service": service_filter},
+        "scanned_candidates": scanned,
+        "returned": min(len(candidates), limit),
+        "missing_counts": dict(sorted(missing_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "candidates": candidates[:limit],
+    }
+
+
+def _elite_uplift_next_action(missing: list[str]) -> str:
+    if "phone" in missing:
+        return "Verify owner/decision-maker phone before selling as Elite."
+    if "official_source_url" in missing or "verified_source_confidence" in missing:
+        return "Attach an auditable public source URL and mark source confidence verified."
+    if "fresh_signal" in missing:
+        return "Refresh permit, inspection, storm or homeowner signal before certification."
+    if "project_value_or_action_window" in missing:
+        return "Capture budget, permit value, inspection window or homeowner intent."
+    if "score_85_plus" in missing:
+        return "Enrich project context until lead score reaches 85+."
+    return "Review manually; lead is close to Elite but below quality threshold."
+
+
 def _elite_sales_proof_payload(city_filter: str = "", service_filter: str = "") -> dict:
     """Public-safe proof points for explaining Elite pricing to contractors."""
     readiness = _elite_market_readiness_payload(city_filter, service_filter)
@@ -4854,6 +4986,19 @@ def admin_elite_quality_report():
     city = (request.args.get("city") or "").strip()
     service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
     return jsonify(_elite_quality_report_payload(city, service)), 200
+
+
+@app.route('/api/admin/elite-uplift-candidates', methods=['GET'])
+@require_admin
+def admin_elite_uplift_candidates():
+    """Return near-Elite candidates that ops can enrich into sellable inventory."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    try:
+        limit = int(request.args.get("limit", 30))
+    except (TypeError, ValueError):
+        limit = 30
+    return jsonify(_elite_uplift_candidates_payload(city, service, limit)), 200
 
 
 PIPELINE_STATUSES = ["Nuevo", "Contactado", "Propuesta", "Negociación", "Ganado", "Perdido"]

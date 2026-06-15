@@ -83,6 +83,7 @@ MLeads/
 - Public market-readiness API reports which cities are ready for Elite, pilot-only, or need more inventory
 - Market readiness includes gap-to-Elite and next-action recommendations so ops knows how to turn a city into a `$500/month` market
 - Public Elite sales-proof API returns ROI-style proof points for explaining the $500/month price
+- Admin Elite uplift queue ranks near-Elite leads by missing requirements so ops can enrich existing inventory into sellable supply
 
 ### Premium Monetization
 - Free preview and authenticated free quota

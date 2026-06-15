@@ -1366,6 +1366,20 @@
                         </div>
                     </div>
 
+                    <div class="elite-quality-card" id="eliteUpliftCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Elite uplift queue</div>
+                            <div class="stat-value" id="eliteUpliftTotal">0</div>
+                            <span class="elite-quality-status warn" id="eliteUpliftStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="eliteUpliftScanned">0</strong><span>Scanned</span></div>
+                            <div><strong id="eliteUpliftTopGap">-</strong><span>Top gap</span></div>
+                            <div class="elite-quality-alert" id="eliteUpliftAlerts">Checking near-Elite candidates...</div>
+                            <div class="market-readiness-list" id="eliteUpliftList"></div>
+                        </div>
+                    </div>
+
                     <div class="elite-quality-card" id="elitePilotDemandCard">
                         <div class="elite-quality-kpi">
                             <div class="stat-label">Elite demand</div>
@@ -2049,6 +2063,7 @@
                 loadEliteQualityReport();
                 loadEliteClaims();
                 loadMarketReadiness();
+                loadEliteUpliftCandidates();
                 loadElitePilotDemand();
                 const response = await fetch('/api/leads', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const data = await response.json();
@@ -2186,6 +2201,46 @@
                 statusEl.textContent = 'Unavailable';
                 statusEl.classList.add('danger');
                 document.getElementById('marketReadinessAlerts').textContent = 'Market readiness could not be loaded.';
+                listEl.innerHTML = '';
+            }
+        }
+
+        async function loadEliteUpliftCandidates() {
+            const statusEl = document.getElementById('eliteUpliftStatus');
+            const listEl = document.getElementById('eliteUpliftList');
+            if (!statusEl || !listEl) return;
+            try {
+                const response = await fetch('/api/admin/elite-uplift-candidates?limit=8', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('elite uplift unavailable');
+                const data = await response.json();
+                const candidates = data.candidates || [];
+                const missingCounts = data.missing_counts || {};
+                const topGap = Object.entries(missingCounts).sort((a, b) => Number(b[1]) - Number(a[1]))[0];
+                document.getElementById('eliteUpliftTotal').textContent = data.returned || candidates.length || 0;
+                document.getElementById('eliteUpliftScanned').textContent = data.scanned_candidates || 0;
+                document.getElementById('eliteUpliftTopGap').textContent = topGap ? `${topGap[0]} (${topGap[1]})` : '-';
+                statusEl.textContent = candidates.length ? 'Enrich next' : 'No queue';
+                statusEl.classList.toggle('warn', candidates.length > 0);
+                statusEl.classList.toggle('danger', false);
+                document.getElementById('eliteUpliftAlerts').textContent = candidates.length
+                    ? 'Prioritize these leads to convert existing inventory into sellable Elite supply.'
+                    : 'No near-Elite candidates found for current inventory.';
+                listEl.innerHTML = candidates.slice(0, 6).map(c => `
+                    <div class="market-readiness-row">
+                        <strong>${escHtml(c.city || 'Unknown')}</strong>
+                        <span>${escHtml(c.service_type || 'lead')} · ${Number(c.quality_score || 0)}/100 · missing ${Number((c.missing_requirements || []).length)}</span>
+                        <span class="market-readiness-price">${Number(c.value || 0) ? '$' + Number(c.value || 0).toLocaleString() : 'No value'}</span>
+                        <div class="market-readiness-action">
+                            ${escHtml(c.next_action || '')}
+                        </div>
+                    </div>
+                `).join('') || '<div class="elite-quality-alert">No uplift candidates yet.</div>';
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('eliteUpliftAlerts').textContent = 'Elite uplift queue could not be loaded.';
                 listEl.innerHTML = '';
             }
         }
