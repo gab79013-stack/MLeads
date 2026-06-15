@@ -88,6 +88,7 @@ MLeads/
 ### Premium Monetization
 - Free preview and authenticated free quota
 - Pro/Premium/Elite Stripe checkout support
+- Admin billing-readiness API/dashboard card shows whether production has Stripe keys, plan price IDs, webhook secret, return URL, and a sellable Elite market before sales pushes paid checkout
 - Elite plan designed for `$500/month` positioning
 - Elite checkout is blocked unless the selected market/filter is `ready_for_elite` with a `$500+` recommended price
 - Blocked Elite checkout attempts are saved as pilot requests so sales can follow up when the market becomes sellable

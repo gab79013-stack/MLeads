@@ -1321,6 +1321,20 @@
                         </div>
                     </div>
 
+                    <div class="elite-quality-card" id="billingReadinessCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Billing readiness</div>
+                            <div class="stat-value" id="billingReadyValue">-</div>
+                            <span class="elite-quality-status warn" id="billingReadyStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="billingCheckout">-</strong><span>Checkout</span></div>
+                            <div><strong id="billingWebhook">-</strong><span>Webhook</span></div>
+                            <div><strong id="billingElite">-</strong><span>Elite $500</span></div>
+                            <div class="elite-quality-alert" id="billingReadyAlerts">Checking Stripe configuration...</div>
+                        </div>
+                    </div>
+
                     <div class="elite-quality-card" id="eliteQualityCard">
                         <div class="elite-quality-kpi">
                             <div class="stat-label">Elite QA</div>
@@ -2060,6 +2074,7 @@
         // ── Dashboard ──
         async function loadDashboard() {
             try {
+                loadBillingReadiness();
                 loadEliteQualityReport();
                 loadEliteClaims();
                 loadMarketReadiness();
@@ -2088,6 +2103,37 @@
                     </tr>
                 `).join('') || '<tr><td colspan="5" class="empty-state"><p>No leads</p></td></tr>';
             } catch (e) { console.error(e); }
+        }
+
+        async function loadBillingReadiness() {
+            const statusEl = document.getElementById('billingReadyStatus');
+            if (!statusEl) return;
+            try {
+                const response = await fetch('/api/admin/billing-readiness', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('billing readiness unavailable');
+                const data = await response.json();
+                const checkoutReady = !!data.checkout_ready;
+                const webhookReady = !!data.webhook_ready;
+                const eliteReady = !!data.elite_ready;
+                document.getElementById('billingReadyValue').textContent = checkoutReady ? 'Ready' : 'Setup';
+                document.getElementById('billingCheckout').textContent = checkoutReady ? 'Ready' : 'Blocked';
+                document.getElementById('billingWebhook').textContent = webhookReady ? 'Ready' : 'Missing';
+                document.getElementById('billingElite').textContent = eliteReady ? '$500 ready' : 'Hold';
+                statusEl.textContent = checkoutReady && webhookReady && eliteReady ? 'Ready to sell' : 'Action needed';
+                statusEl.classList.toggle('danger', !checkoutReady || !webhookReady);
+                statusEl.classList.toggle('warn', checkoutReady && webhookReady && !eliteReady);
+                const missing = data.missing || [];
+                const market = data.elite_market || {};
+                document.getElementById('billingReadyAlerts').textContent = missing.length
+                    ? `Missing production env: ${missing.join(', ')}.`
+                    : `Return URL ${data.base_url || 'current host'} · Elite ${market.city || 'market'} ${market.status || 'unknown'}.`;
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('billingReadyAlerts').textContent = 'Billing readiness could not be loaded.';
+            }
         }
 
         async function loadEliteQualityReport() {

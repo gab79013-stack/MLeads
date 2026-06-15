@@ -2443,6 +2443,71 @@ def bot_users_stats():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@app.route('/api/admin/billing-readiness', methods=['GET'])
+@require_admin
+def admin_billing_readiness():
+    """Report whether production can actually start paid Stripe checkouts."""
+    return jsonify(_billing_readiness_payload()), 200
+
+
+def _billing_readiness_payload() -> dict:
+    stripe_key_set = bool((os.getenv('STRIPE_API_KEY') or '').strip())
+    webhook_secret_set = bool((os.getenv('STRIPE_WEBHOOK_SECRET') or '').strip())
+    generic_price_set = bool((os.getenv('STRIPE_PRICE_ID') or '').strip())
+    base_url = _checkout_base_url()
+    tiers = {}
+    missing = []
+
+    if not stripe_key_set:
+        missing.append('STRIPE_API_KEY')
+    if not webhook_secret_set:
+        missing.append('STRIPE_WEBHOOK_SECRET')
+
+    for tier in ('pro', 'premium', 'elite'):
+        specific_key = f'STRIPE_PRICE_ID_{tier.upper()}'
+        price_set = bool((os.getenv(specific_key) or os.getenv('STRIPE_PRICE_ID') or '').strip())
+        tiers[tier] = {
+            "price_configured": price_set,
+            "uses_generic_price": price_set and not bool((os.getenv(specific_key) or '').strip()),
+        }
+        if not price_set:
+            missing.append(specific_key)
+
+    elite_proof = {}
+    try:
+        proof = _elite_sales_proof_payload()
+        elite_proof = {
+            "status": proof.get("status"),
+            "recommended_price": proof.get("recommended_price"),
+            "city": (proof.get("market") or {}).get("city"),
+            "elite_leads": (proof.get("market") or {}).get("elite_leads"),
+        }
+    except Exception as exc:
+        elite_proof = {"status": "unavailable", "error": str(exc)[:120]}
+
+    checkout_ready = stripe_key_set and all(t["price_configured"] for t in tiers.values())
+    elite_ready = (
+        checkout_ready
+        and elite_proof.get("status") == "ready_for_elite"
+        and int(elite_proof.get("recommended_price") or 0) >= 500
+    )
+
+    return {
+        "checkout_ready": checkout_ready,
+        "webhook_ready": stripe_key_set and webhook_secret_set,
+        "elite_ready": elite_ready,
+        "base_url": base_url,
+        "missing": sorted(set(missing)),
+        "tiers": tiers,
+        "elite_market": elite_proof,
+        "next_action": (
+            "Add Stripe API key, webhook secret, and plan price IDs to production."
+            if missing else
+            "Billing is configured; run a Stripe test checkout before selling live."
+        ),
+    }
+
+
 @app.route('/api/admin/elite-pilot-requests', methods=['GET'])
 @require_admin
 def admin_elite_pilot_requests():
