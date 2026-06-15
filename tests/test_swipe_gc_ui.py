@@ -406,6 +406,8 @@ def test_stripe_elite_subscription_state_is_persisted_for_recurring_billing():
     db_src = (TEMPLATE.parents[1].parents[0] / "utils" / "web_db.py").read_text(encoding="utf-8")
     readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
     index_html = _index_html()
+    docker_doc = (TEMPLATE.parents[2] / "DOCKER.md").read_text(encoding="utf-8")
+    billing_script = (TEMPLATE.parents[2] / "scripts" / "configure_stripe_billing.py").read_text(encoding="utf-8")
 
     assert "city: F.city || ''" in html
     assert "service: [...F.leadTypes].join(',')" in html
@@ -432,6 +434,10 @@ def test_stripe_elite_subscription_state_is_persisted_for_recurring_billing():
     assert "elite_ready" in app_src
     assert "Billing readiness" in index_html
     assert "/api/admin/billing-readiness" in index_html
+    assert "configure_stripe_billing.py" in docker_doc
+    assert "STRIPE_PRICE_ID_ELITE" in docker_doc
+    assert "getpass.getpass" in billing_script
+    assert "chmod(0o600)" in billing_script
     assert "def admin_update_elite_pilot_request" in app_src
     assert "function showElitePilotRequest" in html
     assert "Solicitud piloto registrada" in html

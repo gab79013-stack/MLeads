@@ -20,6 +20,34 @@ docker compose ps
 curl -fsS http://127.0.0.1:${PORT:-5001}/api/health
 ```
 
+## Stripe billing
+
+The web checkout requires production Stripe values in `.env.production`.
+Configure them on the server without printing secrets:
+
+```bash
+python3 scripts/configure_stripe_billing.py
+docker compose up -d --build web
+```
+
+Required values:
+
+- `STRIPE_API_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_ID_PRO`
+- `STRIPE_PRICE_ID_PREMIUM`
+- `STRIPE_PRICE_ID_ELITE`
+- `BASE_URL` such as `http://2.25.162.58` or the production domain
+
+In Stripe, point the webhook to:
+
+```text
+BASE_URL/api/stripe/webhook
+```
+
+Use the admin dashboard `Billing readiness` card to confirm checkout,
+webhook, and Elite `$500/mo` readiness before sending contractors to pay.
+
 ## Optional background agents
 
 Only start the worker when you want the scheduled collection/orchestrator loop active:
