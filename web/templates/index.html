@@ -449,6 +449,13 @@
             color: var(--green);
         }
 
+        .market-readiness-action {
+            grid-column: 1 / -1;
+            color: var(--fg-muted);
+            font-size: 11.5px;
+            line-height: 1.35;
+        }
+
         /* ── SECTION HEADER ── */
         .section-header {
             display: flex;
@@ -2169,6 +2176,10 @@
                         <strong>${escHtml(m.city || 'Unknown')}</strong>
                         <span>${escHtml(m.status || '')} · ${Number(m.elite_leads || 0)} Elite</span>
                         <span class="market-readiness-price">${m.recommended_price ? '$' + Number(m.recommended_price).toLocaleString() + '/mo' : 'Hold'}</span>
+                        <div class="market-readiness-action">
+                            Gap: ${Number(m.gap_to_elite?.elite_leads || 0)} leads · ${Number(m.gap_to_elite?.phone_pct || 0)} pts phone.
+                            ${escHtml((m.next_actions || [])[0] || '')}
+                        </div>
                     </div>
                 `).join('') || '<div class="elite-quality-alert">No market readiness data yet.</div>';
             } catch (e) {

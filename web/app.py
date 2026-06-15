@@ -3444,6 +3444,65 @@ def _elite_quality_report_payload(city_filter: str = "", service_filter: str = "
     return report
 
 
+def _elite_market_action_plan(
+    elite: int,
+    avg_quality: float,
+    phone_pct: float,
+    value_pct: float,
+    hot_pct: float,
+    candidate_leads: int,
+    status: str,
+) -> dict:
+    """Return sales-ops actions needed to make a market sellable at Elite price."""
+    ready_elite_min = 50
+    ready_quality_min = 80
+    ready_phone_min = 90
+    pilot_elite_min = 15
+    pilot_phone_min = 80
+
+    gap_to_elite = {
+        "elite_leads": max(ready_elite_min - elite, 0),
+        "average_quality_score": max(round(ready_quality_min - avg_quality, 1), 0),
+        "phone_pct": max(round(ready_phone_min - phone_pct, 1), 0),
+        "project_value_pct": max(round(50 - value_pct, 1), 0),
+        "hot_score_pct": max(round(70 - hot_pct, 1), 0),
+    }
+    next_actions: list[str] = []
+    if gap_to_elite["elite_leads"]:
+        next_actions.append(
+            f"Add {gap_to_elite['elite_leads']} more Elite-qualified leads from homeowner intake, permits and storm signals."
+        )
+    if gap_to_elite["phone_pct"]:
+        next_actions.append(
+            f"Enrich/verify phone coverage by {gap_to_elite['phone_pct']} pts before selling at $500/month."
+        )
+    if gap_to_elite["average_quality_score"]:
+        next_actions.append(
+            f"Raise average quality by {gap_to_elite['average_quality_score']} pts with fresher source, value and contact evidence."
+        )
+    if gap_to_elite["project_value_pct"]:
+        next_actions.append(
+            f"Capture project value/budget for {gap_to_elite['project_value_pct']} pts more leads to make ROI proof stronger."
+        )
+    if not next_actions:
+        next_actions.append("Ready for $500/month Elite positioning; monitor reports and replacement credits weekly.")
+
+    if status == "ready_for_elite":
+        priority = "sell_now"
+    elif elite >= pilot_elite_min and phone_pct >= pilot_phone_min:
+        priority = "pilot_and_enrich"
+    elif candidate_leads >= ready_elite_min:
+        priority = "enrich_existing_inventory"
+    else:
+        priority = "source_more_inventory"
+
+    return {
+        "priority": priority,
+        "gap_to_elite": gap_to_elite,
+        "next_actions": next_actions[:4],
+    }
+
+
 def _elite_market_readiness_payload(city_filter: str = "", service_filter: str = "") -> dict:
     """Public-safe market readiness summary for selling Elite subscriptions."""
     conn = get_db_connection()
@@ -3540,6 +3599,15 @@ def _elite_market_readiness_payload(city_filter: str = "", service_filter: str =
         else:
             status = "needs_inventory"
             recommended_price = 0
+        action_plan = _elite_market_action_plan(
+            elite,
+            avg_quality,
+            phone_pct,
+            value_pct,
+            hot_pct,
+            int(market["candidate_leads"]),
+            status,
+        )
         readiness.append({
             "city": city,
             "status": status,
@@ -3547,6 +3615,9 @@ def _elite_market_readiness_payload(city_filter: str = "", service_filter: str =
             "candidate_leads": int(market["candidate_leads"]),
             "elite_leads": elite,
             "average_quality_score": avg_quality,
+            "priority": action_plan["priority"],
+            "gap_to_elite": action_plan["gap_to_elite"],
+            "next_actions": action_plan["next_actions"],
             "coverage": {
                 "phone_pct": phone_pct,
                 "project_value_pct": value_pct,

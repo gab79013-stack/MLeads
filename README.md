@@ -81,6 +81,7 @@ MLeads/
 - GC-focused routing prioritizes storm/weather, open owner/GC opportunities, and independently verifiable official sources
 - Elite-only filter for curated, high-confidence leads
 - Public market-readiness API reports which cities are ready for Elite, pilot-only, or need more inventory
+- Market readiness includes gap-to-Elite and next-action recommendations so ops knows how to turn a city into a `$500/month` market
 - Public Elite sales-proof API returns ROI-style proof points for explaining the $500/month price
 
 ### Premium Monetization

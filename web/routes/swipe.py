@@ -1027,6 +1027,8 @@ def swipe_market_readiness():
         "markets": [],
         "filters": {"city": city, "service": service},
         "thresholds": {},
+        "gap_to_elite": {},
+        "next_actions": ["Connect the app helper to compute market-level Elite action plans."],
     }), 200
 
 

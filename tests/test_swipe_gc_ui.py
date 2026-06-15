@@ -177,7 +177,11 @@ def test_swipe_exposes_market_readiness_for_elite_sales():
     assert "@app.route('/api/swipe/market-readiness'" in app_src
     assert "@bp.route('/swipe/market-readiness'" in route_src
     assert "def _elite_market_readiness_payload" in app_src
+    assert "next_actions" in route_src
     assert "recommended_price" in app_src
+    assert "def _elite_market_action_plan" in app_src
+    assert "gap_to_elite" in app_src
+    assert "next_actions" in app_src
     assert '"ready_for_elite": {"elite_leads": 50' in app_src
     assert '"pilot_market": {"elite_leads": 15' in app_src
     assert "fresh_signal_pct" in app_src
@@ -188,7 +192,11 @@ def test_swipe_exposes_market_readiness_for_elite_sales():
     assert "/api/swipe/market-readiness" in index_html
     assert 'id="marketReadinessList"' in index_html
     assert "recommended_price" in index_html
+    assert "market-readiness-action" in index_html
+    assert "m.gap_to_elite?.elite_leads" in index_html
+    assert "m.next_actions" in index_html
     assert "market-readiness API" in readme
+    assert "gap-to-Elite" in readme
 
 
 def test_swipe_exposes_elite_sales_proof_for_500_pricing():
