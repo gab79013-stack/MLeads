@@ -210,9 +210,12 @@ def test_swipe_exposes_elite_sales_proof_for_500_pricing():
     readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
 
     assert 'id="eliteSalesProof"' in html
+    assert 'id="eliteUpgradeBtn"' in html
     assert "function loadEliteSalesProof()" in html
     assert "/api/swipe/elite-sales-proof" in html
     assert "loadEliteSalesProof();" in html
+    assert "Comprar Elite en" in html
+    assert "Buy Elite in" in html
     assert "@app.route('/api/swipe/elite-sales-proof'" in app_src
     assert "@bp.route('/swipe/elite-sales-proof'" in route_src
     assert "def _elite_sales_proof_payload" in app_src

@@ -648,7 +648,7 @@
                 <div class="tier-card elite">
                     <div class="tier-head"><div><div class="tier-name">Elite</div><div class="tier-price">$500<small>/mes</small></div></div><strong style="font-size:11px;color:#111827">Curado</strong></div>
                     <div class="tier-desc">Solo leads con evidencia fuerte: fuente oficial, contacto, score alto y ventana de acción. Ideal si un cierre paga varios meses.</div>
-                    <button class="tier-btn" onclick="handleUpgrade('elite')" style="background:#111827">Elegir Elite</button>
+                    <button class="tier-btn" id="eliteUpgradeBtn" onclick="handleUpgrade('elite')" style="background:#111827">Elegir Elite</button>
                 </div>
             </div>
             <p style="font-size:11px;color:var(--muted);text-align:center">Cancela cuando quieras · sin compromisos</p>
@@ -1067,6 +1067,8 @@ async function loadEliteSalesProof() {
     const box = document.getElementById('eliteSalesProof');
     if (!box) return;
     box.style.display = 'none';
+    const eliteBtn = document.getElementById('eliteUpgradeBtn');
+    if (eliteBtn) eliteBtn.textContent = CURRENT_LANG === 'es' ? 'Elegir Elite' : 'Choose Elite';
     try {
         const url = new URL('/api/swipe/elite-sales-proof', location.origin);
         if (F.city) url.searchParams.set('city', F.city);
@@ -1076,8 +1078,15 @@ async function loadEliteSalesProof() {
         const data = await res.json();
         const points = Array.isArray(data.proof_points) ? data.proof_points.slice(0, 3) : [];
         if (!points.length && !data.headline) return;
+        const market = data.market || {};
         document.getElementById('eliteProofHeadline').textContent = data.headline || (CURRENT_LANG === 'es' ? 'Prueba de valor Elite' : 'Elite value proof');
         document.getElementById('eliteProofBody').textContent = points.join(' ');
+        if (eliteBtn && data.status === 'ready_for_elite' && Number(data.recommended_price || 0) >= 500) {
+            const city = market.city || F.city || '';
+            eliteBtn.textContent = city
+                ? (CURRENT_LANG === 'es' ? `Comprar Elite en ${city}` : `Buy Elite in ${city}`)
+                : (CURRENT_LANG === 'es' ? 'Comprar Elite disponible' : 'Buy available Elite');
+        }
         box.style.display = '';
     } catch (e) {
         box.style.display = 'none';
@@ -1984,7 +1993,11 @@ async function handleUpgrade(tier) {
         toast(e.message || 'Error al conectar con el servidor de pagos');
         if (btn) {
             btn.disabled = false;
-            btn.textContent = tier === 'pro' ? 'Elegir Pro' : tier === 'elite' ? 'Elegir Elite' : 'Elegir Premium';
+            if (tier === 'elite') {
+                loadEliteSalesProof();
+            } else {
+                btn.textContent = tier === 'pro' ? 'Elegir Pro' : 'Elegir Premium';
+            }
         }
     }
 }
