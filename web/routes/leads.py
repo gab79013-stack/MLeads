@@ -3,6 +3,7 @@ leads_routes.py — Leads API routes
 Extracted from app.py by refactor_extract4.py
 """
 import logging
+import os
 
 from flask import Blueprint, request, jsonify, g
 
@@ -1054,7 +1055,7 @@ def create_payment_checkout():
         user = c.fetchone()
         conn.close()
 
-        base_url = os.getenv('BASE_URL', 'http://104.42.252.241:5000')
+        base_url = _checkout_base_url()
         checkout_metadata = {'user_id': str(g.user_id), 'tier': tier, **checkout_context}
         session = _stripe.checkout.Session.create(
             mode='subscription',
@@ -1077,6 +1078,14 @@ def _checkout_filter(value) -> str:
     if isinstance(value, (list, tuple, set)):
         value = ",".join(str(v) for v in value if str(v).strip())
     return str(value or "").strip()[:120]
+
+
+def _checkout_base_url() -> str:
+    """Resolve Stripe return URLs from production config or the active request host."""
+    configured = (os.getenv('BASE_URL') or '').strip()
+    if configured:
+        return configured.rstrip('/')
+    return request.host_url.rstrip('/')
 
 
 def _elite_checkout_guard(tier: str, data: dict):

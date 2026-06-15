@@ -437,6 +437,12 @@ def test_stripe_elite_subscription_state_is_persisted_for_recurring_billing():
     assert "stripe_subscription_id = COALESCE" in app_src
     assert "stripe_customer_id = COALESCE" in app_src
     assert "SELECT COALESCE(is_paid, 0), COALESCE(subscription_tier, 'free'), paid_until" in app_src
+    assert "def _checkout_base_url" in app_src
+    assert "def _checkout_base_url" in route_src
+    assert "request.host_url.rstrip('/')" in app_src
+    assert "request.host_url.rstrip('/')" in route_src
+    assert "104.42.252.241" not in app_src
+    assert "104.42.252.241" not in route_src
 
 
 def test_swipe_refreshes_subscription_status_after_stripe_return():
