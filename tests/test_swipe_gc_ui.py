@@ -131,6 +131,9 @@ def test_elite_quality_gate_requires_phone_source_score_and_action_signal():
 
     for src in (app_src, route_src):
         assert "def _lead_age_days" in src
+        assert "dates: list[datetime]" in src
+        assert "max(dates)" in src
+        assert "raw_fallback" in src
         assert "has_source = bool(gc_insight.get(\"source_url\"))" in src
         assert "has_phone = bool((lead_data.get(\"contact_phone\") or \"\").strip())" in src
         assert "fresh_limit_days = 21 if service in {\"weather\", \"flood\", \"disaster\"} else 45" in src

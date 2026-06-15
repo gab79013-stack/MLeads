@@ -80,6 +80,7 @@ def _tier_lead_limit(tier: str, is_paid: bool) -> int | None:
 
 
 def _lead_age_days(lead_data: dict, fallback_date: str = "") -> int | None:
+    dates: list[datetime] = []
     for field in ("issued_date", "issue_date", "event_date", "created_at", "last_updated", "_first_seen"):
         raw = (lead_data.get(field) or "").strip() if isinstance(lead_data.get(field), str) else lead_data.get(field)
         if not raw:
@@ -90,11 +91,20 @@ def _lead_age_days(lead_data: dict, fallback_date: str = "") -> int | None:
                 dt = datetime.fromisoformat(text[:19])
             else:
                 dt = datetime.fromisoformat(text[:10])
-            return max((datetime.utcnow() - dt).days, 0)
+            dates.append(dt)
         except Exception:
             continue
     if fallback_date:
-        return _lead_age_days({"_first_seen": fallback_date})
+        raw_fallback = str(fallback_date).strip().replace("Z", "").replace("T", " ")
+        try:
+            if len(raw_fallback) >= 19:
+                dates.append(datetime.fromisoformat(raw_fallback[:19]))
+            else:
+                dates.append(datetime.fromisoformat(raw_fallback[:10]))
+        except Exception:
+            pass
+    if dates:
+        return max((datetime.utcnow() - max(dates)).days, 0)
     return None
 
 
