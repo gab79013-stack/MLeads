@@ -1017,13 +1017,82 @@ def swipe_upgrade_info():
         "replacement_credits": replacement_credits,
         "free_limit":  _get_app_const("FREE_USER_LEAD_LIMIT", 40),
         "pro_limit":   _get_app_const("PRO_LEAD_LIMIT", 200),
+        "quality_limit": _get_app_const("QUALITY_LEAD_LIMIT", 120),
         "elite_limit": _get_app_const("ELITE_LEAD_LIMIT", 80),
         "remaining":   None if tier_limit is None else max(tier_limit - billable_swipes, 0),
         "tiers": [
+            {"id": "free",    "price": 0,   "limit": _get_app_const("FREE_USER_LEAD_LIMIT", 40), "label": "Free", "trial": True},
             {"id": "pro",     "price": 29,  "limit": _get_app_const("PRO_LEAD_LIMIT", 200), "label": "Pro"},
+            {"id": "quality", "price": 199, "limit": _get_app_const("QUALITY_LEAD_LIMIT", 120), "label": "Quality", "curated": True},
             {"id": "premium", "price": 99,  "limit": None,           "label": "Premium"},
             {"id": "elite",   "price": 500, "limit": _get_app_const("ELITE_LEAD_LIMIT", 80), "label": "Elite", "curated": True},
         ],
+    }), 200
+
+
+@bp.route('/swipe/free-leads', methods=['GET'])
+def swipe_free_leads():
+    """Public free-leads preview API for the top-of-funnel offer."""
+    payload_fn = _get_app_const("_free_leads_offer_payload")
+    if callable(payload_fn):
+        city = (request.args.get("city") or "").strip()
+        service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+        try:
+            limit = int(request.args.get("limit", 6))
+        except (TypeError, ValueError):
+            limit = 6
+        return jsonify(payload_fn(city, service, limit)), 200
+    return jsonify({
+        "headline": "Muestra gratis para captar contratistas",
+        "subheadline": "Lead gratis como embudo y plan Quality para monetizar leads mejores.",
+        "free_limit": _get_app_const("FREE_USER_LEAD_LIMIT", 40),
+        "anon_limit": ANON_LEAD_LIMIT,
+        "sample_count": 0,
+        "scanned_candidates": 0,
+        "sample_leads": [],
+        "next_action": "Regístrate para desbloquear el paquete gratis completo y luego sube a Quality si quieres leads más limpios.",
+    }), 200
+
+
+@bp.route('/swipe/quality-inventory', methods=['GET'])
+def swipe_quality_inventory():
+    """Non-sensitive inventory counts for the Quality plan."""
+    payload_fn = _get_app_const("_quality_market_readiness_payload")
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    if callable(payload_fn):
+        return jsonify(payload_fn(city, service)), 200
+    return jsonify({
+        "summary": {
+            "ready_markets": 0,
+            "pilot_markets": 0,
+            "needs_inventory_markets": 0,
+            "total_candidate_leads": 0,
+            "total_quality_leads": 0,
+        },
+        "markets": [],
+        "filters": {"city": city, "service": service},
+        "thresholds": {},
+        "gap_to_quality": {},
+        "next_actions": ["Connect the app helper to compute market-level Quality action plans."],
+    }), 200
+
+
+@bp.route('/swipe/quality-sales-proof', methods=['GET'])
+def swipe_quality_sales_proof():
+    """Public-safe proof points for selling the Quality plan."""
+    payload_fn = _get_app_const("_quality_sales_proof_payload")
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    if callable(payload_fn):
+        return jsonify(payload_fn(city, service)), 200
+    return jsonify({
+        "status": "needs_inventory",
+        "recommended_price": 0,
+        "headline": "Quality sales proof unavailable.",
+        "proof_points": [],
+        "market": None,
+        "readiness": {},
     }), 200
 
 

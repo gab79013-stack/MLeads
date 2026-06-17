@@ -2463,7 +2463,7 @@ def _billing_readiness_payload() -> dict:
     if not webhook_secret_set:
         missing.append('STRIPE_WEBHOOK_SECRET')
 
-    for tier in ('pro', 'premium', 'elite'):
+    for tier in ('pro', 'quality', 'premium', 'elite'):
         specific_key = f'STRIPE_PRICE_ID_{tier.upper()}'
         price_set = bool((os.getenv(specific_key) or os.getenv('STRIPE_PRICE_ID') or '').strip())
         tiers[tier] = {
@@ -2668,14 +2668,14 @@ def admin_elite_claims():
 def create_payment_checkout():
     """
     Create a Stripe Checkout session for the authenticated web user.
-    Body: {"tier": "pro" | "premium" | "elite"}
+    Body: {"tier": "pro" | "quality" | "premium" | "elite"}
     Returns: {"checkout_url": "https://checkout.stripe.com/..."}
-    Requires STRIPE_API_KEY and STRIPE_PRICE_ID_PRO / STRIPE_PRICE_ID_PREMIUM / STRIPE_PRICE_ID_ELITE in env.
+    Requires STRIPE_API_KEY and STRIPE_PRICE_ID_* in env.
     """
     data = request.get_json(silent=True) or {}
     tier = (data.get('tier') or 'pro').lower()
-    if tier not in ('pro', 'premium', 'elite'):
-        return jsonify({"error": "Tier must be 'pro', 'premium' or 'elite'"}), 400
+    if tier not in ('pro', 'quality', 'premium', 'elite'):
+        return jsonify({"error": "Tier must be 'pro', 'quality', 'premium' or 'elite'"}), 400
 
     elite_gate, checkout_context = _elite_checkout_guard(tier, data)
     if elite_gate:
@@ -2966,6 +2966,7 @@ ANON_LEAD_LIMIT = int(os.getenv("SWIPE_ANON_LIMIT", "10"))
 FREE_USER_LEAD_LIMIT = int(os.getenv("SWIPE_FREE_LIMIT", "40"))
 REQUIRE_CONTACT = os.getenv("SWIPE_REQUIRE_CONTACT", "false").lower() in ("true", "1", "yes")
 PRO_LEAD_LIMIT = int(os.getenv("SWIPE_PRO_LIMIT", "200"))   # $29/mo tier
+QUALITY_LEAD_LIMIT = int(os.getenv("SWIPE_QUALITY_LIMIT", "120"))  # mid-tier quality plan
 ELITE_LEAD_LIMIT = int(os.getenv("SWIPE_ELITE_LIMIT", "80")) # $500/mo curated tier
 ELITE_CLAIM_DAYS = int(os.getenv("SWIPE_ELITE_CLAIM_DAYS", "14"))
 # PREMIUM = is_paid flag + no limit ($99/mo)
@@ -3001,6 +3002,8 @@ def _tier_lead_limit(tier: str, is_paid: bool) -> int | None:
         return FREE_USER_LEAD_LIMIT
     if tier == "pro":
         return PRO_LEAD_LIMIT
+    if tier == "quality":
+        return QUALITY_LEAD_LIMIT
     if tier == "elite":
         return ELITE_LEAD_LIMIT
     return None
@@ -3729,6 +3732,369 @@ def _elite_market_readiness_payload(city_filter: str = "", service_filter: str =
             "ready_for_elite": {"elite_leads": 50, "average_quality_score": 80, "phone_pct": 90, "price": 500},
             "pilot_market": {"elite_leads": 15, "phone_pct": 80, "price": 250},
         },
+    }
+
+
+def _quality_lead_profile(
+    lead_data: dict,
+    gc_insight: dict,
+    service_type: str,
+    scoring: dict,
+    inspection_date: str = "",
+    first_seen: str = "",
+) -> tuple[int, list[str], bool]:
+    """Return a softer quality score for monetizing mid-tier leads."""
+    q_score, q_checks, _is_elite = _premium_quality(
+        lead_data,
+        gc_insight,
+        service_type,
+        scoring,
+        inspection_date,
+        first_seen,
+    )
+    has_source = bool(gc_insight.get("source_url"))
+    has_phone = bool((lead_data.get("contact_phone") or "").strip())
+    age_days = _lead_age_days(lead_data, first_seen)
+    fresh_limit_days = 30 if str(service_type or "").lower() in {"weather", "flood", "disaster"} else 60
+    has_recent_signal = bool(
+        str(lead_data.get("_lead_channel") or "") == "homeowner_intake"
+        or inspection_date
+        or (age_days is not None and age_days <= fresh_limit_days)
+    )
+    is_quality = q_score >= 60 and has_source and has_phone and has_recent_signal
+    return q_score, q_checks, is_quality
+
+
+def _quality_market_action_plan(
+    quality_leads: int,
+    avg_quality: float,
+    phone_pct: float,
+    source_pct: float,
+    hot_pct: float,
+    candidate_leads: int,
+    status: str,
+) -> dict:
+    """Return the commercial steps needed to sell a quality-tier plan."""
+    ready_quality_min = 40
+    ready_score_min = 65
+    ready_phone_min = 80
+    ready_source_min = 85
+    pilot_quality_min = 15
+    pilot_phone_min = 70
+
+    gap_to_quality = {
+        "quality_leads": max(ready_quality_min - quality_leads, 0),
+        "average_quality_score": max(round(ready_score_min - avg_quality, 1), 0),
+        "phone_pct": max(round(ready_phone_min - phone_pct, 1), 0),
+        "source_pct": max(round(ready_source_min - source_pct, 1), 0),
+        "hot_score_pct": max(round(50 - hot_pct, 1), 0),
+    }
+    next_actions: list[str] = []
+    if gap_to_quality["quality_leads"]:
+        next_actions.append(
+            f"Add {gap_to_quality['quality_leads']} more quality-qualified leads from permits, homeowner intake and cross-data enrichment."
+        )
+    if gap_to_quality["phone_pct"]:
+        next_actions.append(
+            f"Enrich/verify phone coverage by {gap_to_quality['phone_pct']} pts before pitching the quality plan."
+        )
+    if gap_to_quality["source_pct"]:
+        next_actions.append(
+            f"Raise source coverage by {gap_to_quality['source_pct']} pts so the quality plan feels provably better than free."
+        )
+    if gap_to_quality["average_quality_score"]:
+        next_actions.append(
+            f"Lift average quality by {gap_to_quality['average_quality_score']} pts with fresher and more actionable leads."
+        )
+    if not next_actions:
+        next_actions.append("Ready to sell the quality plan; use free leads as the top-of-funnel and upsell the better inventory.")
+
+    if status == "ready_for_quality":
+        priority = "sell_now"
+    elif quality_leads >= pilot_quality_min and phone_pct >= pilot_phone_min:
+        priority = "pilot_and_enrich"
+    elif candidate_leads >= ready_quality_min:
+        priority = "enrich_existing_inventory"
+    else:
+        priority = "source_more_inventory"
+
+    return {
+        "priority": priority,
+        "gap_to_quality": gap_to_quality,
+        "next_actions": next_actions[:4],
+    }
+
+
+def _quality_market_readiness_payload(city_filter: str = "", service_filter: str = "") -> dict:
+    """Public-safe market readiness summary for the mid-tier quality plan."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    conditions = [
+        build_public_real_lead_sql_filter(),
+        build_gc_interest_sql_filter(),
+    ]
+    params: list = []
+    if city_filter:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+    if service_filter:
+        cats = [x.strip().lower() for x in service_filter.split(",") if x.strip()]
+        service_sql, service_params = build_service_category_filter(cats, _TRADE_SERVICE_TO_AI, _SERVICE_TYPE_CATS)
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
+
+    where_sql = "WHERE " + " AND ".join(conditions)
+    c.execute(f"""
+        SELECT address_key, address, city, lead_data, primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY first_seen DESC
+        LIMIT 5000
+    """, params)
+    rows = c.fetchall()
+    conn.close()
+
+    markets: dict[str, dict] = {}
+    total_candidates = 0
+    total_quality = 0
+    for row in rows:
+        rd = dict(row)
+        try:
+            lead_data = json.loads(rd.get("lead_data") or "{}")
+        except Exception:
+            continue
+        service_type = (rd.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if not service_type or not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        gc_insight = build_gc_insight(lead_data, service_type)
+        if not gc_insight.get("source_url"):
+            continue
+        total_candidates += 1
+        city = rd.get("city") or "Unknown"
+        market = markets.setdefault(city, {
+            "city": city,
+            "candidate_leads": 0,
+            "quality_leads": 0,
+            "quality_sum": 0,
+            "phone_count": 0,
+            "source_count": 0,
+            "hot_count": 0,
+            "services": {},
+        })
+        market["candidate_leads"] += 1
+        scoring = lead_data.get("_scoring", {}) or {}
+        q_score, _, is_quality = _quality_lead_profile(
+            lead_data,
+            gc_insight,
+            service_type,
+            scoring,
+            str(lead_data.get("inspection_date") or lead_data.get("next_inspection_date") or "")[:10],
+            rd.get("first_seen", ""),
+        )
+        if not is_quality:
+            continue
+        total_quality += 1
+        market["quality_leads"] += 1
+        market["quality_sum"] += q_score
+        market["services"][service_type] = market["services"].get(service_type, 0) + 1
+        if (lead_data.get("contact_phone") or "").strip():
+            market["phone_count"] += 1
+        if gc_insight.get("source_url"):
+            market["source_count"] += 1
+        if int(scoring.get("score") or 0) >= 90:
+            market["hot_count"] += 1
+
+    readiness = []
+    for city, market in markets.items():
+        quality = int(market["quality_leads"])
+        avg_quality = round(market["quality_sum"] / quality, 1) if quality else 0
+        phone_pct = round(market["phone_count"] * 100 / quality, 1) if quality else 0
+        source_pct = round(market["source_count"] * 100 / quality, 1) if quality else 0
+        hot_pct = round(market["hot_count"] * 100 / quality, 1) if quality else 0
+        if quality >= 40 and avg_quality >= 65 and phone_pct >= 80 and source_pct >= 85:
+            status = "ready_for_quality"
+            recommended_price = 199
+        elif quality >= 15 and avg_quality >= 55 and phone_pct >= 70:
+            status = "pilot_quality"
+            recommended_price = 129
+        else:
+            status = "needs_inventory"
+            recommended_price = 0
+        action_plan = _quality_market_action_plan(
+            quality,
+            avg_quality,
+            phone_pct,
+            source_pct,
+            hot_pct,
+            int(market["candidate_leads"]),
+            status,
+        )
+        readiness.append({
+            "city": city,
+            "status": status,
+            "recommended_price": recommended_price,
+            "candidate_leads": int(market["candidate_leads"]),
+            "quality_leads": quality,
+            "average_quality_score": avg_quality,
+            "priority": action_plan["priority"],
+            "gap_to_quality": action_plan["gap_to_quality"],
+            "next_actions": action_plan["next_actions"],
+            "coverage": {
+                "phone_pct": phone_pct,
+                "source_pct": source_pct,
+                "hot_score_pct": hot_pct,
+                "fresh_signal_pct": 100 if quality else 0,
+            },
+            "top_services": [
+                {"service_type": service, "quality_leads": count}
+                for service, count in sorted(market["services"].items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+            ],
+        })
+
+    readiness.sort(key=lambda m: (m["status"] != "ready_for_quality", m["status"] != "pilot_quality", -m["quality_leads"], m["city"]))
+    summary = {
+        "ready_markets": sum(1 for m in readiness if m["status"] == "ready_for_quality"),
+        "pilot_markets": sum(1 for m in readiness if m["status"] == "pilot_quality"),
+        "needs_inventory_markets": sum(1 for m in readiness if m["status"] == "needs_inventory"),
+        "total_candidate_leads": total_candidates,
+        "total_quality_leads": total_quality,
+    }
+    return {
+        "summary": summary,
+        "markets": readiness[:50],
+        "filters": {"city": city_filter, "service": service_filter},
+        "thresholds": {
+            "ready_for_quality": {"quality_leads": 40, "average_quality_score": 65, "phone_pct": 80, "source_pct": 85, "price": 199},
+            "pilot_quality": {"quality_leads": 15, "average_quality_score": 55, "phone_pct": 70, "price": 129},
+        },
+    }
+
+
+def _quality_sales_proof_payload(city_filter: str = "", service_filter: str = "") -> dict:
+    """Public-safe proof points for selling a mid-tier quality plan."""
+    readiness = _quality_market_readiness_payload(city_filter, service_filter)
+    markets = readiness.get("markets", [])
+    top_market = markets[0] if markets else None
+    if top_market:
+        quality = int(top_market.get("quality_leads") or 0)
+        avg_quality = float(top_market.get("average_quality_score") or 0)
+        recommended_price = int(top_market.get("recommended_price") or 0)
+        if top_market.get("status") == "ready_for_quality" and recommended_price >= 199:
+            status = "ready_for_quality"
+            headline = f"{top_market.get('city')} está listo para Quality a $199/mes."
+        elif quality >= 15:
+            status = "pilot_quality"
+            headline = f"{top_market.get('city')} puede venderse como Quality piloto."
+            recommended_price = recommended_price or 129
+        else:
+            status = "needs_inventory"
+            headline = "Quality todavía necesita más inventario."
+            recommended_price = 0
+        proof_points = [
+            f"{quality} leads Quality con calidad promedio {avg_quality}/100.",
+            f"{float(top_market.get('coverage', {}).get('phone_pct') or 0):.1f}% con teléfono y {float(top_market.get('coverage', {}).get('source_pct') or 0):.1f}% con fuente.",
+        ]
+        return {
+            "status": status,
+            "recommended_price": recommended_price,
+            "headline": headline,
+            "proof_points": proof_points,
+            "market": top_market,
+            "readiness": readiness,
+        }
+    return {
+        "status": "needs_inventory",
+        "recommended_price": 0,
+        "headline": "Quality sales proof unavailable.",
+        "proof_points": [],
+        "market": None,
+        "readiness": readiness,
+    }
+
+
+def _free_leads_offer_payload(city_filter: str = "", service_filter: str = "", limit: int = 6) -> dict:
+    """Public-safe preview payload for the free-leads funnel."""
+    limit = max(1, min(int(limit or 6), 10))
+    conn = get_db_connection()
+    c = conn.cursor()
+    conditions = [
+        build_public_real_lead_sql_filter(),
+        build_gc_interest_sql_filter(),
+    ]
+    params: list = []
+    if city_filter:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+    if service_filter:
+        cats = [x.strip().lower() for x in service_filter.split(",") if x.strip()]
+        service_sql, service_params = build_service_category_filter(cats, _TRADE_SERVICE_TO_AI, _SERVICE_TYPE_CATS)
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
+
+    where_sql = "WHERE " + " AND ".join(conditions)
+    c.execute(f"""
+        SELECT address_key, address, city, lead_data, primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY CAST(json_extract(lead_data, '$._scoring.score') AS INTEGER) DESC,
+                 first_seen DESC
+        LIMIT 200
+    """, params)
+    rows = c.fetchall()
+    conn.close()
+
+    samples: list[dict] = []
+    scanned = 0
+    for row in rows:
+        rd = dict(row)
+        try:
+            lead_data = json.loads(rd.get("lead_data") or "{}")
+        except Exception:
+            continue
+        service_type = (rd.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if not service_type or not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        gc_insight = build_gc_insight(lead_data, service_type)
+        if not gc_insight.get("source_url"):
+            continue
+        scanned += 1
+        scoring = lead_data.get("_scoring", {}) or {}
+        q_score, _, is_quality = _quality_lead_profile(
+            lead_data,
+            gc_insight,
+            service_type,
+            scoring,
+            str(lead_data.get("inspection_date") or lead_data.get("next_inspection_date") or "")[:10],
+            rd.get("first_seen", ""),
+        )
+        samples.append({
+            "id": rd.get("address_key"),
+            "address": rd.get("address"),
+            "city": rd.get("city"),
+            "service_type": service_type,
+            "score": int(scoring.get("score") or 0),
+            "quality_score": q_score,
+            "source_label": gc_insight.get("source_label") or "Fuente oficial",
+            "source_url": gc_insight.get("source_url"),
+            "phone_available": bool((lead_data.get("contact_phone") or "").strip()),
+            "value": lead_data.get("value_float") or 0,
+            "highlight": lead_data.get("_ai_summary") or lead_data.get("description") or "",
+            "is_quality": is_quality,
+        })
+        if len(samples) >= limit:
+            break
+
+    return {
+        "headline": "Muestra gratis para captar contratistas",
+        "subheadline": "Lead gratis como embudo y plan Quality para monetizar leads mejores.",
+        "free_limit": FREE_USER_LEAD_LIMIT,
+        "anon_limit": ANON_LEAD_LIMIT,
+        "sample_count": len(samples),
+        "scanned_candidates": scanned,
+        "sample_leads": samples,
+        "next_action": "Regístrate para desbloquear el paquete gratis completo y luego sube a Quality si quieres leads más limpios.",
     }
 
 
@@ -5028,14 +5394,45 @@ def swipe_upgrade_info():
         "replacement_credits": replacement_credits,
         "free_limit":  FREE_USER_LEAD_LIMIT,
         "pro_limit":   PRO_LEAD_LIMIT,
+        "quality_limit": QUALITY_LEAD_LIMIT,
         "elite_limit": ELITE_LEAD_LIMIT,
         "remaining":   None if tier_limit is None else max(tier_limit - billable_swipes, 0),
         "tiers": [
+            {"id": "free",    "price": 0,   "limit": FREE_USER_LEAD_LIMIT, "label": "Free", "trial": True},
             {"id": "pro",     "price": 29,  "limit": PRO_LEAD_LIMIT, "label": "Pro"},
+            {"id": "quality", "price": 199, "limit": QUALITY_LEAD_LIMIT, "label": "Quality", "curated": True},
             {"id": "premium", "price": 99,  "limit": None,           "label": "Premium"},
             {"id": "elite",   "price": 500, "limit": ELITE_LEAD_LIMIT, "label": "Elite", "curated": True},
         ],
     }), 200
+
+
+@app.route('/api/swipe/free-leads', methods=['GET'])
+def swipe_free_leads():
+    """Public free-leads preview API for the top-of-funnel offer."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    try:
+        limit = int(request.args.get("limit", 6))
+    except (TypeError, ValueError):
+        limit = 6
+    return jsonify(_free_leads_offer_payload(city, service, limit)), 200
+
+
+@app.route('/api/swipe/quality-inventory', methods=['GET'])
+def swipe_quality_inventory():
+    """Non-sensitive inventory counts for the Quality plan."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    return jsonify(_quality_market_readiness_payload(city, service)), 200
+
+
+@app.route('/api/swipe/quality-sales-proof', methods=['GET'])
+def swipe_quality_sales_proof():
+    """Public-safe proof points for selling the Quality plan."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    return jsonify(_quality_sales_proof_payload(city, service)), 200
 
 
 @app.route('/api/swipe/elite-inventory', methods=['GET'])

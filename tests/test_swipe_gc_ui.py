@@ -123,6 +123,34 @@ def test_swipe_supports_elite_500_plan_and_quality_evidence():
     assert "subscription_tier" in db_src
 
 
+def test_swipe_supports_free_leads_preview_and_quality_plan():
+    html = _html()
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    env_example = (TEMPLATE.parents[2] / ".env.example").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+
+    assert 'id="qualitySalesProof"' in html
+    assert 'id="qualityUpgradeBtn"' in html
+    assert "loadQualitySalesProof()" in html
+    assert "Quality" in html
+    assert "$199" in html
+    assert "@app.route('/api/swipe/free-leads'" in app_src
+    assert "@bp.route('/swipe/free-leads'" in route_src
+    assert "@app.route('/api/swipe/quality-sales-proof'" in app_src
+    assert "@bp.route('/swipe/quality-sales-proof'" in route_src
+    assert "@app.route('/api/swipe/quality-inventory'" in app_src
+    assert "@bp.route('/swipe/quality-inventory'" in route_src
+    assert "def _free_leads_offer_payload" in app_src
+    assert "def _quality_sales_proof_payload" in app_src
+    assert "def _quality_market_readiness_payload" in app_src
+    assert "QUALITY_LEAD_LIMIT" in app_src
+    assert "SWIPE_QUALITY_LIMIT" in env_example
+    assert "STRIPE_PRICE_ID_QUALITY" in env_example
+    assert "Public free-leads preview API" in readme
+    assert "Quality plan designed for `$199/month` positioning" in readme
+
+
 def test_elite_quality_gate_requires_phone_source_score_and_action_signal():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
     route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")

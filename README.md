@@ -87,8 +87,10 @@ MLeads/
 
 ### Premium Monetization
 - Free preview and authenticated free quota
-- Pro/Premium/Elite Stripe checkout support
-- Admin billing-readiness API/dashboard card shows whether production has Stripe keys, plan price IDs, webhook secret, return URL, and a sellable Elite market before sales pushes paid checkout
+- Public free-leads preview API for top-of-funnel acquisition
+- Pro/Quality/Premium/Elite Stripe checkout support
+- Admin billing-readiness API/dashboard card shows whether production has Stripe keys, plan price IDs, webhook secret, return URL, and sellable Quality/Elite markets before sales pushes paid checkout
+- Quality plan designed for `$199/month` positioning
 - Elite plan designed for `$500/month` positioning
 - Elite checkout is blocked unless the selected market/filter is `ready_for_elite` with a `$500+` recommended price
 - Blocked Elite checkout attempts are saved as pilot requests so sales can follow up when the market becomes sellable
@@ -100,6 +102,7 @@ MLeads/
 - Contacted-leads history keeps Elite certificate, source and reservation evidence for post-sale follow-up
 - Admin quality report shows sellability, contact coverage, source coverage, project value coverage and market readiness
 - Admin dashboard surfaces blocked Elite checkout demand by market/service for follow-up and inventory prioritization
+- Public quality-sales-proof and quality-inventory APIs expose the mid-tier plan with quality evidence and recommended pricing
 - Admins can mark Elite pilot requests as contacted or closed after sales follow-up
 - Contractors can report bad Elite leads from Swipe; eligible reports auto-grant replacement credits that extend the effective Elite quota
 - Replacement credits reduce Elite billable swipe counts in both feed access and swipe actions

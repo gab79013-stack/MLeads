@@ -35,6 +35,7 @@ Required values:
 - `STRIPE_API_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_PRICE_ID_PRO`
+- `STRIPE_PRICE_ID_QUALITY`
 - `STRIPE_PRICE_ID_PREMIUM`
 - `STRIPE_PRICE_ID_ELITE`
 - `BASE_URL` such as `http://2.25.162.58` or the production domain
@@ -46,7 +47,7 @@ BASE_URL/api/stripe/webhook
 ```
 
 Use the admin dashboard `Billing readiness` card to confirm checkout,
-webhook, and Elite `$500/mo` readiness before sending contractors to pay.
+webhook, and Quality/Elite readiness before sending contractors to pay.
 
 ## Optional background agents
 

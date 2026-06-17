@@ -1329,6 +1329,7 @@
                         </div>
                         <div class="elite-quality-detail">
                             <div><strong id="billingCheckout">-</strong><span>Checkout</span></div>
+                            <div><strong id="billingQuality">-</strong><span>Quality $199</span></div>
                             <div><strong id="billingWebhook">-</strong><span>Webhook</span></div>
                             <div><strong id="billingElite">-</strong><span>Elite $500</span></div>
                             <div class="elite-quality-alert" id="billingReadyAlerts">Checking Stripe configuration...</div>
@@ -2117,8 +2118,10 @@
                 const checkoutReady = !!data.checkout_ready;
                 const webhookReady = !!data.webhook_ready;
                 const eliteReady = !!data.elite_ready;
+                const qualityReady = !!data.tiers?.quality?.price_configured;
                 document.getElementById('billingReadyValue').textContent = checkoutReady ? 'Ready' : 'Setup';
                 document.getElementById('billingCheckout').textContent = checkoutReady ? 'Ready' : 'Blocked';
+                document.getElementById('billingQuality').textContent = qualityReady ? 'Ready' : 'Missing';
                 document.getElementById('billingWebhook').textContent = webhookReady ? 'Ready' : 'Missing';
                 document.getElementById('billingElite').textContent = eliteReady ? '$500 ready' : 'Hold';
                 statusEl.textContent = checkoutReady && webhookReady && eliteReady ? 'Ready to sell' : 'Action needed';

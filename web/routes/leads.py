@@ -1027,14 +1027,14 @@ def get_all_settings():
 def create_payment_checkout():
     """
     Create a Stripe Checkout session for the authenticated web user.
-    Body: {"tier": "pro" | "premium" | "elite"}
+    Body: {"tier": "pro" | "quality" | "premium" | "elite"}
     Returns: {"checkout_url": "https://checkout.stripe.com/..."}
-    Requires STRIPE_API_KEY and STRIPE_PRICE_ID_PRO / STRIPE_PRICE_ID_PREMIUM / STRIPE_PRICE_ID_ELITE in env.
+    Requires STRIPE_API_KEY and STRIPE_PRICE_ID_* in env.
     """
     data = request.get_json(silent=True) or {}
     tier = (data.get('tier') or 'pro').lower()
-    if tier not in ('pro', 'premium', 'elite'):
-        return jsonify({"error": "Tier must be 'pro', 'premium' or 'elite'"}), 400
+    if tier not in ('pro', 'quality', 'premium', 'elite'):
+        return jsonify({"error": "Tier must be 'pro', 'quality', 'premium' or 'elite'"}), 400
 
     elite_gate, checkout_context = _elite_checkout_guard(tier, data)
     if elite_gate:

@@ -319,6 +319,7 @@
         .tier-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:14px}
         .tier-card{border:1.5px solid var(--border);border-radius:14px;padding:13px 12px;background:var(--surface)}
         .tier-card.featured{border:2px solid #16a34a;background:#f0fdf4}
+        .tier-card.quality{border:2px solid #0f766e;background:#f0fdfa}
         .tier-card.elite{border:2px solid #111827;background:#f8fafc}
         .tier-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
         .tier-price{font-size:20px;font-weight:900;color:var(--fg)}
@@ -630,6 +631,10 @@
         <!-- Upgrade flow (paid tiers) -->
         <div id="pwUpgradeSection" class="pw-body" style="display:none">
             <p id="pwUpgradeUsage" style="font-size:13px;color:var(--muted);margin-bottom:12px;text-align:center"></p>
+            <div class="elite-proof" id="qualitySalesProof">
+                <strong id="qualityProofHeadline">Quality proof</strong>
+                <div id="qualityProofBody">Calculando inventario y ROI...</div>
+            </div>
             <div class="elite-proof" id="eliteSalesProof">
                 <strong id="eliteProofHeadline">Elite proof</strong>
                 <div id="eliteProofBody">Calculando inventario y ROI...</div>
@@ -644,6 +649,11 @@
                     <div class="tier-head"><div><div class="tier-name">Premium</div><div class="tier-price">$99<small>/mes</small></div></div><strong style="font-size:11px;color:#166534">Ilimitado</strong></div>
                     <div class="tier-desc">Para equipos activos: leads ilimitados, señales HOT e inspecciones priorizadas.</div>
                     <button class="tier-btn" onclick="handleUpgrade('premium')" style="background:#16a34a">Elegir Premium</button>
+                </div>
+                <div class="tier-card quality">
+                    <div class="tier-head"><div><div class="tier-name">Quality</div><div class="tier-price">$199<small>/mes</small></div></div><strong style="font-size:11px;color:#0f766e">Curado</strong></div>
+                    <div class="tier-desc">Leads con fuente, teléfono y señal reciente para equipos que quieren pagar por calidad, no solo volumen.</div>
+                    <button class="tier-btn" id="qualityUpgradeBtn" onclick="handleUpgrade('quality')" style="background:#0f766e">Elegir Quality</button>
                 </div>
                 <div class="tier-card elite">
                     <div class="tier-head"><div><div class="tier-name">Elite</div><div class="tier-price">$500<small>/mes</small></div></div><strong style="font-size:11px;color:#111827">Curado</strong></div>
@@ -1086,6 +1096,36 @@ async function loadEliteSalesProof() {
             eliteBtn.textContent = city
                 ? (CURRENT_LANG === 'es' ? `Comprar Elite en ${city}` : `Buy Elite in ${city}`)
                 : (CURRENT_LANG === 'es' ? 'Comprar Elite disponible' : 'Buy available Elite');
+        }
+        box.style.display = '';
+    } catch (e) {
+        box.style.display = 'none';
+    }
+}
+
+async function loadQualitySalesProof() {
+    const box = document.getElementById('qualitySalesProof');
+    if (!box) return;
+    box.style.display = 'none';
+    const qualityBtn = document.getElementById('qualityUpgradeBtn');
+    if (qualityBtn) qualityBtn.textContent = CURRENT_LANG === 'es' ? 'Elegir Quality' : 'Choose Quality';
+    try {
+        const url = new URL('/api/swipe/quality-sales-proof', location.origin);
+        if (F.city) url.searchParams.set('city', F.city);
+        if (F.leadTypes.size) url.searchParams.set('service', [...F.leadTypes].join(','));
+        const res = await fetch(url, { headers: authHdrs() });
+        if (!res.ok) return;
+        const data = await res.json();
+        const points = Array.isArray(data.proof_points) ? data.proof_points.slice(0, 3) : [];
+        if (!points.length && !data.headline) return;
+        const market = data.market || {};
+        document.getElementById('qualityProofHeadline').textContent = data.headline || (CURRENT_LANG === 'es' ? 'Prueba de valor Quality' : 'Quality value proof');
+        document.getElementById('qualityProofBody').textContent = points.join(' ');
+        if (qualityBtn && data.status === 'ready_for_quality' && Number(data.recommended_price || 0) >= 199) {
+            const city = market.city || F.city || '';
+            qualityBtn.textContent = city
+                ? (CURRENT_LANG === 'es' ? `Comprar Quality en ${city}` : `Buy Quality in ${city}`)
+                : (CURRENT_LANG === 'es' ? 'Comprar Quality disponible' : 'Buy available Quality');
         }
         box.style.display = '';
     } catch (e) {
@@ -1955,12 +1995,13 @@ function showPaywall(mode) {
             : `You contacted <strong>${S.swipes} leads</strong>. If one close is worth $10k+, Elite ($500/mo) can justify itself with one well-verified opportunity.`;
         regSec.style.display = 'none';
         upgSec.style.display = '';
+        loadQualitySalesProof();
         loadEliteSalesProof();
     } else {
         // Anonymous → register for free leads
         document.getElementById('pwTitle').textContent  = CURRENT_LANG === 'es' ? 'Convierte señales en trabajos' : 'Turn signals into jobs';
         document.getElementById('pwSubtitle').innerHTML = 'Has visto tus <strong style="color:#fff">10 leads gratis</strong>.<br>Regístrate y obtén <strong style="color:#4ade80">40 leads adicionales gratis</strong>.';
-        document.getElementById('pwBadge').innerHTML    = '🎁 40 Leads Gratis<div style="text-align:left"><small id="pwBadgeSmall">Después desde $29/mes</small><small>Sin tarjeta de crédito</small></div>';
+        document.getElementById('pwBadge').innerHTML    = '🎁 40 Leads Gratis<div style="text-align:left"><small id="pwBadgeSmall">Después: Quality $199/mes</small><small>Sin tarjeta de crédito</small></div>';
         document.getElementById('pwFooter').textContent = '40 leads gratis · después desde $29/mes';
         regSec.style.display = '';
         upgSec.style.display = 'none';
@@ -1995,6 +2036,8 @@ async function handleUpgrade(tier) {
             btn.disabled = false;
             if (tier === 'elite') {
                 loadEliteSalesProof();
+            } else if (tier === 'quality') {
+                loadQualitySalesProof();
             } else {
                 btn.textContent = tier === 'pro' ? 'Elegir Pro' : 'Elegir Premium';
             }
