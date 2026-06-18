@@ -192,7 +192,7 @@ def test_quality_admin_readiness_requires_specific_stripe_quality_price():
     for src in (app_src, route_src):
         assert "curated_tiers = {'quality', 'elite'}" in src
         assert "if tier in curated_tiers else" in src
-        assert "os.getenv(specific_key, os.getenv('STRIPE_PRICE_ID', ''))" in src
+        assert "(os.getenv(specific_key) or os.getenv('STRIPE_PRICE_ID') or '')" in src
         assert "os.getenv(f'STRIPE_PRICE_ID_{tier.upper()}', os.getenv('STRIPE_PRICE_ID', ''))" not in src
 
 

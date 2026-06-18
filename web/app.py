@@ -2755,7 +2755,7 @@ def create_payment_checkout():
     price_id = (
         os.getenv(specific_key, '')
         if tier in curated_tiers else
-        os.getenv(specific_key, os.getenv('STRIPE_PRICE_ID', ''))
+        (os.getenv(specific_key) or os.getenv('STRIPE_PRICE_ID') or '')
     )
     if not stripe_key or not price_id:
         return jsonify({"error": "Pago no configurado. Contacta a soporte.", "code": "stripe_not_configured"}), 503
