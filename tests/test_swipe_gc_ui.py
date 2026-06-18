@@ -175,6 +175,7 @@ def test_admin_dashboard_surfaces_quality_readiness_for_sales():
 
 def test_quality_admin_readiness_requires_specific_stripe_quality_price():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "leads.py").read_text(encoding="utf-8")
     helper_start = app_src.index("def _quality_admin_guidance_payload")
     helper_end = app_src.index("@app.route('/api/admin/elite-pilot-requests'", helper_start)
     helper_src = app_src[helper_start:helper_end]
@@ -188,6 +189,11 @@ def test_quality_admin_readiness_requires_specific_stripe_quality_price():
     assert "specific_price_required = {'quality', 'elite'}" in billing_src
     assert "generic_price_allowed = tier not in specific_price_required" in billing_src
     assert "price_set = specific_price_set or (generic_price_allowed and generic_price_set)" in billing_src
+    for src in (app_src, route_src):
+        assert "curated_tiers = {'quality', 'elite'}" in src
+        assert "if tier in curated_tiers else" in src
+        assert "os.getenv(specific_key, os.getenv('STRIPE_PRICE_ID', ''))" in src
+        assert "os.getenv(f'STRIPE_PRICE_ID_{tier.upper()}', os.getenv('STRIPE_PRICE_ID', ''))" not in src
 
 
 def test_elite_quality_gate_requires_phone_source_score_and_action_signal():

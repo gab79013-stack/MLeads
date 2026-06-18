@@ -1041,7 +1041,13 @@ def create_payment_checkout():
         return elite_gate
 
     stripe_key = os.getenv('STRIPE_API_KEY', '')
-    price_id   = os.getenv(f'STRIPE_PRICE_ID_{tier.upper()}', os.getenv('STRIPE_PRICE_ID', ''))
+    specific_key = f'STRIPE_PRICE_ID_{tier.upper()}'
+    curated_tiers = {'quality', 'elite'}
+    price_id = (
+        os.getenv(specific_key, '')
+        if tier in curated_tiers else
+        os.getenv(specific_key, os.getenv('STRIPE_PRICE_ID', ''))
+    )
     if not stripe_key or not price_id:
         return jsonify({"error": "Pago no configurado. Contacta a soporte.", "code": "stripe_not_configured"}), 503
 
