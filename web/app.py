@@ -2537,7 +2537,7 @@ def _quality_admin_guidance_payload(readiness: dict) -> dict:
     top_market = markets[0] if markets else {}
     ready_count = int(summary.get("ready_markets") or 0)
     pilot_count = int(summary.get("pilot_markets") or 0)
-    quality_price_configured = bool((os.getenv("STRIPE_PRICE_ID_QUALITY") or os.getenv("STRIPE_PRICE_ID") or "").strip())
+    quality_price_configured = bool((os.getenv("STRIPE_PRICE_ID_QUALITY") or "").strip())
 
     if ready_count and quality_price_configured:
         status = "ready_to_sell"

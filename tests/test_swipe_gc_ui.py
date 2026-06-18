@@ -173,6 +173,17 @@ def test_admin_dashboard_surfaces_quality_readiness_for_sales():
     assert "$199/month Quality plan" in readme
 
 
+def test_quality_admin_readiness_requires_specific_stripe_quality_price():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    helper_start = app_src.index("def _quality_admin_guidance_payload")
+    helper_end = app_src.index("@app.route('/api/admin/elite-pilot-requests'", helper_start)
+    helper_src = app_src[helper_start:helper_end]
+
+    assert 'os.getenv("STRIPE_PRICE_ID_QUALITY") or ""' in helper_src
+    assert 'os.getenv("STRIPE_PRICE_ID_QUALITY") or os.getenv("STRIPE_PRICE_ID")' not in helper_src
+    assert '"missing": [] if quality_price_configured else ["STRIPE_PRICE_ID_QUALITY"]' in helper_src
+
+
 def test_elite_quality_gate_requires_phone_source_score_and_action_signal():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
     route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
