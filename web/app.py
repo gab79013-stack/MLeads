@@ -2450,6 +2450,28 @@ def admin_billing_readiness():
     return jsonify(_billing_readiness_payload()), 200
 
 
+@app.route('/api/admin/quality-readiness', methods=['GET'])
+@require_admin
+def admin_quality_readiness():
+    """Show admin sales readiness for the $199 Quality plan."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    readiness = _quality_market_readiness_payload(city, service)
+    guidance = _quality_admin_guidance_payload(readiness)
+    payload = {
+        **readiness,
+        "sales_guidance": {
+            "status": guidance["status"],
+            "headline": guidance["headline"],
+            "primary_action": guidance["primary_action"],
+            "next_actions": guidance["next_actions"],
+            "top_market": guidance["top_market"],
+        },
+        "billing": guidance["billing"],
+    }
+    return jsonify(payload), 200
+
+
 def _billing_readiness_payload() -> dict:
     stripe_key_set = bool((os.getenv('STRIPE_API_KEY') or '').strip())
     webhook_secret_set = bool((os.getenv('STRIPE_WEBHOOK_SECRET') or '').strip())
@@ -2505,6 +2527,49 @@ def _billing_readiness_payload() -> dict:
             if missing else
             "Billing is configured; run a Stripe test checkout before selling live."
         ),
+    }
+
+
+def _quality_admin_guidance_payload(readiness: dict) -> dict:
+    """Add admin-only sales guidance to Quality readiness data."""
+    summary = readiness.get("summary") or {}
+    markets = readiness.get("markets") or []
+    top_market = markets[0] if markets else {}
+    ready_count = int(summary.get("ready_markets") or 0)
+    pilot_count = int(summary.get("pilot_markets") or 0)
+    quality_price_configured = bool((os.getenv("STRIPE_PRICE_ID_QUALITY") or os.getenv("STRIPE_PRICE_ID") or "").strip())
+
+    if ready_count and quality_price_configured:
+        status = "ready_to_sell"
+        headline = "Quality is ready to sell in at least one market."
+        primary_action = "Start outreach with the top ready market and use free leads as the entry offer."
+    elif ready_count:
+        status = "billing_blocked"
+        headline = "Quality inventory is ready, but checkout is not fully configured."
+        primary_action = "Configure STRIPE_PRICE_ID_QUALITY before sending buyers to checkout."
+    elif pilot_count:
+        status = "pilot_only"
+        headline = "Quality can support pilot pricing, but needs more proof for the $199 pitch."
+        primary_action = "Sell a limited pilot and enrich phone/source coverage before full rollout."
+    else:
+        status = "needs_inventory"
+        headline = "Quality needs more sellable inventory before a paid push."
+        primary_action = "Prioritize homeowner intake, permits, and contact enrichment in the highest-candidate markets."
+
+    next_actions = list(top_market.get("next_actions") or [])
+    if primary_action not in next_actions:
+        next_actions.insert(0, primary_action)
+
+    return {
+        "status": status,
+        "headline": headline,
+        "primary_action": primary_action,
+        "top_market": top_market,
+        "next_actions": next_actions[:4],
+        "billing": {
+            "quality_price_configured": quality_price_configured,
+            "missing": [] if quality_price_configured else ["STRIPE_PRICE_ID_QUALITY"],
+        },
     }
 
 
