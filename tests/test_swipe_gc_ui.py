@@ -151,6 +151,28 @@ def test_swipe_supports_free_leads_preview_and_quality_plan():
     assert "Quality plan designed for `$199/month` positioning" in readme
 
 
+def test_admin_dashboard_surfaces_quality_readiness_for_sales():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    index_html = _index_html()
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+
+    assert "@app.route('/api/admin/quality-readiness'" in app_src
+    assert "def admin_quality_readiness" in app_src
+    assert "@require_admin" in app_src
+    assert "def _quality_admin_guidance_payload" in app_src
+    assert "_quality_market_readiness_payload(city, service)" in app_src
+    assert "STRIPE_PRICE_ID_QUALITY" in app_src
+
+    assert 'id="qualityReadinessCard"' in index_html
+    assert 'id="qualityReadyCount"' in index_html
+    assert 'id="qualityReadinessList"' in index_html
+    assert "/api/admin/quality-readiness" in index_html
+    assert "loadQualityReadiness()" in index_html
+
+    assert "Admin Quality readiness" in readme
+    assert "$199/month Quality plan" in readme
+
+
 def test_elite_quality_gate_requires_phone_source_score_and_action_signal():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
     route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
