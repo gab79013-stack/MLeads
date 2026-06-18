@@ -178,10 +178,16 @@ def test_quality_admin_readiness_requires_specific_stripe_quality_price():
     helper_start = app_src.index("def _quality_admin_guidance_payload")
     helper_end = app_src.index("@app.route('/api/admin/elite-pilot-requests'", helper_start)
     helper_src = app_src[helper_start:helper_end]
+    billing_start = app_src.index("def _billing_readiness_payload")
+    billing_end = app_src.index("def _quality_admin_guidance_payload", billing_start)
+    billing_src = app_src[billing_start:billing_end]
 
     assert 'os.getenv("STRIPE_PRICE_ID_QUALITY") or ""' in helper_src
     assert 'os.getenv("STRIPE_PRICE_ID_QUALITY") or os.getenv("STRIPE_PRICE_ID")' not in helper_src
     assert '"missing": [] if quality_price_configured else ["STRIPE_PRICE_ID_QUALITY"]' in helper_src
+    assert "specific_price_required = {'quality', 'elite'}" in billing_src
+    assert "generic_price_allowed = tier not in specific_price_required" in billing_src
+    assert "price_set = specific_price_set or (generic_price_allowed and generic_price_set)" in billing_src
 
 
 def test_elite_quality_gate_requires_phone_source_score_and_action_signal():

@@ -2485,12 +2485,15 @@ def _billing_readiness_payload() -> dict:
     if not webhook_secret_set:
         missing.append('STRIPE_WEBHOOK_SECRET')
 
+    specific_price_required = {'quality', 'elite'}
     for tier in ('pro', 'quality', 'premium', 'elite'):
         specific_key = f'STRIPE_PRICE_ID_{tier.upper()}'
-        price_set = bool((os.getenv(specific_key) or os.getenv('STRIPE_PRICE_ID') or '').strip())
+        specific_price_set = bool((os.getenv(specific_key) or '').strip())
+        generic_price_allowed = tier not in specific_price_required
+        price_set = specific_price_set or (generic_price_allowed and generic_price_set)
         tiers[tier] = {
             "price_configured": price_set,
-            "uses_generic_price": price_set and not bool((os.getenv(specific_key) or '').strip()),
+            "uses_generic_price": price_set and not specific_price_set,
         }
         if not price_set:
             missing.append(specific_key)
