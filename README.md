@@ -91,6 +91,9 @@ MLeads/
 - Pro/Quality/Premium/Elite Stripe checkout support
 - Admin billing-readiness API/dashboard card shows whether production has Stripe keys, plan price IDs, webhook secret, return URL, and sellable Quality/Elite markets before sales pushes paid checkout
 - Quality plan designed for `$199/month` positioning
+- Admin Quality readiness API/dashboard identifies markets ready for the `$199/month Quality plan`
+- Quality readiness separates inventory readiness from `STRIPE_PRICE_ID_QUALITY` checkout readiness
+- Admins can use ready/pilot/needs-inventory status to decide whether to sell now, pilot, or enrich more data
 - Elite plan designed for `$500/month` positioning
 - Elite checkout is blocked unless the selected market/filter is `ready_for_elite` with a `$500+` recommended price
 - Blocked Elite checkout attempts are saved as pilot requests so sales can follow up when the market becomes sellable
