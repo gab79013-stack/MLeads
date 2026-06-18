@@ -1336,6 +1336,21 @@
                         </div>
                     </div>
 
+                    <div class="elite-quality-card" id="qualityReadinessCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Quality readiness</div>
+                            <div class="stat-value" id="qualityReadyCount">0</div>
+                            <span class="elite-quality-status warn" id="qualityReadinessStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="qualityPilotCount">0</strong><span>Pilot markets</span></div>
+                            <div><strong id="qualityNeedsCount">0</strong><span>Needs inventory</span></div>
+                            <div><strong id="qualityLeadTotal">0</strong><span>Quality leads</span></div>
+                            <div class="elite-quality-alert" id="qualityReadinessAlerts">Checking Quality sellability...</div>
+                            <div class="market-readiness-list" id="qualityReadinessList"></div>
+                        </div>
+                    </div>
+
                     <div class="elite-quality-card" id="eliteQualityCard">
                         <div class="elite-quality-kpi">
                             <div class="stat-label">Elite QA</div>
@@ -2076,6 +2091,7 @@
         async function loadDashboard() {
             try {
                 loadBillingReadiness();
+                loadQualityReadiness();
                 loadEliteQualityReport();
                 loadEliteClaims();
                 loadMarketReadiness();
@@ -2136,6 +2152,58 @@
                 statusEl.textContent = 'Unavailable';
                 statusEl.classList.add('danger');
                 document.getElementById('billingReadyAlerts').textContent = 'Billing readiness could not be loaded.';
+            }
+        }
+
+        async function loadQualityReadiness() {
+            const statusEl = document.getElementById('qualityReadinessStatus');
+            const listEl = document.getElementById('qualityReadinessList');
+            if (!statusEl || !listEl) return;
+            try {
+                const response = await fetch('/api/admin/quality-readiness', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('quality readiness unavailable');
+                const data = await response.json();
+                const summary = data.summary || {};
+                const markets = data.markets || [];
+                const guidance = data.sales_guidance || {};
+                const billing = data.billing || {};
+                const readyMarkets = Number(summary.ready_markets || 0);
+                const pilotMarkets = Number(summary.pilot_markets || 0);
+                document.getElementById('qualityReadyCount').textContent = readyMarkets;
+                document.getElementById('qualityPilotCount').textContent = pilotMarkets;
+                document.getElementById('qualityNeedsCount').textContent = summary.needs_inventory_markets || 0;
+                document.getElementById('qualityLeadTotal').textContent = summary.total_quality_leads || 0;
+
+                const labels = {
+                    ready_to_sell: 'Sell Quality',
+                    billing_blocked: 'Setup billing',
+                    pilot_only: 'Pilot only',
+                    needs_inventory: 'Needs inventory'
+                };
+                statusEl.textContent = labels[guidance.status] || 'Review';
+                statusEl.classList.toggle('danger', guidance.status === 'needs_inventory' || guidance.status === 'billing_blocked');
+                statusEl.classList.toggle('warn', guidance.status === 'pilot_only');
+                document.getElementById('qualityReadinessAlerts').textContent = billing.quality_price_configured === false
+                    ? `${guidance.headline || 'Quality needs review'} Missing STRIPE_PRICE_ID_QUALITY.`
+                    : (guidance.headline || 'Quality readiness loaded.');
+
+                listEl.innerHTML = markets.slice(0, 6).map(m => `
+                    <div class="market-readiness-row">
+                        <strong>${escHtml(m.city || 'Unknown')}</strong>
+                        <span>${escHtml(m.status || '')} · ${Number(m.quality_leads || 0)} Quality · ${Number(m.average_quality_score || 0)}/100</span>
+                        <span class="market-readiness-price">${m.recommended_price ? '$' + Number(m.recommended_price).toLocaleString() + '/mo' : 'Hold'}</span>
+                        <div class="market-readiness-action">
+                            ${escHtml((m.next_actions || guidance.next_actions || [])[0] || 'Review enrichment gaps before selling Quality.')}
+                        </div>
+                    </div>
+                `).join('') || '<div class="elite-quality-alert">No Quality readiness data yet.</div>';
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('qualityReadinessAlerts').textContent = 'Quality readiness could not be loaded.';
+                listEl.innerHTML = '';
             }
         }
 
