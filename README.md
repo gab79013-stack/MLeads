@@ -138,6 +138,10 @@ Then add the CRM destination to the 0brix runtime environment:
 TWENTY_URL=http://2.25.162.58:3000
 ```
 
+On the production VM the setup script updates `/etc/mleads/mleads.env`
+automatically when that file exists, so restarting `0brix-web` applies the
+redirect.
+
 ### AI Classification
 - DeepSeek-V3.2-NVFP4 (free) via Vultr Inference API
 - 17 fields: trade, pain point, upsell, sub-trades, urgency, decision maker, best time

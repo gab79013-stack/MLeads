@@ -11,6 +11,7 @@ set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/twenty}"
 SERVER_URL="${SERVER_URL:-http://2.25.162.58:3000}"
+MLEADS_ENV_FILE="${MLEADS_ENV_FILE:-/etc/mleads/mleads.env}"
 COMPOSE_URL="${COMPOSE_URL:-https://raw.githubusercontent.com/twentyhq/twenty/refs/heads/main/packages/twenty-docker/docker-compose.yml}"
 ENV_EXAMPLE_URL="${ENV_EXAMPLE_URL:-https://raw.githubusercontent.com/twentyhq/twenty/refs/heads/main/packages/twenty-docker/.env.example}"
 
@@ -80,6 +81,16 @@ chmod 600 .env
 
 docker compose up -d
 
+if [[ -f "${MLEADS_ENV_FILE}" ]]; then
+  if grep -q '^TWENTY_URL=' "${MLEADS_ENV_FILE}"; then
+    sed -i "s#^TWENTY_URL=.*#TWENTY_URL=${SERVER_URL}#" "${MLEADS_ENV_FILE}"
+  else
+    printf '\nTWENTY_URL=%s\n' "${SERVER_URL}" >> "${MLEADS_ENV_FILE}"
+  fi
+  echo "Updated ${MLEADS_ENV_FILE} with TWENTY_URL=${SERVER_URL}"
+else
+  echo "MLeads env file not found at ${MLEADS_ENV_FILE}; set TWENTY_URL=${SERVER_URL} manually."
+fi
+
 echo "Twenty CRM requested at ${SERVER_URL}"
-echo "Set TWENTY_URL=${SERVER_URL} in the 0brix web environment."
 docker compose ps

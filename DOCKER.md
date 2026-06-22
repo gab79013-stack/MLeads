@@ -73,6 +73,9 @@ TWENTY_URL=http://2.25.162.58:3000
 docker compose up -d --build web
 ```
 
+On the production VM, `setup_twenty_crm.sh` updates
+`/etc/mleads/mleads.env` automatically when the file exists.
+
 ## Logs
 
 ```bash
