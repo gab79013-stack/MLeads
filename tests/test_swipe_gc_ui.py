@@ -176,23 +176,26 @@ def test_admin_dashboard_surfaces_quality_readiness_for_sales():
 def test_quality_admin_readiness_requires_specific_stripe_quality_price():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
     route_src = (TEMPLATE.parents[1] / "routes" / "leads.py").read_text(encoding="utf-8")
+    billing_src = (TEMPLATE.parents[1].parents[0] / "utils" / "billing.py").read_text(encoding="utf-8")
     helper_start = app_src.index("def _quality_admin_guidance_payload")
     helper_end = app_src.index("@app.route('/api/admin/elite-pilot-requests'", helper_start)
     helper_src = app_src[helper_start:helper_end]
     billing_start = app_src.index("def _billing_readiness_payload")
     billing_end = app_src.index("def _quality_admin_guidance_payload", billing_start)
-    billing_src = app_src[billing_start:billing_end]
+    readiness_src = app_src[billing_start:billing_end]
 
     assert 'os.getenv("STRIPE_PRICE_ID_QUALITY") or ""' in helper_src
     assert 'os.getenv("STRIPE_PRICE_ID_QUALITY") or os.getenv("STRIPE_PRICE_ID")' not in helper_src
     assert '"missing": [] if quality_price_configured else ["STRIPE_PRICE_ID_QUALITY"]' in helper_src
-    assert "specific_price_required = {'quality', 'elite'}" in billing_src
-    assert "generic_price_allowed = tier not in specific_price_required" in billing_src
-    assert "price_set = specific_price_set or (generic_price_allowed and generic_price_set)" in billing_src
+    assert "specific_price_required = {'quality', 'elite'}" in readiness_src
+    assert "generic_price_allowed = tier not in specific_price_required" in readiness_src
+    assert "price_set = specific_price_set or (generic_price_allowed and generic_price_set)" in readiness_src
+    assert 'def select_web_checkout_price_id' in billing_src
+    assert 'curated_tiers = {"quality", "elite"}' in billing_src
+    assert 'return os.getenv(specific_key, "")' in billing_src
+    assert 'return os.getenv(specific_key) or os.getenv("STRIPE_PRICE_ID") or ""' in billing_src
     for src in (app_src, route_src):
-        assert "curated_tiers = {'quality', 'elite'}" in src
-        assert "if tier in curated_tiers else" in src
-        assert "(os.getenv(specific_key) or os.getenv('STRIPE_PRICE_ID') or '')" in src
+        assert "billing.select_web_checkout_price_id(tier)" in src
         assert "os.getenv(f'STRIPE_PRICE_ID_{tier.upper()}', os.getenv('STRIPE_PRICE_ID', ''))" not in src
 
 

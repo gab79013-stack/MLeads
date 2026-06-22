@@ -6,6 +6,7 @@ import logging
 import os
 
 from flask import Blueprint, request, jsonify, g
+from utils import billing
 
 bp = Blueprint('leads_routes', __name__)
 logger = logging.getLogger('mleads')
@@ -1041,13 +1042,7 @@ def create_payment_checkout():
         return elite_gate
 
     stripe_key = os.getenv('STRIPE_API_KEY', '')
-    specific_key = f'STRIPE_PRICE_ID_{tier.upper()}'
-    curated_tiers = {'quality', 'elite'}
-    price_id = (
-        os.getenv(specific_key, '')
-        if tier in curated_tiers else
-        (os.getenv(specific_key) or os.getenv('STRIPE_PRICE_ID') or '')
-    )
+    price_id = billing.select_web_checkout_price_id(tier)
     if not stripe_key or not price_id:
         return jsonify({"error": "Pago no configurado. Contacta a soporte.", "code": "stripe_not_configured"}), 503
 
