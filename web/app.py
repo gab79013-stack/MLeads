@@ -13,7 +13,7 @@ import json
 import logging
 import hashlib
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, g, send_file
+from flask import Flask, request, jsonify, g, send_file, redirect
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -170,7 +170,19 @@ def server_error(e):
 
 @app.route('/', methods=['GET'])
 def index():
-    """Serve the main dashboard HTML."""
+    """Serve the public project landing page."""
+    template_path = os.path.join(os.path.dirname(__file__), 'templates', 'home.html')
+    try:
+        with open(template_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return jsonify({"error": "Landing page not found"}), 404
+
+
+@app.route('/app', methods=['GET'])
+@app.route('/dashboard', methods=['GET'])
+def dashboard_page():
+    """Serve the internal dashboard HTML."""
     template_path = os.path.join(os.path.dirname(__file__), 'templates', 'index.html')
     try:
         with open(template_path, 'r', encoding='utf-8') as f:
@@ -222,13 +234,32 @@ def homeowner_intake_page():
 @app.route('/pipeline', methods=['GET'])
 @app.route('/pipeline.html', methods=['GET'])
 def pipeline_page():
-    """Serve the Kanban pipeline page for swiped/right leads."""
-    pipeline_path = os.path.join(os.path.dirname(__file__), 'templates', 'pipeline.html')
+    """Redirect the legacy CRM entry point to Twenty."""
+    twenty_url = os.getenv("TWENTY_URL", "").rstrip("/")
+    if not twenty_url:
+        twenty_url = "http://localhost:3000"
+    return redirect(twenty_url, code=302)
+
+
+@app.route('/crm', methods=['GET'])
+def crm_redirect():
+    """Alias for the new CRM destination."""
+    twenty_url = os.getenv("TWENTY_URL", "").rstrip("/")
+    if not twenty_url:
+        twenty_url = "http://localhost:3000"
+    return redirect(twenty_url, code=302)
+
+
+@app.route('/colaboradores', methods=['GET'])
+@app.route('/partners', methods=['GET'])
+def collaborators_page():
+    """Serve the collaborators / investors invitation page."""
+    template_path = os.path.join(os.path.dirname(__file__), 'templates', 'colaboradores.html')
     try:
-        with open(pipeline_path, 'r', encoding='utf-8') as f:
+        with open(template_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        return jsonify({"error": "Pipeline page not found"}), 404
+        return jsonify({"error": "Collaborators page not found"}), 404
 
 
 @app.route('/api/homeowner-intake', methods=['POST'])

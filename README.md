@@ -1,6 +1,6 @@
 # 0brix — Premium Lead Platform for General Contractors
 
-Lead generation platform for General Contractors: detects permit, weather, property and homeowner-intent signals, classifies sellable opportunities, and delivers them through a swipe feed + CRM pipeline.
+Lead generation platform for General Contractors: detects permit, weather, property and homeowner-intent signals, classifies sellable opportunities, and delivers them through a swipe feed + public marketing site + CRM pipeline.
 
 **Stack:** Python Flask + SQLite + Vue/JS frontend | **AI:** DeepSeek-V3.2-NVFP4 (free via Vultr Inference) | **Server:** 2.25.162.58
 
@@ -23,11 +23,12 @@ docker run --rm -p 5001:5001 -v "$PWD/data:/app/data" -v "$PWD/contacts:/app/con
 ```
 
 **Live URLs:**
+- Public homepage: `http://2.25.162.58/`
+- Collaborators / investors: `http://2.25.162.58/colaboradores`
 - Swipe feed: `http://2.25.162.58/swipe`
 - Homeowner intake: `http://2.25.162.58/homeowner-intake`
-- Pipeline CRM: `http://2.25.162.58/pipeline`
-- Dashboard: `http://2.25.162.58/`
-- Huly CRM: `http://2.25.162.58:8080`
+- Internal dashboard: `http://2.25.162.58/app`
+- CRM: `TWENTY_URL` or the TwentyHQ deployment URL
 
 ---
 
@@ -120,12 +121,10 @@ MLeads/
 - Publishes submissions into `consolidated_leads` as `remodel` GC opportunities with `planning` phase, homeowner decision-maker metadata and HOT/WARM scoring
 - Keeps raw submissions in `homeowner_project_intakes` for audit, QA and follow-up
 
-### Pipeline CRM (`/pipeline`)
-- 6-column Kanban: Nuevo → Contactado → Propuesta → Negociación → Ganado / Perdido
-- Drag & drop between columns
-- Notes, follow-ups, estimates, contact log
-- Invoice/estimate draft preparation from saved leads
-- Auto-advances status on contact/estimate actions
+### CRM
+- The legacy internal pipeline UI has been retired from the public app entry points.
+- `/pipeline` and `/crm` now redirect to TwentyHQ.
+- Set `TWENTY_URL` in the environment to point to your Twenty deployment.
 
 ### AI Classification
 - DeepSeek-V3.2-NVFP4 (free) via Vultr Inference API
@@ -164,6 +163,10 @@ cd /opt/MLeads && python3 main.py --run permits  # single agent
   - `lead_quality_reports` — user-reported lead quality issues
   - `elite_replacement_credits` — replacement credits for reported Elite leads
   - `elite_pilot_requests` — captured Elite demand for markets not ready for `$500/month`
+
+## Environment
+
+- `TWENTY_URL`: public URL of the TwentyHQ instance used for CRM redirects
 
 ---
 

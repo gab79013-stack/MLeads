@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>0brix — Socios e inversionistas</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{--bg:#0b1220;--surface:#111a2e;--surface2:#17243d;--text:#f8fafc;--muted:#94a3b8;--line:#24324f;--accent:#ff6b6b;--accent2:#60a5fa;--green:#34d399}
+    body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(180deg,#08101d 0%,#0b1220 100%);color:var(--text);line-height:1.5}
+    .wrap{max-width:1120px;margin:0 auto;padding:28px 20px 64px}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:36px}
+    .brand{font-weight:800;letter-spacing:-.03em;font-size:20px}
+    a{color:inherit}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:999px;text-decoration:none;font-weight:700;border:1px solid var(--line);color:var(--text);background:rgba(255,255,255,.02)}
+    .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+    .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:20px}
+    .panel{background:rgba(17,26,46,.88);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:20px;padding:28px}
+    h1{font-size:clamp(36px,5vw,62px);line-height:1.03;letter-spacing:-.05em;margin-bottom:14px}
+    .lead{font-size:18px;color:var(--muted);max-width:62ch}
+    .stack{display:grid;gap:14px;margin-top:18px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}
+    .pill{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03);font-size:13px;font-weight:600}
+    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:18px}
+    .card{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:16px;padding:20px}
+    .card h2{font-size:18px;margin-bottom:8px}
+    .card p{color:var(--muted)}
+    .metric{padding:18px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.03)}
+    .metric strong{display:block;font-size:26px;letter-spacing:-.04em}
+    .metric span{color:var(--muted);font-size:13px}
+    .cta{margin-top:20px;display:flex;gap:12px;flex-wrap:wrap}
+    .footer{margin-top:24px;color:var(--muted);font-size:13px}
+    @media (max-width: 900px){.hero,.grid{grid-template-columns:1fr}.top{flex-direction:column;align-items:flex-start}}
+    @media (max-width: 640px){.wrap{padding:20px 14px 48px}h1{font-size:40px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">0brix</div>
+      <a class="btn" href="/">Volver al proyecto</a>
+    </div>
+
+    <section class="hero">
+      <div class="panel">
+        <h1>Buscamos socios, colaboradores e inversionistas que quieran acelerar la distribución.</h1>
+        <p class="lead">Estamos construyendo una plataforma que encuentra y califica demanda real para contratistas generales. El valor está en el dato, el timing y la capacidad de convertir señales públicas en pipeline comercial.</p>
+        <div class="row">
+          <span class="pill">Partnerships</span>
+          <span class="pill">Distribución</span>
+          <span class="pill">Infraestructura comercial</span>
+          <span class="pill">Capital para escalar</span>
+        </div>
+        <div class="cta">
+          <a class="btn primary" href="mailto:hello@0brix.com">Escribirnos</a>
+          <a class="btn" href="/homeowner-intake">Ver canal de captación</a>
+        </div>
+      </div>
+      <div class="panel stack">
+        <div class="metric"><strong>2</strong><span>frentes de monetización: leads y acceso premium</span></div>
+        <div class="metric"><strong>1</strong><span>producto listo para ventas B2B</span></div>
+        <div class="metric"><strong>Escalable</strong><span>mercados y canales que se pueden replicar por ciudad</span></div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h2>Colaboradores</h2>
+        <p>Personas que ayuden con growth, data, ventas, partnerships o producto y quieran entrar cerca del núcleo operativo.</p>
+      </div>
+      <div class="card">
+        <h2>Socios</h2>
+        <p>Aliados que aporten distribución, acceso a mercado, operación local o know-how de la industria de construcción.</p>
+      </div>
+      <div class="card">
+        <h2>Inversionistas</h2>
+        <p>Capital inteligente para acelerar adquisición, cobertura de mercados y empaquetado comercial del producto.</p>
+      </div>
+    </section>
+
+    <div class="footer">Si quieres evaluar una alianza, escribe a <a href="mailto:hello@0brix.com">hello@0brix.com</a> y cuéntanos tu rol ideal.</div>
+  </div>
+</body>
+</html>

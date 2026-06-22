@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>0brix — Leads premium para contratistas</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{--bg:#f6f7fb;--surface:#fff;--text:#101828;--muted:#667085;--line:#e4e7ec;--accent:#e45561;--accent2:#1f6feb;--green:#067647}
+    body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+    .wrap{max-width:1160px;margin:0 auto;padding:28px 20px 64px}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:40px}
+    .brand{font-weight:800;letter-spacing:-.03em;font-size:20px}
+    .nav{display:flex;gap:10px;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:999px;text-decoration:none;font-weight:700;border:1px solid var(--line);color:var(--text);background:#fff}
+    .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+    .hero{display:grid;grid-template-columns:1.2fr .8fr;gap:24px;align-items:stretch}
+    .panel{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:28px;box-shadow:0 10px 30px rgba(16,24,40,.05)}
+    h1{font-size:clamp(38px,5vw,66px);line-height:1.02;letter-spacing:-.05em;margin-bottom:16px}
+    .lead{font-size:18px;color:var(--muted);max-width:58ch}
+    .chips{display:flex;flex-wrap:wrap;gap:10px;margin:24px 0 28px}
+    .chip{padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:13px;font-weight:600;color:#344054}
+    .actions{display:flex;gap:12px;flex-wrap:wrap}
+    .statgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .stat{padding:16px;border:1px solid var(--line);border-radius:14px;background:#fcfcfd}
+    .stat strong{display:block;font-size:24px;letter-spacing:-.04em}
+    .stat span{color:var(--muted);font-size:13px}
+    .section{margin-top:22px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+    .card h2{font-size:18px;margin-bottom:8px}
+    .card p{color:var(--muted);font-size:15px}
+    .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px}
+    .wide{margin-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .stack{display:grid;gap:14px}
+    .mini{padding:18px;border:1px solid var(--line);border-radius:14px;background:#fff}
+    .mini strong{display:block;margin-bottom:4px}
+    .footer{margin-top:28px;color:var(--muted);font-size:13px}
+    @media (max-width: 900px){.hero,.section,.wide{grid-template-columns:1fr}.top{flex-direction:column;align-items:flex-start}.statgrid{grid-template-columns:1fr 1fr}}
+    @media (max-width: 640px){.wrap{padding:20px 14px 48px}h1{font-size:40px}.statgrid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">0brix</div>
+      <div class="nav">
+        <a class="btn" href="/swipe">Explorar leads</a>
+        <a class="btn" href="/homeowner-intake">Publicar proyecto</a>
+        <a class="btn primary" href="/colaboradores">Colaborar con el proyecto</a>
+      </div>
+    </div>
+
+    <section class="hero">
+      <div class="panel">
+        <h1>Leads de construcción con intención real, antes que la competencia.</h1>
+        <p class="lead">0brix detecta oportunidades verificables para contratistas generales y oficios: homeowners que apenas están pensando en una adición, señales públicas de obra, y proyectos con potencial comercial claro.</p>
+        <div class="chips">
+          <span class="chip">Adiciones y remodelaciones</span>
+          <span class="chip">Homeowners en etapa temprana</span>
+          <span class="chip">Datos públicos + enriquecimiento</span>
+          <span class="chip">Entrega para ventas</span>
+        </div>
+        <div class="actions">
+          <a class="btn primary" href="/homeowner-intake">Captar homeowners</a>
+          <a class="btn" href="/swipe">Ver el feed de leads</a>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="statgrid">
+          <div class="stat"><strong>3</strong><span>canales de entrada</span></div>
+          <div class="stat"><strong>1</strong><span>pipeline comercial</span></div>
+          <div class="stat"><strong>Real</strong><span>datos y señales públicas</span></div>
+          <div class="stat"><strong>Premium</strong><span>listo para cobrar</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="card">
+        <h2>Inventario que vende</h2>
+        <p>Nos enfocamos en leads con intención, valor y contexto suficiente para que un GC pueda hacer contacto útil y avanzar la venta.</p>
+      </div>
+      <div class="card">
+        <h2>Captura temprana</h2>
+        <p>El formulario de homeowner abre un nuevo canal para proyectos que aún no entraron al radar de permisos o contratistas.</p>
+      </div>
+      <div class="card">
+        <h2>Sales-ready</h2>
+        <p>La interfaz está pensada para convertir tráfico en cuentas, llamadas y cierres sin complicar la operación.</p>
+      </div>
+    </section>
+
+    <section class="wide">
+      <div class="panel stack">
+        <div class="mini">
+          <strong>Para contratistas</strong>
+          <span>Encuentra leads filtrados por ciudad, intención y valor de proyecto.</span>
+        </div>
+        <div class="mini">
+          <strong>Para operaciones</strong>
+          <span>Convierte señales públicas en oportunidades ordenadas para seguimiento.</span>
+        </div>
+      </div>
+      <div class="panel stack">
+        <div class="mini">
+          <strong>Para negocio</strong>
+          <span>La propuesta ya está orientada a pricing premium y a mercados con demanda real.</span>
+        </div>
+        <div class="mini">
+          <strong>Para crecimiento</strong>
+          <span>La siguiente capa es partnerships, socios e inversionistas que ayuden a acelerar la distribución.</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">Accesos internos: <a href="/app">Dashboard</a> · <a href="/pipeline">CRM</a></div>
+  </div>
+</body>
+</html>
