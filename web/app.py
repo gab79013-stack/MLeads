@@ -237,7 +237,8 @@ def pipeline_page():
     """Redirect the legacy CRM entry point to Twenty."""
     twenty_url = os.getenv("TWENTY_URL", "").rstrip("/")
     if not twenty_url:
-        twenty_url = "http://localhost:3000"
+        host = request.host.split(":")[0] if request.host else "127.0.0.1"
+        twenty_url = f"http://{host}:3000"
     return redirect(twenty_url, code=302)
 
 
@@ -246,7 +247,8 @@ def crm_redirect():
     """Alias for the new CRM destination."""
     twenty_url = os.getenv("TWENTY_URL", "").rstrip("/")
     if not twenty_url:
-        twenty_url = "http://localhost:3000"
+        host = request.host.split(":")[0] if request.host else "127.0.0.1"
+        twenty_url = f"http://{host}:3000"
     return redirect(twenty_url, code=302)
 
 

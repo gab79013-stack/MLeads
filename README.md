@@ -28,7 +28,7 @@ docker run --rm -p 5001:5001 -v "$PWD/data:/app/data" -v "$PWD/contacts:/app/con
 - Swipe feed: `http://2.25.162.58/swipe`
 - Homeowner intake: `http://2.25.162.58/homeowner-intake`
 - Internal dashboard: `http://2.25.162.58/app`
-- CRM: `TWENTY_URL` or the TwentyHQ deployment URL
+- CRM: `TWENTY_URL` or `http://<server-ip>:3000` when Twenty runs on the same server
 
 ---
 
@@ -124,7 +124,7 @@ MLeads/
 ### CRM
 - The legacy internal pipeline UI has been retired from the public app entry points.
 - `/pipeline` and `/crm` now redirect to TwentyHQ.
-- Set `TWENTY_URL` in the environment to point to your Twenty deployment.
+- Set `TWENTY_URL` in the environment to point to your Twenty deployment, or expose Twenty on port `3000` on the same server.
 
 ### AI Classification
 - DeepSeek-V3.2-NVFP4 (free) via Vultr Inference API
