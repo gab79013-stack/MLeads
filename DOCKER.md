@@ -57,6 +57,22 @@ Only start the worker when you want the scheduled collection/orchestrator loop a
 docker compose --profile agents up -d worker
 ```
 
+## Twenty CRM
+
+The legacy `/pipeline` page redirects to TwentyHQ. For a same-server
+self-hosted CRM, install Twenty on port `3000`:
+
+```bash
+sudo SERVER_URL=http://2.25.162.58:3000 ./scripts/setup_twenty_crm.sh
+```
+
+Then set the MLeads web runtime variable and rebuild/restart the web service:
+
+```bash
+TWENTY_URL=http://2.25.162.58:3000
+docker compose up -d --build web
+```
+
 ## Logs
 
 ```bash

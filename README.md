@@ -1,6 +1,6 @@
 # 0brix — Premium Lead Platform for General Contractors
 
-Lead generation platform for General Contractors: detects permit, weather, property and homeowner-intent signals, classifies sellable opportunities, and delivers them through a swipe feed + public marketing site + CRM pipeline.
+Lead generation platform for General Contractors: detects permit, weather, property and homeowner-intent signals, classifies sellable opportunities, and delivers them through a swipe feed, public marketing site, and TwentyHQ CRM handoff.
 
 **Stack:** Python Flask + SQLite + Vue/JS frontend | **AI:** DeepSeek-V3.2-NVFP4 (free via Vultr Inference) | **Server:** 2.25.162.58
 
@@ -41,7 +41,7 @@ MLeads/
 │   ├── auth.py             # JWT auth helpers
 │   ├── routes/             # Blueprints (target structure)
 │   │   ├── leads.py        # Leads CRUD + stats + notes
-│   │   ├── pipeline.py      # CRM: Kanban board
+│   │   ├── pipeline.py      # Legacy pipeline API helpers
 │   │   ├── swipe.py        # Swipe feed + action
 │   │   ├── admin.py        # Admin: users, scheduler
 │   │   └── ai_routes.py    # AI: classify, crossdata, disasters
@@ -49,7 +49,7 @@ MLeads/
 │       ├── index.html      # Dashboard
 │       ├── swipe.html      # Tinder-style swipe feed
 │       ├── homeowner_intake.html # Public homeowner project intake
-│       └── pipeline.html   # Kanban CRM board
+│       └── pipeline.html   # Legacy Kanban UI retained for reference
 ├── utils/
 │   ├── web_db.py           # Multi-user DB schema (1450 lines)
 │   ├── ai_classifier.py    # DeepSeek classification
@@ -126,6 +126,18 @@ MLeads/
 - `/pipeline` and `/crm` now redirect to TwentyHQ.
 - Set `TWENTY_URL` in the environment to point to your Twenty deployment, or expose Twenty on port `3000` on the same server.
 
+To install Twenty on the same server:
+
+```bash
+sudo SERVER_URL=http://2.25.162.58:3000 ./scripts/setup_twenty_crm.sh
+```
+
+Then add the CRM destination to the 0brix runtime environment:
+
+```bash
+TWENTY_URL=http://2.25.162.58:3000
+```
+
 ### AI Classification
 - DeepSeek-V3.2-NVFP4 (free) via Vultr Inference API
 - 17 fields: trade, pain point, upsell, sub-trades, urgency, decision maker, best time
@@ -166,7 +178,7 @@ cd /opt/MLeads && python3 main.py --run permits  # single agent
 
 ## Environment
 
-- `TWENTY_URL`: public URL of the TwentyHQ instance used for CRM redirects
+- `TWENTY_URL`: public URL of the TwentyHQ instance used for CRM redirects. On the current server this is `http://2.25.162.58:3000`.
 
 ---
 
