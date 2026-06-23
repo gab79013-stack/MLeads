@@ -25,6 +25,13 @@ def test_home_positions_0brix_as_useful_startup():
         assert text in html
 
 
+def test_home_crm_nav_opens_external_crm_entrypoint():
+    html = _html(HOME)
+    assert '<a class="btn" href="/crm">CRM</a>' in html
+    assert 'href="/pipeline">CRM</a>' not in html
+    assert 'href="/pipeline">Abrir CRM</a>' not in html
+
+
 def test_collaborators_page_invites_capital_distribution_and_advocacy():
     html = _html(COLLAB)
     for text in [
