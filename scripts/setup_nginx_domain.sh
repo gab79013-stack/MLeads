@@ -75,7 +75,7 @@ if [[ "${INCLUDE_WWW}" == true ]]; then
   SERVER_NAMES="${SERVER_NAMES} www.${DOMAIN}"
 fi
 
-SITE_NAME="$(echo "${DOMAIN}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9.-' '-')"
+SITE_NAME="$(printf '%s' "${DOMAIN}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9.-' '-')"
 AVAILABLE="/etc/nginx/sites-available/${SITE_NAME}"
 ENABLED="/etc/nginx/sites-enabled/${SITE_NAME}"
 
