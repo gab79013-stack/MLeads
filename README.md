@@ -30,6 +30,13 @@ docker run --rm -p 5001:5001 -v "$PWD/data:/app/data" -v "$PWD/contacts:/app/con
 - Internal dashboard: `http://2.25.162.58/app`
 - CRM: `TWENTY_URL` or `http://<server-ip>:3000` when Twenty runs on the same server
 
+**Same-server domains:**
+- Point every domain's `A` record to `2.25.162.58`.
+- Use `scripts/setup_nginx_domain.sh` to route each domain by hostname.
+- Example: Yami / Taco Taco static site → `/var/www/taco-taco`.
+- Example: Obrits / 0brix app → `http://127.0.0.1:5001`.
+- Example: CRM subdomain → `http://127.0.0.1:3000`.
+
 ---
 
 ## Project Structure
@@ -221,4 +228,46 @@ For Docker-based deployment:
 ```bash
 docker build -t mleads-web .
 docker run --rm -p 5001:5001 -v "$PWD/data:/app/data" -v "$PWD/contacts:/app/contacts" mleads-web
+```
+
+## Multi-domain hosting
+
+This server can host many domains on the same IP. DNS decides which domains
+reach the box; Nginx decides which app or static folder each domain serves.
+
+DNS records:
+
+```text
+Type  Host  Value
+A     @     2.25.162.58
+A     www   2.25.162.58
+```
+
+Create a static site domain:
+
+```bash
+sudo ./scripts/setup_nginx_domain.sh \
+  --domain yami.com \
+  --www \
+  --static-root /var/www/taco-taco \
+  --enable-ssl
+```
+
+Create an app domain for 0brix:
+
+```bash
+sudo ./scripts/setup_nginx_domain.sh \
+  --domain obrits.com \
+  --www \
+  --proxy http://127.0.0.1:5001 \
+  --enable-ssl
+```
+
+Create a CRM domain for Twenty:
+
+```bash
+sudo ./scripts/setup_nginx_domain.sh \
+  --domain crm.obrits.com \
+  --proxy http://127.0.0.1:3000 \
+  --enable-ssl
 ```
