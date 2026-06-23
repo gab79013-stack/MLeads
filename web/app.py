@@ -13,7 +13,7 @@ import json
 import logging
 import hashlib
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, g, send_file, redirect
+from flask import Flask, request, jsonify, g, send_file, redirect, render_template
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -234,12 +234,8 @@ def homeowner_intake_page():
 @app.route('/pipeline', methods=['GET'])
 @app.route('/pipeline.html', methods=['GET'])
 def pipeline_page():
-    """Redirect the legacy CRM entry point to Twenty."""
-    twenty_url = os.getenv("TWENTY_URL", "").rstrip("/")
-    if not twenty_url:
-        host = request.host.split(":")[0] if request.host else "127.0.0.1"
-        twenty_url = f"http://{host}:3000"
-    return redirect(twenty_url, code=302)
+    """Serve the per-user CRM populated by swipe likes."""
+    return render_template("pipeline.html")
 
 
 @app.route('/crm', methods=['GET'])

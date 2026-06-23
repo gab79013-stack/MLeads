@@ -23,6 +23,13 @@ def test_pipeline_and_invoice_api_routes_are_registered_in_live_app():
     assert "@app.route('/api/pipeline/invoice', methods=['POST'])" in src
 
 
+def test_pipeline_page_serves_user_crm_instead_of_redirecting_to_external_crm():
+    src = _src(APP)
+    pipeline_block = src.split("def pipeline_page():", 1)[1].split("@app.route('/crm'", 1)[0]
+    assert "pipeline.html" in pipeline_block
+    assert "return redirect" not in pipeline_block
+
+
 def test_pipeline_invoice_tables_are_initialized():
     src = _src(WEB_DB)
     assert "CREATE TABLE IF NOT EXISTS lead_pipeline" in src

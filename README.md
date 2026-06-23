@@ -28,7 +28,8 @@ docker run --rm -p 5001:5001 -v "$PWD/data:/app/data" -v "$PWD/contacts:/app/con
 - Swipe feed: `http://2.25.162.58/swipe`
 - Homeowner intake: `http://2.25.162.58/homeowner-intake`
 - Internal dashboard: `http://2.25.162.58/app`
-- CRM: `TWENTY_URL` or `http://<server-ip>:3000` when Twenty runs on the same server
+- User CRM pipeline: `http://2.25.162.58/pipeline`
+- Twenty CRM: `TWENTY_URL` or `http://<server-ip>:3000` when Twenty runs on the same server
 
 **Same-server domains:**
 - Point every domain's `A` record to `2.25.162.58`.
@@ -129,9 +130,9 @@ MLeads/
 - Keeps raw submissions in `homeowner_project_intakes` for audit, QA and follow-up
 
 ### CRM
-- The legacy internal pipeline UI has been retired from the public app entry points.
-- `/pipeline` and `/crm` now redirect to TwentyHQ.
-- Set `TWENTY_URL` in the environment to point to your Twenty deployment, or expose Twenty on port `3000` on the same server.
+- `/pipeline` serves the per-user 0brix CRM. A new user starts with an empty pipeline, and each swipe-right inserts that lead into their own `lead_pipeline` records.
+- `/crm` redirects to TwentyHQ for the external/admin CRM.
+- Set `TWENTY_URL` in the environment to point `/crm` to your Twenty deployment, or expose Twenty on port `3000` on the same server.
 
 To install Twenty on the same server:
 
@@ -189,7 +190,7 @@ cd /opt/MLeads && python3 main.py --run permits  # single agent
 
 ## Environment
 
-- `TWENTY_URL`: public URL of the TwentyHQ instance used for CRM redirects. On the current server this is `http://2.25.162.58:3000`.
+- `TWENTY_URL`: public URL of the TwentyHQ instance used for `/crm` redirects. On the current server this is `http://2.25.162.58:3000` until `crm.0brix.com` has a public DNS record.
 
 ---
 
@@ -267,7 +268,7 @@ Create a CRM domain for Twenty:
 
 ```bash
 sudo ./scripts/setup_nginx_domain.sh \
-  --domain crm.obrits.com \
+  --domain crm.0brix.com \
   --proxy http://127.0.0.1:3000 \
   --enable-ssl
 ```
