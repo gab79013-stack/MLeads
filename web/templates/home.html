@@ -3,116 +3,194 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>0brix — Leads premium para contratistas</title>
+  <title>0brix - Infraestructura comercial para contratistas</title>
+  <meta name="description" content="0brix convierte senales de construccion en prospectos verificados para contratistas, con swipe, filtros y CRM por usuario.">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    :root{--bg:#f6f7fb;--surface:#fff;--text:#101828;--muted:#667085;--line:#e4e7ec;--accent:#e45561;--accent2:#1f6feb;--green:#067647}
-    body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
-    .wrap{max-width:1160px;margin:0 auto;padding:28px 20px 64px}
-    .top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:40px}
-    .brand{font-weight:800;letter-spacing:-.03em;font-size:20px}
-    .nav{display:flex;gap:10px;flex-wrap:wrap}
-    .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:999px;text-decoration:none;font-weight:700;border:1px solid var(--line);color:var(--text);background:#fff}
+    :root{
+      --bg:#f7f8fb;--ink:#111827;--muted:#5f6b7a;--panel:#ffffff;--line:#dbe2ea;
+      --accent:#e84d5b;--blue:#2563eb;--green:#0f8a63;--amber:#b7791f;--soft:#eef3f7;
+      --shadow:0 22px 60px rgba(16,24,40,.11)
+    }
+    body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+    a{color:inherit}
+    .shell{max-width:1180px;margin:0 auto;padding:24px 20px 56px}
+    .nav{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:850;font-size:22px;letter-spacing:0}
+    .mark{display:grid;place-items:center;width:36px;height:36px;border-radius:8px;background:#111827;color:#fff;font-weight:900}
+    .links{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:10px 15px;border:1px solid var(--line);border-radius:8px;background:#fff;color:#172033;text-decoration:none;font-weight:750;font-size:14px;white-space:nowrap}
     .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-    .hero{display:grid;grid-template-columns:1.2fr .8fr;gap:24px;align-items:stretch}
-    .panel{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:28px;box-shadow:0 10px 30px rgba(16,24,40,.05)}
-    h1{font-size:clamp(38px,5vw,66px);line-height:1.02;letter-spacing:-.05em;margin-bottom:16px}
-    .lead{font-size:18px;color:var(--muted);max-width:58ch}
-    .chips{display:flex;flex-wrap:wrap;gap:10px;margin:24px 0 28px}
-    .chip{padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:13px;font-weight:600;color:#344054}
-    .actions{display:flex;gap:12px;flex-wrap:wrap}
-    .statgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-    .stat{padding:16px;border:1px solid var(--line);border-radius:14px;background:#fcfcfd}
-    .stat strong{display:block;font-size:24px;letter-spacing:-.04em}
-    .stat span{color:var(--muted);font-size:13px}
-    .section{margin-top:22px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
-    .card h2{font-size:18px;margin-bottom:8px}
-    .card p{color:var(--muted);font-size:15px}
-    .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px}
-    .wide{margin-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    .stack{display:grid;gap:14px}
-    .mini{padding:18px;border:1px solid var(--line);border-radius:14px;background:#fff}
-    .mini strong{display:block;margin-bottom:4px}
-    .footer{margin-top:28px;color:var(--muted);font-size:13px}
-    @media (max-width: 900px){.hero,.section,.wide{grid-template-columns:1fr}.top{flex-direction:column;align-items:flex-start}.statgrid{grid-template-columns:1fr 1fr}}
-    @media (max-width: 640px){.wrap{padding:20px 14px 48px}h1{font-size:40px}.statgrid{grid-template-columns:1fr}}
+    .btn.dark{background:#111827;border-color:#111827;color:#fff}
+    .hero{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:8px;background:#182131;min-height:620px;box-shadow:var(--shadow)}
+    .hero::before{content:"";position:absolute;inset:0;background:rgba(11,18,32,.86)}
+    .hero-grid{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,.82fr);gap:26px;align-items:center;min-height:620px;padding:48px}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid rgba(255,255,255,.18);border-radius:8px;background:rgba(255,255,255,.06);color:#dbeafe;font-weight:750;font-size:13px;margin-bottom:18px}
+    h1{max-width:780px;color:#fff;font-size:clamp(40px,6vw,76px);line-height:1.01;letter-spacing:0;margin-bottom:18px}
+    .hero-copy{max-width:660px;color:#d4dae5;font-size:18px}
+    .hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:28px}
+    .proof{display:flex;gap:12px;flex-wrap:wrap;margin-top:28px}
+    .proof span{display:inline-flex;align-items:center;min-height:34px;padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#edf2f7;font-size:13px;font-weight:700}
+    .product-visual{position:relative;min-height:480px}
+    .screen{position:absolute;right:0;top:0;width:min(440px,100%);border:1px solid rgba(255,255,255,.22);border-radius:8px;background:#f9fbfd;box-shadow:0 30px 80px rgba(0,0,0,.34);overflow:hidden}
+    .screen-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #e1e7ef;background:#fff}
+    .screen-title{font-weight:850;color:#111827}
+    .status{font-size:12px;color:var(--green);font-weight:800}
+    .lead-card{margin:16px;border:1px solid #dde5ef;border-radius:8px;background:#fff;padding:16px}
+    .tagline{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+    .tag{font-size:12px;font-weight:800;padding:6px 8px;border-radius:7px;background:#edf2ff;color:#2446a8}
+    .tag.hot{background:#fff0f1;color:#bb2535}.tag.good{background:#e9f8f2;color:#087052}
+    .lead-card h2{font-size:20px;line-height:1.18;margin-bottom:8px}
+    .lead-card p{color:#667085;font-size:14px;margin-bottom:14px}
+    .lead-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .lead-meta div{padding:10px;border:1px solid #edf1f5;border-radius:8px;background:#fbfcfe}
+    .lead-meta strong{display:block;font-size:13px}.lead-meta span{font-size:12px;color:#667085}
+    .pipeline{position:absolute;right:24px;bottom:14px;width:min(420px,92%);display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:12px;border:1px solid rgba(17,24,39,.08);border-radius:8px;background:#fff;box-shadow:0 18px 50px rgba(16,24,40,.22)}
+    .col{min-height:118px;padding:9px;border-radius:8px;background:#f4f7fb}
+    .col b{display:block;font-size:12px;color:#4b5563;margin-bottom:8px}.ticket{padding:9px;border-radius:8px;background:#fff;border:1px solid #e5eaf1;font-size:12px;font-weight:750;color:#182131}
+    .section{padding:56px 0 0}
+    .section-head{display:flex;align-items:end;justify-content:space-between;gap:20px;margin-bottom:18px}
+    .section h2{font-size:clamp(28px,4vw,44px);line-height:1.06;letter-spacing:0;max-width:760px}
+    .section p{color:var(--muted)}
+    .grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+    .grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+    .card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:22px}
+    .card .icon{display:grid;place-items:center;width:38px;height:38px;border-radius:8px;background:var(--soft);margin-bottom:16px;font-weight:900}
+    .card h3{font-size:19px;margin-bottom:8px}.card p{font-size:15px}
+    .step{background:#fff;border:1px solid var(--line);border-radius:8px;padding:20px;min-height:160px}
+    .step-num{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#111827;color:#fff;font-size:13px;font-weight:900;margin-bottom:14px}
+    .band{margin-top:56px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:28px;display:grid;grid-template-columns:1.1fr .9fr;gap:24px;align-items:center}
+    .metric-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .metric{border:1px solid #e2e8f0;border-radius:8px;padding:16px;background:#fbfdff}.metric strong{display:block;font-size:25px}.metric span{font-size:13px;color:var(--muted)}
+    .footer{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:36px;padding-top:22px;border-top:1px solid var(--line);color:#687386;font-size:14px}
+    .footer-links{display:flex;gap:14px;flex-wrap:wrap}
+    @media (max-width:980px){.hero-grid{grid-template-columns:1fr;padding:34px}.product-visual{min-height:430px}.section-head,.band{grid-template-columns:1fr;display:grid}.grid-3,.grid-4{grid-template-columns:1fr 1fr}.metric-row{grid-template-columns:1fr 1fr}}
+    @media (max-width:680px){.shell{padding:16px 12px 42px}.nav{align-items:flex-start;flex-direction:column}.links{width:100%}.btn{flex:1}.hero{min-height:auto}.hero-grid{min-height:auto;padding:28px 18px}.product-visual{display:none}h1{font-size:42px}.grid-3,.grid-4,.metric-row{grid-template-columns:1fr}.footer{align-items:flex-start;flex-direction:column}}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
-      <div class="brand">0brix</div>
-      <div class="nav">
-        <a class="btn" href="/swipe">Explorar leads</a>
-        <a class="btn" href="/homeowner-intake">Publicar proyecto</a>
-        <a class="btn primary" href="/colaboradores">Colaborar con el proyecto</a>
+  <div class="shell">
+    <nav class="nav" aria-label="Principal">
+      <div class="brand"><span class="mark">0</span><span>0brix</span></div>
+      <div class="links">
+        <a class="btn" href="/pipeline">CRM</a>
+        <a class="btn" href="/homeowner-intake">Homeowner intake</a>
+        <a class="btn primary" href="/swipe">Explorar leads</a>
       </div>
-    </div>
+    </nav>
 
-    <section class="hero">
-      <div class="panel">
-        <h1>Leads de construcción con intención real, antes que la competencia.</h1>
-        <p class="lead">0brix detecta oportunidades verificables para contratistas generales y oficios: homeowners que apenas están pensando en una adición, señales públicas de obra, y proyectos con potencial comercial claro.</p>
-        <div class="chips">
-          <span class="chip">Adiciones y remodelaciones</span>
-          <span class="chip">Homeowners en etapa temprana</span>
-          <span class="chip">Datos públicos + enriquecimiento</span>
-          <span class="chip">Entrega para ventas</span>
+    <header class="hero">
+      <div class="hero-grid">
+        <div>
+          <div class="eyebrow">Construccion B2B · inteligencia comercial accionable</div>
+          <h1>0brix es infraestructura comercial para contratistas que necesitan prospectos reales.</h1>
+          <p class="hero-copy">Convertimos permisos, senales publicas, dano por tormenta y proyectos de homeowners en leads calificados que se pueden revisar con swipe, guardar en CRM por usuario y trabajar hasta cerrar.</p>
+          <div class="hero-actions">
+            <a class="btn primary" href="/swipe">Explorar leads</a>
+            <a class="btn dark" href="/homeowner-intake">Captar homeowners</a>
+            <a class="btn" href="/colaboradores">Invertir o colaborar</a>
+          </div>
+          <div class="proof" aria-label="Capacidades principales">
+            <span>HOT + Elite filters</span>
+            <span>CRM por usuario</span>
+            <span>Cross-data verificable</span>
+            <span>Mercados replicables</span>
+          </div>
         </div>
-        <div class="actions">
-          <a class="btn primary" href="/homeowner-intake">Captar homeowners</a>
-          <a class="btn" href="/swipe">Ver el feed de leads</a>
+
+        <div class="product-visual" aria-hidden="true">
+          <div class="screen">
+            <div class="screen-head">
+              <span class="screen-title">Lead intelligence</span>
+              <span class="status">Listo para ventas</span>
+            </div>
+            <div class="lead-card">
+              <div class="tagline">
+                <span class="tag hot">HOT 92</span>
+                <span class="tag good">Owner intent</span>
+                <span class="tag">Permiso abierto</span>
+              </div>
+              <h2>Adicion residencial con GC no confirmado</h2>
+              <p>Contacto, valor estimado, fuente auditable y razon comercial para priorizar seguimiento.</p>
+              <div class="lead-meta">
+                <div><strong>$225k</strong><span>valor estimado</span></div>
+                <div><strong>12 dias</strong><span>senal fresca</span></div>
+                <div><strong>Honolulu</strong><span>mercado activo</span></div>
+                <div><strong>GC</strong><span>mejor comprador</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="pipeline">
+            <div class="col"><b>Nuevo</b><div class="ticket">Swipe right guardado</div></div>
+            <div class="col"><b>Contactado</b><div class="ticket">Llamada agendada</div></div>
+            <div class="col"><b>Propuesta</b><div class="ticket">Estimate listo</div></div>
+          </div>
         </div>
       </div>
-      <div class="panel">
-        <div class="statgrid">
-          <div class="stat"><strong>3</strong><span>canales de entrada</span></div>
-          <div class="stat"><strong>1</strong><span>pipeline comercial</span></div>
-          <div class="stat"><strong>Real</strong><span>datos y señales públicas</span></div>
-          <div class="stat"><strong>Premium</strong><span>listo para cobrar</span></div>
-        </div>
+    </header>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Un producto para encontrar demanda antes de que el contratista pierda la oportunidad.</h2>
+        <p>0brix no vende listas frias. Ordena senales de intencion y las convierte en acciones comerciales simples.</p>
+      </div>
+      <div class="grid-3">
+        <article class="card">
+          <div class="icon">S</div>
+          <h3>Swipe para decidir rapido</h3>
+          <p>El usuario revisa leads como tarjetas, filtra por valor, ubicacion, HOT, Elite y oportunidad para GC.</p>
+        </article>
+        <article class="card">
+          <div class="icon">C</div>
+          <h3>CRM por usuario</h3>
+          <p>Cada contratista empieza vacio y solo agrega sus propios prospectos cuando desliza a la derecha.</p>
+        </article>
+        <article class="card">
+          <div class="icon">H</div>
+          <h3>Homeowner intake</h3>
+          <p>Capturamos owners que apenas estan pensando en una adicion, ADU o remodelacion antes de buscar GC.</p>
+        </article>
       </div>
     </section>
 
     <section class="section">
-      <div class="card">
-        <h2>Inventario que vende</h2>
-        <p>Nos enfocamos en leads con intención, valor y contexto suficiente para que un GC pueda hacer contacto útil y avanzar la venta.</p>
+      <div class="section-head">
+        <h2>Como funciona</h2>
+        <p>Un flujo corto para transformar datos dispersos en pipeline comercial.</p>
       </div>
-      <div class="card">
-        <h2>Captura temprana</h2>
-        <p>El formulario de homeowner abre un nuevo canal para proyectos que aún no entraron al radar de permisos o contratistas.</p>
-      </div>
-      <div class="card">
-        <h2>Sales-ready</h2>
-        <p>La interfaz está pensada para convertir tráfico en cuentas, llamadas y cierres sin complicar la operación.</p>
+      <div class="grid-4">
+        <div class="step"><span class="step-num">1</span><h3>Detecta</h3><p>Senales publicas, permisos, eventos climaticos y formularios directos de homeowners.</p></div>
+        <div class="step"><span class="step-num">2</span><h3>Califica</h3><p>Score de oportunidad, tipo de servicio, valor potencial y evidencia para auditar la fuente.</p></div>
+        <div class="step"><span class="step-num">3</span><h3>Guarda en CRM</h3><p>Swipe-right crea el prospecto en el pipeline privado del usuario para dar seguimiento.</p></div>
+        <div class="step"><span class="step-num">4</span><h3>Da seguimiento</h3><p>El contratista mueve etapas, prepara contacto, estimate e invoice desde un flujo simple.</p></div>
       </div>
     </section>
 
-    <section class="wide">
-      <div class="panel stack">
-        <div class="mini">
-          <strong>Para contratistas</strong>
-          <span>Encuentra leads filtrados por ciudad, intención y valor de proyecto.</span>
-        </div>
-        <div class="mini">
-          <strong>Para operaciones</strong>
-          <span>Convierte señales públicas en oportunidades ordenadas para seguimiento.</span>
+    <section class="band">
+      <div>
+        <h2>Hecho para cobrar por utilidad, no por promesas.</h2>
+        <p>La propuesta comercial se apoya en leads con contexto, timing y accion siguiente: el tipo de inventario que un contratista puede justificar pagar si le ahorra busqueda y aumenta velocidad de contacto.</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="/swipe">Probar el feed</a>
+          <a class="btn" href="/pipeline">Abrir CRM</a>
         </div>
       </div>
-      <div class="panel stack">
-        <div class="mini">
-          <strong>Para negocio</strong>
-          <span>La propuesta ya está orientada a pricing premium y a mercados con demanda real.</span>
-        </div>
-        <div class="mini">
-          <strong>Para crecimiento</strong>
-          <span>La siguiente capa es partnerships, socios e inversionistas que ayuden a acelerar la distribución.</span>
-        </div>
+      <div class="metric-row">
+        <div class="metric"><strong>3</strong><span>canales de entrada</span></div>
+        <div class="metric"><strong>1</strong><span>CRM accionable</span></div>
+        <div class="metric"><strong>24/7</strong><span>senales en monitoreo</span></div>
       </div>
     </section>
 
-    <div class="footer">Accesos internos: <a href="/app">Dashboard</a> · <a href="/pipeline">CRM</a></div>
+    <footer class="footer">
+      <span>0brix - prospectos de construccion con intencion comercial.</span>
+      <div class="footer-links">
+        <a href="/swipe">Swipe</a>
+        <a href="/pipeline">CRM</a>
+        <a href="/homeowner-intake">Homeowner intake</a>
+        <a href="/colaboradores">Colaboradores</a>
+      </div>
+    </footer>
   </div>
 </body>
 </html>
