@@ -28,6 +28,7 @@ def test_home_positions_0brix_as_useful_startup():
 def test_home_crm_nav_opens_external_crm_entrypoint():
     html = _html(HOME)
     assert '<a class="btn" href="/crm" target="_blank" rel="noopener">CRM externo</a>' in html
+    assert '<a class="btn" href="/pipeline">Pipeline 0brix</a>' in html
     assert 'href="/pipeline">CRM</a>' not in html
     assert 'href="/pipeline">Abrir CRM</a>' not in html
 
