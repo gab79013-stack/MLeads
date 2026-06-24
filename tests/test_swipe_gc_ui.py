@@ -40,11 +40,36 @@ def test_swipe_gc_filter_options_match_general_contractor_buying_intent():
         "Proyecto sin GC confirmado",
         "Demolición / rebuild",
         "Venta de propiedad",
+        "Radar post-venta",
         "Cross-data verificado",
     ]
     for label in expected:
         assert label in html
     assert "Construcción activa" not in html
+
+
+def test_swipe_post_sale_remodel_channel_is_registered_end_to_end():
+    html = _html()
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    db_src = (TEMPLATE.parents[1].parents[0] / "utils" / "web_db.py").read_text(encoding="utf-8")
+    helper_src = (TEMPLATE.parents[1] / "helpers" / "gc_interest.py").read_text(encoding="utf-8")
+
+    assert 'data-cat="post_sale_remodel"' in html
+    assert "post_sale_remodel:'🏘️ Radar post-venta'" in html
+    assert 'post_sale_remodel": "Radar post-venta"' in app_src
+    assert '"post_sale_remodel"' in app_src
+    assert '("post_sale_remodel", "Post-Sale Remodel Radar"' in db_src
+    assert '"post_sale_remodel"' in helper_src
+
+
+def test_post_sale_remodel_intake_api_publishes_to_swipe_inventory():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+
+    assert "@app.route('/api/post-sale-remodel/leads', methods=['POST'])" in app_src
+    assert "def post_sale_remodel_lead_submit" in app_src
+    assert "primary_service_type': 'post_sale_remodel'" in app_src
+    assert "'post_sale_remodel', 1, 1, 0" in app_src
+    assert "INSERT OR REPLACE INTO consolidated_leads" in app_src
 
 
 def test_swipe_feed_request_only_sends_gc_opportunity_categories():

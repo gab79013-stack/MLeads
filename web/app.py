@@ -145,6 +145,51 @@ def _homeowner_lead_score(has_email, budget_value, timeline, description):
     }
 
 
+def _parse_money(value) -> float:
+    try:
+        return float("".join(ch for ch in str(value or "") if ch.isdigit() or ch == ".") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _post_sale_remodel_score(lead: dict) -> dict:
+    score = 55
+    reasons = ["Venta reciente detectada como señal temprana de remodelación."]
+    buyer_text = " ".join(str(lead.get(k) or "") for k in ("buyer_name", "buyer_type", "financing_type")).lower()
+    desc = str(lead.get("description") or "").lower()
+
+    if lead.get("sale_date"):
+        score += 10
+        reasons.append("Fecha de venta disponible para ventana de contacto.")
+    if any(term in buyer_text for term in ("llc", "cash", "invest", "holdings", "trust", "no mortgage")):
+        score += 16
+        reasons.append("Comprador tipo cash/LLC/inversionista.")
+    try:
+        year_built = int(lead.get("year_built") or 0)
+    except (TypeError, ValueError):
+        year_built = 0
+    if year_built and year_built <= 1985:
+        score += 10
+        reasons.append("Propiedad antigua con alta probabilidad de upgrades.")
+    if any(term in desc for term in ("as-is", "as is", "tlc", "fixer", "contractor special", "needs work", "renovation")):
+        score += 12
+        reasons.append("Texto de condición sugiere reparación/remodelación.")
+    if lead.get("contact_phone"):
+        score += 8
+        reasons.append("Contacto telefónico disponible para venta inmediata.")
+    if lead.get("source_url"):
+        score += 8
+        reasons.append("Fuente pública verificable.")
+
+    score = min(score, 98)
+    return {
+        "score": score,
+        "grade": "HOT" if score >= 90 else "WARM" if score >= 70 else "COOL",
+        "grade_emoji": "🔥" if score >= 90 else "⚡" if score >= 70 else "📍",
+        "reasons": reasons[:5],
+    }
+
+
 # ─────────────────────────────────────────────────────────
 # Error Handlers
 # ─────────────────────────────────────────────────────────
@@ -381,6 +426,120 @@ def homeowner_intake_submit():
         "score": scoring["score"],
         "grade": scoring["grade"],
         "message": "project_request_received",
+    }), 201
+
+
+@app.route('/api/post-sale-remodel/leads', methods=['POST'])
+@limiter.limit("120 per minute")
+def post_sale_remodel_lead_submit():
+    """
+    Publish a recently sold property as a Post-Sale Remodel Radar lead.
+
+    Intended input: county recorder/property-sale data enriched with a reachable
+    owner/buyer phone. The lead becomes visible in Swipe under post_sale_remodel.
+    """
+    data = request.get_json(silent=True) or {}
+    address = _clean_text(data.get("address"), 180)
+    city = _clean_text(data.get("city"), 80)
+    state = _clean_text(data.get("state"), 20).upper()
+    zip_code = _clean_text(data.get("zip") or data.get("zipcode"), 20)
+    buyer_name = _clean_text(data.get("buyer_name") or data.get("buyer"), 160)
+    seller_name = _clean_text(data.get("seller_name") or data.get("seller"), 160)
+    phone = _normalize_phone(data.get("contact_phone") or data.get("phone"))
+    email = _clean_text(data.get("contact_email") or data.get("email"), 160).lower()
+    source_url = _clean_text(data.get("source_url") or data.get("record_url") or data.get("url"), 500)
+    sale_date = _clean_text(data.get("sale_date") or data.get("recording_date") or data.get("transfer_date"), 40)[:10]
+    sale_price = _parse_money(data.get("sale_price") or data.get("price") or data.get("consideration_amount"))
+    year_built_raw = _clean_text(data.get("year_built") or data.get("property_year_built"), 10)
+    description = _clean_text(data.get("description") or data.get("listing_remarks"), 1200)
+    buyer_type = _clean_text(data.get("buyer_type"), 80)
+    financing_type = _clean_text(data.get("financing_type"), 80)
+
+    missing = []
+    for field_name, value in [
+        ("address", address),
+        ("city", city),
+        ("buyer_name", buyer_name),
+        ("contact_phone", phone),
+        ("source_url", source_url),
+    ]:
+        if not value:
+            missing.append(field_name)
+    if missing:
+        return jsonify({"error": "missing_required_fields", "fields": missing}), 400
+
+    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    identity = "|".join([address.lower(), city.lower(), state.lower(), buyer_name.lower(), sale_date])
+    digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()[:16]
+    lead_id = f"post_sale_{digest}"
+    try:
+        year_built = int(year_built_raw) if year_built_raw else None
+    except (TypeError, ValueError):
+        year_built = None
+
+    lead_data = {
+        'id': lead_id,
+        'source': 'post_sale_remodel',
+        'source_label': 'Post-Sale Remodel Radar',
+        'source_url': source_url,
+        'primary_service_type': 'post_sale_remodel',
+        'service_type': 'post_sale_remodel',
+        'lead_type': data.get("lead_type") or "post_sale_remodel_candidate",
+        'address': address,
+        'city': city,
+        'state': state,
+        'zip': zip_code,
+        'owner': buyer_name,
+        'buyer_name': buyer_name,
+        'seller_name': seller_name,
+        'contact_phone': phone,
+        'contact_email': email,
+        'contractor': 'NONE',
+        'sale_date': sale_date,
+        'sale_price': sale_price,
+        'value_float': sale_price,
+        'year_built': year_built,
+        'buyer_type': buyer_type,
+        'financing_type': financing_type,
+        'permit_type': 'Recent property sale',
+        'description': description or f"Recently sold property; buyer {buyer_name} may need remodel work.",
+        '_scoring': {},
+        '_trade': 'GENERAL_CONTRACTOR',
+        '_urgency': 'HIGH',
+        '_ai_summary': 'Recent sale with remodel-intent signals for GC outreach.',
+        '_is_residential': True,
+        '_project_phase': 'post-sale planning',
+        '_decision_maker': 'buyer',
+        '_owner_type': 'NEW_OWNER',
+        '_services': ['general_contractor', 'remodel', 'renovation'],
+        '_lead_channel': 'post_sale_remodel',
+    }
+    lead_data['_scoring'] = _post_sale_remodel_score(lead_data)
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT OR REPLACE INTO consolidated_leads (
+            address_key, address, city, agent_sources, first_seen, last_updated,
+            lead_data, notified, primary_service_type, has_contact, has_phone, is_dead_lead
+        ) VALUES (
+            ?, ?, ?, 'post_sale_remodel',
+            COALESCE((SELECT first_seen FROM consolidated_leads WHERE address_key = ?), ?),
+            ?, ?, 0, 'post_sale_remodel', 1, 1, 0
+        )
+    """, (
+        lead_id, address, city, lead_id, now, now, json.dumps(lead_data, ensure_ascii=False),
+    ))
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "ok": True,
+        "lead_id": lead_id,
+        "service_type": "post_sale_remodel",
+        "score": lead_data["_scoring"]["score"],
+        "grade": lead_data["_scoring"]["grade"],
+        "message": "post_sale_remodel_lead_published",
     }), 201
 
 
@@ -4506,7 +4665,7 @@ _SERVICE_CAT_KEYWORDS: dict[str, list[str]] = {
     "remodel":     ["remodel", "renovation", "kitchen remodel", "bathroom remodel", "addition", "adu", "accessory dwelling", "tenant improvement", "interior alteration", "room addition"],
 }
 # These map directly to primary_service_type column
-_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "weather", "disaster", "energy", "rodents", "deconstruction", "remodel", "crossdata"}
+_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "post_sale_remodel", "flood", "weather", "disaster", "energy", "rodents", "deconstruction", "remodel", "crossdata"}
 
 # Subcontractor categories must use the post-classification opportunity trade,
 # not raw permit keywords. Example: a REROOF permit pulled by a CCC roofer is
@@ -4535,6 +4694,7 @@ _SWIPE_FILTER_CATEGORY_LABELS = {
     "remodel": "Remodelación / reparación",
     "deconstruction": "Demolición / rebuild",
     "realestate": "Venta de propiedad",
+    "post_sale_remodel": "Radar post-venta",
     "crossdata": "Cross-data verificado",
 }
 
@@ -4545,6 +4705,7 @@ _SWIPE_FILTER_SERVICE_ALIASES = {
     "remodel": {"remodel"},
     "deconstruction": {"deconstruction"},
     "realestate": {"realestate"},
+    "post_sale_remodel": {"post_sale_remodel"},
     "crossdata": {"crossdata"},
 }
 

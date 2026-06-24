@@ -28,6 +28,7 @@ DEFAULT_TRADE_SERVICE_TO_AI = {
 
 DEFAULT_SERVICE_CATEGORY_ALIASES = {
     "weather": {"weather", "flood", "disaster"},
+    "post_sale_remodel": {"post_sale_remodel"},
 }
 
 

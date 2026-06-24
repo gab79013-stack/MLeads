@@ -18,6 +18,7 @@ GC_OPPORTUNITY_SERVICE_TYPES = {
     "permits",
     "deconstruction",
     "realestate",
+    "post_sale_remodel",
     "crossdata",
     "rodents",
 }
@@ -201,6 +202,55 @@ def _source_url(lead: Mapping[str, Any]) -> str:
     return ""
 
 
+def _is_cash_or_investor_buyer(lead: Mapping[str, Any]) -> bool:
+    buyer_text = _text(
+        lead.get("buyer_name"),
+        lead.get("buyer"),
+        lead.get("grantee"),
+        lead.get("owner"),
+        lead.get("_buyer_type"),
+        lead.get("financing_type"),
+    )
+    return any(
+        term in buyer_text
+        for term in (
+            " llc",
+            "llc ",
+            "inc",
+            "holdings",
+            "invest",
+            "trust",
+            "cash",
+            "no mortgage",
+        )
+    )
+
+
+def _post_sale_signal_count(lead: Mapping[str, Any]) -> int:
+    desc = _text(
+        lead.get("description"),
+        lead.get("desc"),
+        lead.get("listing_remarks"),
+        lead.get("_ai_summary"),
+    )
+    count = 0
+    if lead.get("sale_date") or lead.get("recording_date") or lead.get("transfer_date"):
+        count += 1
+    if _is_cash_or_investor_buyer(lead):
+        count += 1
+    try:
+        year_built = int(lead.get("year_built") or lead.get("property_year_built") or 0)
+    except (TypeError, ValueError):
+        year_built = 0
+    if year_built and year_built <= 1985:
+        count += 1
+    if any(term in desc for term in ("as-is", "as is", "tlc", "fixer", "contractor special", "needs work", "renovation")):
+        count += 1
+    if lead.get("sale_price") or lead.get("value_float"):
+        count += 1
+    return count
+
+
 def is_placeholder_or_demo_lead(lead: Mapping[str, Any], address_key: str | None = None) -> bool:
     """Return True for synthetic/demo rows that must never appear publicly."""
     haystack = _text(
@@ -279,6 +329,24 @@ def build_gc_insight(lead: Mapping[str, Any], service_type: str | None) -> dict[
         score += 15
         badges.append("Venta reciente")
         reasons.append("Venta/propiedad en transición puede detonar remodelación o reparación.")
+    elif service == "post_sale_remodel":
+        score += 25
+        badges.append("Post-sale remodel")
+        reasons.append("Venta reciente con señales de remodelación temprana; ideal para contactar antes de que el owner elija GC.")
+        if _is_cash_or_investor_buyer(lead):
+            score += 15
+            badges.append("Cash/LLC buyer")
+            reasons.append("Comprador tipo cash/LLC/inversionista suele remodelar rápido para renta, flip o reventa.")
+        try:
+            year_built = int(lead.get("year_built") or lead.get("property_year_built") or 0)
+        except (TypeError, ValueError):
+            year_built = 0
+        if year_built and year_built <= 1985:
+            score += 10
+            badges.append("Casa antigua")
+        if _post_sale_signal_count(lead) >= 3:
+            score += 10
+            badges.append("Señales cruzadas")
     elif service == "crossdata":
         score += 20
         badges.append("Cross-data")
@@ -343,6 +411,9 @@ def is_gc_interesting_lead(lead: Mapping[str, Any], service_type: str | None) ->
 
     if service in PRE_AWARD_CONSTRUCTION_SERVICE_TYPES:
         return _is_pre_award_signal(lead)
+
+    if service == "post_sale_remodel":
+        return _post_sale_signal_count(lead) >= 2
 
     if service in GC_OPPORTUNITY_SERVICE_TYPES:
         return True

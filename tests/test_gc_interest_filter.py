@@ -88,6 +88,29 @@ def test_gc_insight_marks_storm_damage_as_candidate_when_source_missing():
     assert insight["source_label"] == "Fuente no verificada"
 
 
+def test_post_sale_remodel_radar_is_gc_sellable_with_verifiable_sales_signal():
+    lead = {
+        "description": "Recently sold as-is property; buyer is LLC cash buyer likely planning renovation",
+        "buyer_name": "Sunrise Homes LLC",
+        "sale_date": "2026-06-10",
+        "sale_price": 735000,
+        "year_built": 1968,
+        "contact_phone": "4157770199",
+        "source_url": "https://recorder.example.gov/deed/ABC123",
+        "_scoring": {"score": 91},
+    }
+
+    assert is_gc_interesting_lead(lead, "post_sale_remodel") is True
+
+    insight = build_gc_insight(lead, "post_sale_remodel")
+
+    assert insight["confidence"] == "verified"
+    assert "Post-sale remodel" in insight["badges"]
+    assert "Cash/LLC buyer" in insight["badges"]
+    assert any("venta reciente" in reason.lower() for reason in insight["reasons"])
+    assert insight["source_url"] == "https://recorder.example.gov/deed/ABC123"
+
+
 def test_placeholder_demo_leads_are_rejected_from_public_swipe_feed():
     fake_lead = {
         "address": "1234 Maple Ave",

@@ -1133,6 +1133,7 @@ def seed_cities_and_agents():
         ("energy", "Energy Efficiency", "🔋", "Energy efficiency programs", "green"),
         ("construction", "Construction", "👷", "Active construction projects", "building"),
         ("realestate", "Real Estate", "🏠", "Real estate sales and transfers", "real_estate"),
+        ("post_sale_remodel", "Post-Sale Remodel Radar", "🏘️", "Recent sales likely to become remodel projects", "real_estate"),
         ("yelp", "Business Directory", "⭐", "Business directory and reviews", "information"),
         ("places", "Business Licenses", "📍", "Business licenses and permits", "information"),
         # Trade-specific services

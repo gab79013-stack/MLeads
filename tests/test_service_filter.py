@@ -44,3 +44,16 @@ def test_open_gc_roof_scope_still_matches_roofing_feed():
     }
 
     assert _matches_category(row, "roofing") is True
+
+
+def test_post_sale_remodel_category_matches_new_service_type():
+    row = {
+        "primary_service_type": "post_sale_remodel",
+        "lead_data": {
+            "lead_type": "post_sale_cash_buyer",
+            "buyer_name": "Sunrise Homes LLC",
+            "_scoring": {"score": 91},
+        },
+    }
+
+    assert _matches_category(row, "post_sale_remodel") is True

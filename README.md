@@ -129,6 +129,32 @@ MLeads/
 - Publishes submissions into `consolidated_leads` as `remodel` GC opportunities with `planning` phase, homeowner decision-maker metadata and HOT/WARM scoring
 - Keeps raw submissions in `homeowner_project_intakes` for audit, QA and follow-up
 
+### Post-Sale Remodel Radar
+- New Swipe channel: `post_sale_remodel` / `Radar post-venta`
+- Targets recently sold properties where a GC may win remodel work before permits appear
+- Sellability signals: recent deed/transfer date, cash/LLC/investor buyer, older home, as-is/TLC/fixer language, high sale value and verifiable public source
+- Leads are published into `consolidated_leads` and become filterable in Swipe with `service_cats=post_sale_remodel`
+
+Publish one enriched post-sale lead:
+
+```bash
+curl -X POST http://2.25.162.58/api/post-sale-remodel/leads \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "address": "125 Main St",
+    "city": "Austin",
+    "state": "TX",
+    "zip": "78704",
+    "buyer_name": "Example Homes LLC",
+    "contact_phone": "5125550199",
+    "sale_date": "2026-06-20",
+    "sale_price": 735000,
+    "year_built": 1974,
+    "description": "Recently sold as-is fixer with renovation potential",
+    "source_url": "https://public-recorder.example.gov/deed/ABC123"
+  }'
+```
+
 ### CRM
 - `/pipeline` serves the per-user 0brix CRM. A new user starts with an empty pipeline, and each swipe-right inserts that lead into their own `lead_pipeline` records.
 - `/crm` redirects to TwentyHQ for the external/admin CRM.
