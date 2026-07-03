@@ -57,3 +57,45 @@ def test_post_sale_remodel_category_matches_new_service_type():
     }
 
     assert _matches_category(row, "post_sale_remodel") is True
+    assert _matches_category(row, "post_sale") is True
+
+
+def test_unknown_service_category_matches_no_rows_instead_of_disabling_filter():
+    service_sql, params = build_service_category_filter(["unknown_gc_category"])
+
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE leads (primary_service_type TEXT, lead_data TEXT)")
+    conn.execute(
+        "INSERT INTO leads (primary_service_type, lead_data) VALUES (?, ?)",
+        ("permits", json.dumps({"_trade": "GENERAL_CONTRACTOR"})),
+    )
+    result = conn.execute(f"SELECT COUNT(*) FROM leads WHERE {service_sql}", params).fetchone()[0]
+    conn.close()
+
+    assert result == 0
+
+
+def test_legacy_gc_category_aliases_are_canonicalized():
+    service_type_cats = {"permits", "weather", "deconstruction", "realestate"}
+
+    demolition_sql, demolition_params = build_service_category_filter(
+        ["demolition"], service_type_cats=service_type_cats
+    )
+    sale_sql, sale_params = build_service_category_filter(
+        ["post_sale"], service_type_cats=service_type_cats
+    )
+
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE leads (primary_service_type TEXT, lead_data TEXT)")
+    conn.executemany(
+        "INSERT INTO leads (primary_service_type, lead_data) VALUES (?, ?)",
+        [
+            ("deconstruction", "{}"),
+            ("post_sale_remodel", "{}"),
+            ("permits", "{}"),
+        ],
+    )
+
+    assert conn.execute(f"SELECT COUNT(*) FROM leads WHERE {demolition_sql}", demolition_params).fetchone()[0] == 1
+    assert conn.execute(f"SELECT COUNT(*) FROM leads WHERE {sale_sql}", sale_params).fetchone()[0] == 1
+    conn.close()

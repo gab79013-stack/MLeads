@@ -739,6 +739,16 @@ const F = {
 };
 
 // ── Filter persistence (localStorage + URL params) ────────────────────────────
+const SERVICE_CAT_ALIASES = {
+    demolition: 'deconstruction', demo: 'deconstruction', rebuild: 'deconstruction',
+    post_sale: 'realestate', 'post-sale': 'realestate', property_sale: 'realestate',
+    'property-sale': 'realestate', real_estate: 'realestate'
+};
+function normalizeServiceCat(cat) {
+    const key = String(cat || '').trim().toLowerCase();
+    return SERVICE_CAT_ALIASES[key] || key;
+}
+
 function saveFilters() {
     try {
         const snap = {
@@ -777,7 +787,10 @@ function loadFilters() {
 
         if (urlCity || urlService || urlAll !== null || urlElite !== null) {
             if (urlCity)    F.city = urlCity;
-            if (urlService) urlService.split(',').forEach(s => F.leadTypes.add(s.trim()));
+            if (urlService) urlService.split(',').forEach(s => {
+                const cat = normalizeServiceCat(s);
+                if (cat) F.leadTypes.add(cat);
+            });
             if (urlAll === '1') F.hotOnly = false;
             if (urlElite === '1') F.eliteOnly = true;
             return; // URL params win — don't restore localStorage
@@ -789,7 +802,7 @@ function loadFilters() {
             F.hotOnly   = snap.hotOnly  ?? false;
             F.eliteOnly = snap.eliteOnly ?? false;
         F.subCats   = new Set();
-        F.leadTypes = new Set(snap.leadTypes || []);
+        F.leadTypes = new Set((snap.leadTypes || []).map(normalizeServiceCat).filter(Boolean));
         F.city      = snap.city   || '';
         F.radius    = snap.radius ?? 25;
         F.minVal    = snap.minVal ?? 0;
