@@ -42,7 +42,9 @@ def is_configured() -> bool:
 
 def select_web_checkout_price_id(tier: str) -> str:
     """Return the Stripe price ID that web checkout should use for a tier."""
-    normalized_tier = (tier or "pro").lower()
+    normalized_tier = (tier or "beta_pro").lower()
+    if normalized_tier in {"premium", "beta_pro"}:
+        return os.getenv("STRIPE_PRICE_ID_BETA_PRO") or os.getenv("STRIPE_PRICE_ID_PREMIUM") or os.getenv("STRIPE_PRICE_ID") or ""
     specific_key = f"STRIPE_PRICE_ID_{normalized_tier.upper()}"
     curated_tiers = {"quality", "elite"}
     if normalized_tier in curated_tiers:

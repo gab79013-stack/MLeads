@@ -12,6 +12,10 @@ import os
 import json
 import logging
 import hashlib
+import secrets
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, g, send_file, redirect, render_template
 from flask_cors import CORS
@@ -39,6 +43,7 @@ from web.helpers.gc_interest import (
     build_gc_insight,
     build_gc_interest_sql_filter,
     build_public_real_lead_sql_filter,
+    classify_contact_level,
     is_gc_interesting_lead,
     is_placeholder_or_demo_lead,
 )
@@ -47,17 +52,27 @@ app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
 
 # ─── CORS ────────────────────────────────────────────────
-_allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
-if _allowed_origins != "*":
-    CORS(app, origins=[o.strip() for o in _allowed_origins.split(",")])
-else:
-    import warnings
-    warnings.warn(
-        "ALLOWED_ORIGINS is not set — CORS is open to all origins. "
-        "Set ALLOWED_ORIGINS in .env for production (e.g., https://your-domain.com).",
-        stacklevel=1,
+_DEFAULT_ALLOWED_ORIGINS = "https://0brix.com,https://www.0brix.com"
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", _DEFAULT_ALLOWED_ORIGINS).strip()
+# Production hardening: legacy deploys may still export ALLOWED_ORIGINS=*.
+# Do not keep wildcard CORS on the public paid-launch surface.
+if not _allowed_origins or _allowed_origins == "*":
+    _allowed_origins = _DEFAULT_ALLOWED_ORIGINS
+CORS(app, origins=[o.strip() for o in _allowed_origins.split(",") if o.strip()])
+
+
+@app.after_request
+def add_production_security_headers(response):
+    """Set conservative browser security headers for the public SaaS surface."""
+    response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "frame-ancestors 'self'; object-src 'none'; base-uri 'self'",
     )
-    CORS(app)
+    return response
 
 # ─── Rate Limiting ────────────────────────────────────────
 # Use Redis if available (shared across gunicorn workers), else fall back to
@@ -285,12 +300,31 @@ def pipeline_page():
 
 @app.route('/crm', methods=['GET'])
 def crm_redirect():
-    """Alias for the new CRM destination."""
-    twenty_url = os.getenv("TWENTY_URL", "").rstrip("/")
-    if not twenty_url:
-        host = request.host.split(":")[0] if request.host else "127.0.0.1"
-        twenty_url = f"http://{host}:3000"
-    return redirect(twenty_url, code=302)
+    """Open Twenty CRM as a branded 0brix continuation of the swipe session."""
+    return render_template("crm_bridge.html")
+
+
+def _public_base_url():
+    return os.getenv('BASE_URL', 'https://0brix.com').rstrip('/')
+
+
+@app.route('/robots.txt', methods=['GET'])
+def robots_txt():
+    base_url = _public_base_url()
+    body = f"User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: {base_url}/sitemap.xml\n"
+    return app.response_class(body, mimetype='text/plain; charset=utf-8')
+
+
+@app.route('/sitemap.xml', methods=['GET'])
+def sitemap_xml():
+    base_url = _public_base_url()
+    urls = ['/', '/swipe', '/homeowner-intake', '/pipeline', '/colaboradores']
+    items = ''.join(
+        f"<url><loc>{base_url}{path}</loc><changefreq>weekly</changefreq><priority>{'1.0' if path == '/' else '0.8'}</priority></url>"
+        for path in urls
+    )
+    body = f"<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">{items}</urlset>"
+    return app.response_class(body, mimetype='application/xml; charset=utf-8')
 
 
 @app.route('/colaboradores', methods=['GET'])
@@ -561,52 +595,364 @@ def catch_all(filename):
 # ─────────────────────────────────────────────────────────
 
 @app.route('/api/health', methods=['GET'])
+@app.route('/health', methods=['GET'])
 def health():
-    """Health check endpoint with full system status."""
-    now = datetime.utcnow()
+    """Public health check: expose only coarse status, not internals."""
     status = "ok"
-    details = {}
+    try:
+        conn = get_db_connection()
+        conn.execute("SELECT 1")
+        conn.close()
+    except Exception:
+        status = "degraded"
+    return jsonify({
+        "status": status,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }), 200 if status == "ok" else 503
 
-    # Database connectivity + lead count
+
+# ─────────────────────────────────────────────────────────
+# Twenty CRM bridge
+# ─────────────────────────────────────────────────────────
+
+TWENTY_WORKSPACE_ID = os.getenv("TWENTY_WORKSPACE_ID", "d33dc25c-0994-45db-83bc-0058b9a3b60a")
+TWENTY_WORKSPACE_INVITE_HASH = os.getenv("TWENTY_WORKSPACE_INVITE_HASH", "ee3a0c2b-b6d4-4676-8a22-a748073619ec")
+TWENTY_METADATA_URL = os.getenv("TWENTY_METADATA_URL", "http://127.0.0.1:3000/metadata")
+TWENTY_PUBLIC_URL = os.getenv("TWENTY_PUBLIC_URL", "https://crm.0brix.com").rstrip("/")
+TWENTY_CRM_ENTRY_PATH = os.getenv("TWENTY_CRM_ENTRY_PATH", "/objects/opportunities")
+TWENTY_ORIGIN = os.getenv("TWENTY_ORIGIN", "https://crm.0brix.com")
+TWENTY_ADMIN_EMAIL = os.getenv("TWENTY_ADMIN_EMAIL", "")
+TWENTY_ADMIN_PASSWORD = os.getenv("TWENTY_ADMIN_PASSWORD", "")
+
+
+def _ensure_crm_account_table():
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS user_crm_accounts (
+            user_id INTEGER PRIMARY KEY,
+            email TEXT NOT NULL,
+            crm_password TEXT NOT NULL,
+            twenty_workspace_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login_at TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def _twenty_graphql(query, variables=None, access_token=None, workspace_id=None):
+    payload = json.dumps({"query": query, "variables": variables or {}}).encode("utf-8")
+    headers = {"Content-Type": "application/json", "Origin": TWENTY_ORIGIN}
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    if workspace_id:
+        headers["x-workspace-id"] = workspace_id
+    req = urllib.request.Request(TWENTY_METADATA_URL, data=payload, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            raw = resp.read().decode("utf-8")
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Twenty no respondió: {exc}") from exc
+    data = json.loads(raw or "{}")
+    if data.get("errors"):
+        message = data["errors"][0].get("message", "Error de Twenty")
+        raise RuntimeError(message)
+    return data.get("data") or {}
+
+
+def _twenty_login(email, password):
+    sign_in = _twenty_graphql("""
+        mutation SignIn($email:String!, $password:String!) {
+          signIn(email:$email, password:$password) {
+            availableWorkspaces {
+              availableWorkspacesForSignIn { id loginToken workspaceUrls { subdomainUrl customUrl } }
+            }
+          }
+        }
+    """, {"email": email, "password": password})
+    workspaces = (sign_in.get("signIn") or {}).get("availableWorkspaces", {}).get("availableWorkspacesForSignIn", [])
+    for workspace in workspaces:
+        if workspace.get("id") == TWENTY_WORKSPACE_ID:
+            return workspace.get("loginToken")
+    if workspaces:
+        return workspaces[0].get("loginToken")
+    raise RuntimeError("La cuenta existe, pero no tiene acceso al workspace CRM de 0brix.")
+
+
+def _twenty_admin_access_token():
+    if not TWENTY_ADMIN_EMAIL or not TWENTY_ADMIN_PASSWORD:
+        raise RuntimeError("Faltan TWENTY_ADMIN_EMAIL/TWENTY_ADMIN_PASSWORD para invitar usuarios al CRM.")
+    login_token = _twenty_login(TWENTY_ADMIN_EMAIL, TWENTY_ADMIN_PASSWORD)
+    token_data = _twenty_graphql("""
+        mutation GetTokens($loginToken:String!, $origin:String!) {
+          getAuthTokensFromLoginToken(loginToken:$loginToken, origin:$origin) {
+            tokens { accessOrWorkspaceAgnosticToken { token } }
+          }
+        }
+    """, {"loginToken": login_token, "origin": TWENTY_ORIGIN})
+    token = (((token_data.get("getAuthTokensFromLoginToken") or {}).get("tokens") or {})
+             .get("accessOrWorkspaceAgnosticToken") or {}).get("token")
+    if not token:
+        raise RuntimeError("Twenty no devolvió token administrativo.")
+    return token
+
+
+def _twenty_invite_and_signup(email, password):
+    admin_token = _twenty_admin_access_token()
+    try:
+        _twenty_graphql("""
+            mutation SendInvitations($emails:[String!]!) {
+              sendInvitations(emails:$emails) { success errors result { id email expiresAt } }
+            }
+        """, {"emails": [email]}, access_token=admin_token, workspace_id=TWENTY_WORKSPACE_ID)
+    except RuntimeError as exc:
+        # Existing invitations/users are acceptable; sign-up/sign-in below will decide.
+        if "already invited" not in str(exc) and "already in the workspace" not in str(exc):
+            raise
+    sign_up = _twenty_graphql("""
+        mutation SignUpInWorkspace($email:String!, $password:String!, $hash:String!) {
+          signUpInWorkspace(email:$email, password:$password, workspaceInviteHash:$hash) {
+            loginToken { token expiresAt }
+            workspace { id workspaceUrls { subdomainUrl customUrl } }
+          }
+        }
+    """, {"email": email, "password": password, "hash": TWENTY_WORKSPACE_INVITE_HASH})
+    token = (((sign_up.get("signUpInWorkspace") or {}).get("loginToken") or {}).get("token"))
+    if not token:
+        raise RuntimeError("No se pudo crear la cuenta CRM en Twenty.")
+    return token
+
+
+def _get_or_create_twenty_login_token(user_id):
+    _ensure_crm_account_table()
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT email, full_name FROM users WHERE id = ? AND is_active = 1", (user_id,))
+    user = c.fetchone()
+    if not user:
+        conn.close()
+        raise RuntimeError("Usuario 0brix no encontrado o inactivo.")
+    email = (user["email"] or "").strip().lower()
+    if not email:
+        conn.close()
+        raise RuntimeError("El usuario no tiene email para crear acceso CRM.")
+    c.execute("SELECT crm_password FROM user_crm_accounts WHERE user_id = ?", (user_id,))
+    row = c.fetchone()
+    if row:
+        crm_password = row["crm_password"]
+    else:
+        crm_password = secrets.token_urlsafe(32) + "Aa1!"
+        c.execute("""
+            INSERT INTO user_crm_accounts (user_id, email, crm_password, twenty_workspace_id)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, email, crm_password, TWENTY_WORKSPACE_ID))
+        conn.commit()
+    conn.close()
+
+    try:
+        login_token = _twenty_login(email, crm_password)
+    except RuntimeError:
+        login_token = _twenty_invite_and_signup(email, crm_password)
+
+    conn = get_db_connection()
+    conn.execute(
+        "UPDATE user_crm_accounts SET last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
+        (user_id,),
+    )
+    conn.commit()
+    conn.close()
+    return login_token
+
+
+@app.route('/api/crm/sso', methods=['GET'])
+@require_auth
+def crm_sso():
+    """Return a branded Twenty auto-login URL for the current 0brix user."""
+    try:
+        login_token = _get_or_create_twenty_login_token(g.user_id)
+    except Exception as exc:
+        logger.exception("CRM SSO failed")
+        return jsonify({"error": str(exc)}), 502
+    params = {"loginToken": login_token}
+    if TWENTY_CRM_ENTRY_PATH:
+        params["returnToPath"] = TWENTY_CRM_ENTRY_PATH
+    return jsonify({
+        "redirect_url": f"{TWENTY_PUBLIC_URL}/verify?{urllib.parse.urlencode(params)}",
+        "crm_url": TWENTY_PUBLIC_URL,
+        "entry_path": TWENTY_CRM_ENTRY_PATH,
+    }), 200
+
+
+def _twenty_workspace_graphql(query, variables=None):
+    """Run a workspace GraphQL mutation as the 0brix CRM admin."""
+    admin_token = _twenty_admin_access_token()
+    graphql_url = TWENTY_METADATA_URL.replace('/metadata', '/graphql')
+    payload = json.dumps({"query": query, "variables": variables or {}}).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Origin": TWENTY_ORIGIN,
+        "Authorization": f"Bearer {admin_token}",
+        "x-workspace-id": TWENTY_WORKSPACE_ID,
+    }
+    req = urllib.request.Request(graphql_url, data=payload, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=12) as resp:
+        data = json.loads(resp.read().decode("utf-8") or "{}")
+    if data.get("errors"):
+        raise RuntimeError(data["errors"][0].get("message", "Twenty workspace error"))
+    return data.get("data") or {}
+
+
+def _currency_amount_from_lead(lead_data):
+    """Return a Twenty CURRENCY payload when a permit/estimate value is available."""
+    raw = (
+        lead_data.get("permit_value")
+        or lead_data.get("valuation")
+        or lead_data.get("estimated_value")
+        or lead_data.get("project_value")
+        or lead_data.get("value")
+    )
+    if raw in (None, ""):
+        return None
+    try:
+        amount = float(str(raw).replace("$", "").replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+    if amount <= 0:
+        return None
+    return {"amountMicros": int(amount * 1_000_000), "currencyCode": "USD"}
+
+
+def _split_contact_name(name):
+    parts = (name or "").strip().split()
+    if not parts:
+        return {"firstName": "Lead", "lastName": "0brix"}
+    if len(parts) == 1:
+        return {"firstName": parts[0][:80], "lastName": ""}
+    return {"firstName": parts[0][:80], "lastName": " ".join(parts[1:])[:80]}
+
+
+def _sync_liked_lead_to_twenty(user_id, lead_id):
+    """Create market-ready CRM records when a registered user likes a lead.
+
+    The local 0brix write remains the source of truth. This best-effort sync gives
+    the user a real sales workflow in Twenty: Company/property + optional Person +
+    Opportunity + follow-up Task.
+    """
     try:
         conn = get_db_connection()
         c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM consolidated_leads")
-        leads_count = c.fetchone()[0]
+        c.execute("SELECT email, full_name FROM users WHERE id = ?", (user_id,))
+        user = c.fetchone()
         c.execute("""
-            SELECT COUNT(*), MAX(created_at)
-            FROM scheduled_inspections
-            WHERE inspection_date >= date('now')
-        """)
-        row = c.fetchone()
-        future_inspections = row[0]
-        last_inspection_saved = row[1]
+            SELECT address, city, lead_data, primary_service_type
+            FROM consolidated_leads
+            WHERE address_key = ?
+            LIMIT 1
+        """, (lead_id,))
+        lead = c.fetchone()
         conn.close()
-        details["db"] = {
-            "status": "ok",
-            "leads_count": leads_count,
-            "future_inspections": future_inspections,
-            "last_inspection_saved": last_inspection_saved,
+        if not user or not lead:
+            return
+
+        lead_data = json.loads(lead["lead_data"] or "{}")
+        address = lead["address"] or lead_id
+        city = lead["city"] or lead_data.get("city") or ""
+        service = lead["primary_service_type"] or lead_data.get("service_type") or lead_data.get("trade") or "GC opportunity"
+        source_url = lead_data.get("source_url") or lead_data.get("permit_url") or lead_data.get("url") or ""
+        owner = lead_data.get("owner") or lead_data.get("property_owner") or lead_data.get("owner_name") or ""
+        contractor = lead_data.get("contractor") or lead_data.get("gc_name") or lead_data.get("contractor_name") or ""
+        contact_name = lead_data.get("contact_name") or owner or contractor or "Lead 0brix"
+        contact_email = (lead_data.get("contact_email") or lead_data.get("email") or "").strip()
+        contact_phone = lead_data.get("contact_phone") or lead_data.get("phone") or lead_data.get("owner_phone") or ""
+        permit_number = lead_data.get("permit_number") or lead_data.get("permit_id") or lead_data.get("record_id") or ""
+        value_payload = _currency_amount_from_lead(lead_data)
+
+        company_name = f"{address}"
+        if city and city.lower() not in company_name.lower():
+            company_name = f"{company_name} — {city}"
+        company = _twenty_workspace_graphql("""
+            mutation CreateCompany($data: CompanyCreateInput!) {
+              createCompany(data: $data) { id name }
+            }
+        """, {"data": {"name": company_name[:255]}}).get("createCompany") or {}
+        company_id = company.get("id")
+
+        person_id = None
+        if contact_email or contact_phone or contact_name != "Lead 0brix":
+            person_data = {
+                "name": _split_contact_name(contact_name),
+                "jobTitle": "Property contact / decision maker",
+            }
+            if contact_email:
+                person_data["emails"] = {"primaryEmail": contact_email}
+            if company_id:
+                person_data["companyId"] = company_id
+            person = _twenty_workspace_graphql("""
+                mutation CreatePerson($data: PersonCreateInput!) {
+                  createPerson(data: $data) { id }
+                }
+            """, {"data": person_data}).get("createPerson") or {}
+            person_id = person.get("id")
+
+        opportunity_data = {
+            "name": f"{service}: {address}"[:255],
+            "stage": "NEW",
         }
-    except Exception as e:
-        status = "degraded"
-        details["db"] = {"status": "error", "error": str(e)}
+        if company_id:
+            opportunity_data["companyId"] = company_id
+        if person_id:
+            opportunity_data["pointOfContactId"] = person_id
+        if value_payload:
+            opportunity_data["amount"] = value_payload
+        opportunity = _twenty_workspace_graphql("""
+            mutation CreateOpportunity($data: OpportunityCreateInput!) {
+              createOpportunity(data: $data) { id name stage }
+            }
+        """, {"data": opportunity_data}).get("createOpportunity") or {}
+        opportunity_id = opportunity.get("id")
 
-    # Scheduler status
-    try:
-        sched = get_scheduler_status()
-        details["scheduler"] = sched
-        if not sched.get("running"):
-            status = "degraded"
-    except Exception as e:
-        status = "degraded"
-        details["scheduler"] = {"status": "error", "error": str(e)}
-
-    return jsonify({
-        "status": status,
-        "timestamp": now.isoformat() + "Z",
-        **details,
-    }), 200 if status == "ok" else 503
+        lines = [
+            "# Lead guardado desde 0brix",
+            f"Usuario 0brix: {user['full_name'] or ''} <{user['email'] or ''}>",
+            f"Lead ID: {lead_id}",
+            f"Dirección: {address}",
+            f"Ciudad: {city}",
+            f"Servicio/Oportunidad: {service}",
+            f"Permit/Record: {permit_number}",
+            f"Owner: {owner}",
+            f"Contratista/GC actual: {contractor}",
+            f"Contacto: {contact_name}",
+            f"Teléfono: {contact_phone}",
+            f"Email: {contact_email}",
+            f"Fuente: {source_url}",
+            "",
+            f"Company ID: {company_id or ''}",
+            f"Person ID: {person_id or ''}",
+            f"Opportunity ID: {opportunity_id or ''}",
+            "",
+            "Acción recomendada: verificar fuente/contacto y llamar o enviar propuesta inicial.",
+            "Origen: usuario hizo swipe-right / Me interesa en 0brix.",
+        ]
+        _twenty_workspace_graphql("""
+            mutation CreateTask($data: TaskCreateInput!) {
+              createTask(data: $data) { id title status createdAt }
+            }
+        """, {
+            "data": {
+                "title": f"Contactar lead 0brix: {address}"[:255],
+                "status": "TODO",
+                "bodyV2": {"markdown": "\n".join(lines)},
+            }
+        })
+        logger.info(
+            "Twenty lead sync created company=%s person=%s opportunity=%s for lead=%s",
+            company_id, person_id, opportunity_id, lead_id,
+        )
+    except Exception as exc:
+        logger.warning(f"Twenty lead sync failed for {lead_id}: {exc}")
 
 
 # ─────────────────────────────────────────────────────────
@@ -2924,14 +3270,16 @@ def admin_elite_claims():
 def create_payment_checkout():
     """
     Create a Stripe Checkout session for the authenticated web user.
-    Body: {"tier": "pro" | "quality" | "premium" | "elite"}
+    Body: {"tier": "beta_pro"}
     Returns: {"checkout_url": "https://checkout.stripe.com/..."}
-    Requires STRIPE_API_KEY and STRIPE_PRICE_ID_* in env.
+    Requires STRIPE_API_KEY and STRIPE_PRICE_ID in env.
     """
     data = request.get_json(silent=True) or {}
-    tier = (data.get('tier') or 'pro').lower()
-    if tier not in ('pro', 'quality', 'premium', 'elite'):
-        return jsonify({"error": "Tier must be 'pro', 'quality', 'premium' or 'elite'"}), 400
+    tier = (data.get('tier') or 'beta_pro').lower()
+    if tier == 'premium':
+        tier = 'beta_pro'
+    if tier not in ('beta_pro', 'pro', 'quality', 'elite'):
+        return jsonify({"error": "Tier must be 'beta_pro'"}), 400
 
     elite_gate, checkout_context = _elite_checkout_guard(tier, data)
     if elite_gate:
@@ -3245,7 +3593,9 @@ def _get_web_subscription(user_id) -> tuple[bool, str]:
             except Exception:
                 pass
         if is_paid and tier == "free":
-            tier = "premium"
+            tier = "beta_pro"
+        if tier == "premium":
+            tier = "beta_pro"
         if not is_paid:
             tier = "free"
         return is_paid, tier
@@ -3256,7 +3606,7 @@ def _get_web_subscription(user_id) -> tuple[bool, str]:
 def _tier_lead_limit(tier: str, is_paid: bool) -> int | None:
     if not is_paid:
         return FREE_USER_LEAD_LIMIT
-    if tier == "pro":
+    if tier in {"pro", "beta_pro"}:
         return PRO_LEAD_LIMIT
     if tier == "quality":
         return QUALITY_LEAD_LIMIT
@@ -3413,7 +3763,9 @@ def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scori
     score = int(scoring.get("score") or 0)
     service = str(service_type or "").lower()
     has_source = bool(gc_insight.get("source_url"))
+    contact_level = classify_contact_level(lead_data)
     has_phone = bool((lead_data.get("contact_phone") or "").strip())
+    has_direct_contact = bool(contact_level.get("is_direct"))
     has_value = bool(lead_data.get("value_float"))
     age_days = _lead_age_days(lead_data, first_seen)
     has_action_window = bool(inspection_date)
@@ -3428,9 +3780,12 @@ def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scori
     if has_source:
         points += 15
         checks.append("Link de fuente auditable")
-    if has_phone:
+    if has_direct_contact:
         points += 20
-        checks.append("Teléfono disponible")
+        checks.append("Contacto directo verificado")
+    elif has_phone:
+        points += 6
+        checks.append("Teléfono en registro público")
     if score >= 90:
         points += 15
         checks.append("Score HOT 90+")
@@ -3449,13 +3804,13 @@ def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scori
     is_elite = (
         points >= 70
         and has_source
-        and has_phone
+        and has_direct_contact
         and score >= 85
         and (has_value or has_action_window or has_direct_owner_intent)
         and has_recent_signal
     )
-    if not is_elite and not has_phone:
-        checks.append("No Elite: falta teléfono")
+    if not is_elite and not has_direct_contact:
+        checks.append("No Elite: contacto directo no verificado")
     if not is_elite and not has_recent_signal:
         checks.append("No Elite: señal vieja o sin fecha")
     return min(points, 100), checks[:5], is_elite
@@ -3481,8 +3836,13 @@ def _elite_certificate(
             "value": gc_insight.get("source_label") or "Fuente oficial",
             "status": "verified" if gc_insight.get("confidence") == "verified" else "present",
         })
-    if (lead_data.get("contact_phone") or "").strip():
-        evidence.append({"label": "Contacto directo", "value": "Teléfono disponible", "status": "verified"})
+    contact_level = classify_contact_level(lead_data)
+    if (lead_data.get("contact_phone") or "").strip() or (lead_data.get("contact_email") or "").strip():
+        evidence.append({
+            "label": contact_level.get("label", "Requiere enriquecimiento"),
+            "value": contact_level.get("value", "Owner/GC no confirmado"),
+            "status": contact_level.get("status", "needs_enrichment"),
+        })
     if lead_data.get("value_float"):
         try:
             value = f"${float(lead_data.get('value_float') or 0):,.0f}"
@@ -4358,7 +4718,9 @@ def _elite_uplift_missing_requirements(lead_data: dict, gc_insight: dict, servic
     """Explain what a near-Elite lead still needs before it can be sold."""
     missing: list[str] = []
     score = int(scoring.get("score") or 0)
+    contact_level = classify_contact_level(lead_data)
     has_phone = bool((lead_data.get("contact_phone") or "").strip())
+    has_direct_contact = bool(contact_level.get("is_direct"))
     has_value = bool(lead_data.get("value_float"))
     has_action_window = bool(inspection_date)
     has_direct_owner_intent = str(lead_data.get("_lead_channel") or "") == "homeowner_intake"
@@ -5344,6 +5706,7 @@ def swipe_feed():
             "gc_badges":        gc_insight.get("badges", []),
             "source_url":       gc_insight.get("source_url", ""),
             "source_label":     gc_insight.get("source_label", ""),
+            "contact_level":    gc_insight.get("contact_level", classify_contact_level(lead_data)),
             "contractor":       contractor,
             "owner":            owner,
             "phone":            phone,
@@ -5562,6 +5925,10 @@ def swipe_action():
         return jsonify({"error": "failed to record swipe"}), 500
     conn.close()
 
+    # ── Non-blocking CRM sync: a liked authenticated lead becomes a Twenty task ──
+    if action == 'like' and user_id:
+        _sync_liked_lead_to_twenty(user_id, lead_id)
+
     # ── Alert admin after 50 consecutive rejections ───────────────────────────
     if action == 'dislike':
         try:
@@ -5633,12 +6000,26 @@ def _check_and_alert_rejections(user_id, anon_id):
             logger.warning(f"Failed to send rejection alert: {e}")
 
 
+def _public_beta_pro_tiers() -> list[dict]:
+    return [
+        {"id": "free", "price": 0, "limit": FREE_USER_LEAD_LIMIT, "label": "Free", "trial": True},
+        {
+            "id": "beta_pro",
+            "price": 99,
+            "limit": PRO_LEAD_LIMIT,
+            "label": "Beta Pro",
+            "early_access": True,
+            "replacement_policy": "Crédito interno si la fuente está rota, el contacto está mal rotulado o el lead está duplicado.",
+        },
+    ]
+
+
 @app.route('/api/swipe/upgrade-info', methods=['GET'])
 def swipe_upgrade_info():
-    """Return current user's quota status."""
+    """Return current user's quota status and the single public Beta Pro offer."""
     user_id, _ = _resolve_swipe_identity()
     if not user_id:
-        return jsonify({"anon": True, "limit": ANON_LEAD_LIMIT}), 200
+        return jsonify({"anon": True, "limit": ANON_LEAD_LIMIT, "tiers": _public_beta_pro_tiers()}), 200
     is_paid, tier = _get_web_subscription(user_id)
     swipes = _count_swipes(user_id, None)
     tier_limit = _tier_lead_limit(str(tier).lower(), is_paid)
@@ -5651,16 +6032,18 @@ def swipe_upgrade_info():
         "billable_swipes": billable_swipes,
         "replacement_credits": replacement_credits,
         "free_limit":  FREE_USER_LEAD_LIMIT,
-        "pro_limit":   PRO_LEAD_LIMIT,
-        "quality_limit": QUALITY_LEAD_LIMIT,
-        "elite_limit": ELITE_LEAD_LIMIT,
+        "beta_pro_limit": PRO_LEAD_LIMIT,
         "remaining":   None if tier_limit is None else max(tier_limit - billable_swipes, 0),
         "tiers": [
-            {"id": "free",    "price": 0,   "limit": FREE_USER_LEAD_LIMIT, "label": "Free", "trial": True},
-            {"id": "pro",     "price": 29,  "limit": PRO_LEAD_LIMIT, "label": "Pro"},
-            {"id": "quality", "price": 199, "limit": QUALITY_LEAD_LIMIT, "label": "Quality", "curated": True},
-            {"id": "premium", "price": 99,  "limit": None,           "label": "Premium"},
-            {"id": "elite",   "price": 500, "limit": ELITE_LEAD_LIMIT, "label": "Elite", "curated": True},
+            {"id": "free", "price": 0, "limit": FREE_USER_LEAD_LIMIT, "label": "Free", "trial": True},
+            {
+                "id": "beta_pro",
+                "price": 99,
+                "limit": PRO_LEAD_LIMIT,
+                "label": "Beta Pro",
+                "early_access": True,
+                "replacement_policy": "Crédito interno si la fuente está rota, el contacto está mal rotulado o el lead está duplicado.",
+            },
         ],
     }), 200
 

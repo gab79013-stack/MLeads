@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrando al CRM | 0brix</title>
+  <style>
+    :root { color-scheme: light; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#f6f7fb; color:#111827; }
+    .card { width:min(92vw, 520px); background:white; border:1px solid #e5e7eb; border-radius:24px; padding:32px; box-shadow:0 20px 60px rgba(15,23,42,.10); text-align:center; }
+    .brand { font-weight:900; letter-spacing:-.04em; font-size:32px; margin-bottom:8px; }
+    .muted { color:#6b7280; line-height:1.55; }
+    .spinner { width:38px; height:38px; border-radius:999px; border:4px solid #e5e7eb; border-top-color:#111827; animation:spin .8s linear infinite; margin:22px auto; }
+    .error { display:none; background:#fef2f2; color:#991b1b; border:1px solid #fecaca; border-radius:14px; padding:14px; margin-top:18px; text-align:left; }
+    a, button { color:#111827; font-weight:800; }
+    button { border:0; border-radius:999px; padding:12px 18px; margin-top:16px; background:#111827; color:white; cursor:pointer; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand">0brix CRM</div>
+    <p class="muted">Estamos abriendo tu CRM con la misma sesión de 0brix. Tus leads interesados continúan aquí para seguimiento.</p>
+    <div class="spinner" aria-label="Cargando"></div>
+    <div id="error" class="error"></div>
+    <button id="retry" style="display:none">Intentar otra vez</button>
+  </main>
+  <script>
+    async function openCrm(){
+      const box = document.getElementById('error');
+      const retry = document.getElementById('retry');
+      box.style.display = 'none'; retry.style.display = 'none';
+      const token = localStorage.getItem('access_token');
+      if(!token){
+        location.href = '/login.html?next=/crm';
+        return;
+      }
+      try{
+        const res = await fetch('/api/crm/sso', {headers:{Authorization:'Bearer ' + token}});
+        const data = await res.json().catch(() => ({}));
+        if(!res.ok || !data.redirect_url){
+          throw new Error(data.error || 'No se pudo abrir el CRM.');
+        }
+        location.replace(data.redirect_url);
+      }catch(err){
+        box.textContent = err.message || 'No se pudo conectar al CRM.';
+        box.style.display = 'block'; retry.style.display = 'inline-block';
+      }
+    }
+    document.getElementById('retry').addEventListener('click', openCrm);
+    openCrm();
+  </script>
+</body>
+</html>

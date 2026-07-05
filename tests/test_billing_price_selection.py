@@ -14,6 +14,7 @@ from utils.billing import select_web_checkout_price_id
 def stripe_env(**values):
     keys = {
         "STRIPE_PRICE_ID",
+        "STRIPE_PRICE_ID_BETA_PRO",
         "STRIPE_PRICE_ID_PRO",
         "STRIPE_PRICE_ID_PREMIUM",
         "STRIPE_PRICE_ID_QUALITY",
@@ -32,6 +33,16 @@ def stripe_env(**values):
         for key, value in previous.items():
             if value is not None:
                 os.environ[key] = value
+
+
+def test_beta_pro_uses_single_public_99_price_id_with_legacy_premium_fallback():
+    with stripe_env(STRIPE_PRICE_ID="price_generic"):
+        assert select_web_checkout_price_id("beta_pro") == "price_generic"
+    with stripe_env(STRIPE_PRICE_ID="price_generic", STRIPE_PRICE_ID_PREMIUM="price_premium"):
+        assert select_web_checkout_price_id("premium") == "price_premium"
+        assert select_web_checkout_price_id("beta_pro") == "price_premium"
+    with stripe_env(STRIPE_PRICE_ID="price_generic", STRIPE_PRICE_ID_PREMIUM="price_premium", STRIPE_PRICE_ID_BETA_PRO="price_beta"):
+        assert select_web_checkout_price_id("beta_pro") == "price_beta"
 
 
 def test_non_curated_tiers_use_generic_price_when_specific_price_is_blank():

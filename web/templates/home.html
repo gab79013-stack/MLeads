@@ -57,6 +57,11 @@
     .card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:22px}
     .card .icon{display:grid;place-items:center;width:38px;height:38px;border-radius:8px;background:var(--soft);margin-bottom:16px;font-weight:900}
     .card h3{font-size:19px;margin-bottom:8px}.card p{font-size:15px}
+    .proof-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+    .proof-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px}
+    .proof-card b{display:block;font-size:13px;color:var(--accent);text-transform:uppercase;letter-spacing:.03em;margin-bottom:7px}
+    .proof-card strong{display:block;font-size:18px;line-height:1.2;margin-bottom:8px}
+    .proof-card span{display:block;color:var(--muted);font-size:14px}
     .step{background:#fff;border:1px solid var(--line);border-radius:8px;padding:20px;min-height:160px}
     .step-num{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#111827;color:#fff;font-size:13px;font-weight:900;margin-bottom:14px}
     .band{margin-top:56px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:28px;display:grid;grid-template-columns:1.1fr .9fr;gap:24px;align-items:center}
@@ -64,8 +69,8 @@
     .metric{border:1px solid #e2e8f0;border-radius:8px;padding:16px;background:#fbfdff}.metric strong{display:block;font-size:25px}.metric span{font-size:13px;color:var(--muted)}
     .footer{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:36px;padding-top:22px;border-top:1px solid var(--line);color:#687386;font-size:14px}
     .footer-links{display:flex;gap:14px;flex-wrap:wrap}
-    @media (max-width:980px){.hero-grid{grid-template-columns:1fr;padding:34px}.product-visual{min-height:430px}.section-head,.band{grid-template-columns:1fr;display:grid}.grid-3,.grid-4{grid-template-columns:1fr 1fr}.metric-row{grid-template-columns:1fr 1fr}}
-    @media (max-width:680px){.shell{padding:16px 12px 42px}.nav{align-items:flex-start;flex-direction:column}.links{width:100%}.btn{flex:1}.hero{min-height:auto}.hero-grid{min-height:auto;padding:28px 18px}.product-visual{display:none}h1{font-size:42px}.grid-3,.grid-4,.metric-row{grid-template-columns:1fr}.footer{align-items:flex-start;flex-direction:column}}
+    @media (max-width:980px){.hero-grid{grid-template-columns:1fr;padding:34px}.product-visual{min-height:430px}.section-head,.band{grid-template-columns:1fr;display:grid}.grid-3,.grid-4,.proof-grid{grid-template-columns:1fr 1fr}.metric-row{grid-template-columns:1fr 1fr}}
+    @media (max-width:680px){.shell{padding:16px 12px 42px}.nav{align-items:flex-start;flex-direction:column}.links{width:100%}.btn{flex:1}.hero{min-height:auto}.hero-grid{min-height:auto;padding:28px 18px}.product-visual{display:none}h1{font-size:42px}.grid-3,.grid-4,.proof-grid,.metric-row{grid-template-columns:1fr}.footer{align-items:flex-start;flex-direction:column}}
   </style>
 </head>
 <body>
@@ -73,7 +78,6 @@
     <nav class="nav" aria-label="Principal">
       <div class="brand"><span class="mark">0</span><span>0brix</span></div>
       <div class="links">
-        <a class="btn" href="/crm" target="_blank" rel="noopener">CRM externo</a>
         <a class="btn" href="/pipeline">Pipeline 0brix</a>
         <a class="btn" href="/homeowner-intake">Homeowner intake</a>
         <a class="btn primary" href="/swipe">Explorar leads</a>
@@ -103,7 +107,7 @@
           <div class="screen">
             <div class="screen-head">
               <span class="screen-title">Lead intelligence</span>
-              <span class="status">Listo para ventas</span>
+              <span class="status">Beta verificada</span>
             </div>
             <div class="lead-card">
               <div class="tagline">
@@ -167,13 +171,42 @@
       </div>
     </section>
 
+    <section class="section">
+      <div class="section-head">
+        <h2>Lo que compras en Beta Pro.</h2>
+        <p>Mensajes claros antes de cobrar: fuente, cobertura, siguiente accion y politica cuando un lead no sirve.</p>
+      </div>
+      <div class="proof-grid">
+        <article class="proof-card">
+          <b>Precio</b>
+          <strong>Beta Pro $99/mes</strong>
+          <span>Acceso al feed, filtros disponibles e historial privado del usuario.</span>
+        </article>
+        <article class="proof-card">
+          <b>Fuente</b>
+          <strong>Fuente oficial auditable</strong>
+          <span>Cada lead publico debe indicar si viene de permiso, senal climatica o intake; si no hay fuente directa, se marca como no verificada.</span>
+        </article>
+        <article class="proof-card">
+          <b>Despues del like</b>
+          <strong>Swipe-right crea pipeline</strong>
+          <span>El lead se guarda en Pipeline 0brix para seguimiento, notas, estimate e invoice draft.</span>
+        </article>
+        <article class="proof-card">
+          <b>Credito</b>
+          <strong>Reemplazo si falla la evidencia</strong>
+          <span>Durante beta, un lead con fuente rota, contacto mal rotulado o duplicado se reemplaza con credito interno.</span>
+        </article>
+      </div>
+    </section>
+
     <section class="band">
       <div>
         <h2>Hecho para cobrar por utilidad, no por promesas.</h2>
         <p>La propuesta comercial se apoya en leads con contexto, timing y accion siguiente: el tipo de inventario que un contratista puede justificar pagar si le ahorra busqueda y aumenta velocidad de contacto.</p>
         <div class="hero-actions">
           <a class="btn primary" href="/swipe">Probar el feed</a>
-          <a class="btn" href="/crm" target="_blank" rel="noopener">Abrir CRM externo</a>
+          <a class="btn" href="/pipeline">Abrir Pipeline 0brix</a>
         </div>
       </div>
       <div class="metric-row">
@@ -187,7 +220,6 @@
       <span>0brix - prospectos de construccion con intencion comercial.</span>
       <div class="footer-links">
         <a href="/swipe">Swipe</a>
-        <a href="/crm" target="_blank" rel="noopener">CRM externo</a>
         <a href="/pipeline">Pipeline 0brix</a>
         <a href="/homeowner-intake">Homeowner intake</a>
         <a href="/colaboradores">Colaboradores</a>

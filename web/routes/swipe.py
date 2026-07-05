@@ -12,7 +12,7 @@ from web.helpers.geocode import _get_ip_geo, _geo_locate_ip
 from web.helpers.swipe import _resolve_swipe_identity, _already_swiped_ids, _count_swipes, ANON_LEAD_LIMIT
 from web.helpers.geocode import _haversine_miles, _city_coords, CITY_COORDS
 from web.helpers.service_filter import build_service_category_filter, DEFAULT_TRADE_SERVICE_TO_AI
-from web.helpers.gc_interest import build_gc_insight, build_gc_interest_sql_filter, build_public_real_lead_sql_filter, is_gc_interesting_lead
+from web.helpers.gc_interest import build_gc_insight, build_gc_interest_sql_filter, build_public_real_lead_sql_filter, classify_contact_level, is_gc_interesting_lead
 bp = Blueprint("swipe", __name__)
 
 # Lazy imports to avoid circular dependency with web.app
@@ -112,7 +112,9 @@ def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scori
     score = int(scoring.get("score") or 0)
     service = str(service_type or "").lower()
     has_source = bool(gc_insight.get("source_url"))
+    contact_level = classify_contact_level(lead_data)
     has_phone = bool((lead_data.get("contact_phone") or "").strip())
+    has_direct_contact = bool(contact_level.get("is_direct"))
     has_value = bool(lead_data.get("value_float"))
     age_days = _lead_age_days(lead_data, first_seen)
     has_action_window = bool(inspection_date)
@@ -127,9 +129,12 @@ def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scori
     if has_source:
         points += 15
         checks.append("Link de fuente auditable")
-    if has_phone:
+    if has_direct_contact:
         points += 20
-        checks.append("Teléfono disponible")
+        checks.append("Contacto directo verificado")
+    elif has_phone:
+        points += 6
+        checks.append("Teléfono en registro público")
     if score >= 90:
         points += 15
         checks.append("Score HOT 90+")
@@ -148,13 +153,13 @@ def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scori
     is_elite = (
         points >= 70
         and has_source
-        and has_phone
+        and has_direct_contact
         and score >= 85
         and (has_value or has_action_window or has_direct_owner_intent)
         and has_recent_signal
     )
-    if not is_elite and not has_phone:
-        checks.append("No Elite: falta teléfono")
+    if not is_elite and not has_direct_contact:
+        checks.append("No Elite: contacto directo no verificado")
     if not is_elite and not has_recent_signal:
         checks.append("No Elite: señal vieja o sin fecha")
     return min(points, 100), checks[:5], is_elite
@@ -180,8 +185,13 @@ def _elite_certificate(
             "value": gc_insight.get("source_label") or "Fuente oficial",
             "status": "verified" if gc_insight.get("confidence") == "verified" else "present",
         })
-    if (lead_data.get("contact_phone") or "").strip():
-        evidence.append({"label": "Contacto directo", "value": "Teléfono disponible", "status": "verified"})
+    contact_level = classify_contact_level(lead_data)
+    if (lead_data.get("contact_phone") or "").strip() or (lead_data.get("contact_email") or "").strip():
+        evidence.append({
+            "label": contact_level.get("label", "Requiere enriquecimiento"),
+            "value": contact_level.get("value", "Owner/GC no confirmado"),
+            "status": contact_level.get("status", "needs_enrichment"),
+        })
     if lead_data.get("value_float"):
         try:
             value = f"${float(lead_data.get('value_float') or 0):,.0f}"
@@ -722,6 +732,7 @@ def swipe_feed():
             "gc_badges":        gc_insight.get("badges", []),
             "source_url":       gc_insight.get("source_url", ""),
             "source_label":     gc_insight.get("source_label", ""),
+            "contact_level":    gc_insight.get("contact_level", classify_contact_level(lead_data)),
             "contractor":       contractor,
             "owner":            owner,
             "phone":            phone,

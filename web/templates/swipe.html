@@ -397,12 +397,12 @@
 <!-- Value proof -->
 	<div class="value-strip" id="valueStrip">
 	    <div>
-	        <div class="value-main" id="valueMain">Leads verificados para GCs listos para llamar</div>
-	        <div class="value-sub" id="valueSub">Permisos, tormentas y oportunidades sin GC confirmado.</div>
-	        <div class="value-sub" id="eliteInventoryText">Inventario Elite filtrado por ciudad y categoría.</div>
+	        <div class="value-main" id="valueMain">Señales verificables para GCs y restoration contractors</div>
+	        <div class="value-sub" id="valueSub">Cada lead indica si es contactable, permiso oficial o señal que requiere verificación.</div>
+	        <div class="value-sub" id="eliteInventoryText">Inventario beta filtrado por ciudad y categoría.</div>
 	        <a class="homeowner-link" href="/homeowner-intake" id="homeownerLeadLink">¿Homeowner? Solicita GC para una adición o remodel</a>
 	    </div>
-	    <div class="value-pill" id="valuePill">$500/mes Elite</div>
+	    <div class="value-pill" id="valuePill">Beta Pro $99/mes</div>
 	</div>
 
 <!-- First-run onboarding -->
@@ -410,7 +410,7 @@
     <div class="ob-card">
         <div class="ob-kicker" id="obKicker">Configura tu búsqueda</div>
         <h2 class="ob-title" id="obTitle">Encuentra leads cerca de ti</h2>
-        <p class="ob-copy" id="obCopy">Dinos qué oportunidad buscas y en qué zona trabajas. Te mostramos permisos, daños por tormenta y proyectos listos para contactar.</p>
+        <p class="ob-copy" id="obCopy">Dinos qué oportunidad buscas y en qué zona trabajas. Te mostramos permisos, daños por tormenta y proyectos con nivel de verificación claro.</p>
 
         <div class="ob-section">
             <div class="ob-label" id="obTypeLabel">Tipo de oportunidad</div>
@@ -484,10 +484,10 @@
                 <button class="tsw" id="hotToggle" role="switch" aria-checked="false"></button>
             </div>
 
-            <div class="trow">
+            <div class="trow" id="eliteFilterRow">
                 <div class="tlabel">
-                    <span id="eliteOnlyLabel">🏆 Solo leads Elite</span>
-                    <small id="eliteOnlyDesc">Fuente oficial + contacto + alta intención</small>
+                    <span id="eliteOnlyLabel">🏆 Contacto directo verificado</span>
+                    <small id="eliteOnlyDesc">Solo se activa cuando hay inventario Elite real</small>
                 </div>
                 <button class="tsw" id="eliteToggle" role="switch" aria-checked="false"></button>
             </div>
@@ -571,7 +571,7 @@
             <div class="trial-badge" id="pwBadge">
                 🎁 40 Leads Gratis
                 <div style="text-align:left">
-                    <small id="pwBadgeSmall">Después desde $29/mes</small>
+                    <small id="pwBadgeSmall">Después: Beta Pro $99/mes</small>
                     <small>Sin tarjeta de crédito</small>
                 </div>
             </div>
@@ -582,11 +582,11 @@
             <div class="perks">
                 <div class="roi-box" id="pwRoiBox">
                     <div>Por qué vale pagarlo</div>
-                    <div>Si cierras 1 trabajo de cada 20 leads a $3k, un mes Pro puede pagarse muchas veces.</div>
+                    <div>Durante beta, 0brix separa señales verificables, permisos oficiales y leads contactables para que sepas qué estás comprando.</div>
                 </div>
                 <div class="perk"><div class="perk-icon pi-g">🎁</div><span><strong>40 leads gratis</strong> — sin tarjeta de crédito</span></div>
-                <div class="perk"><div class="perk-icon pi-b">📞</div><span><strong>Contacto completo</strong> — Teléfono, email y contratista</span></div>
-                <div class="perk"><div class="perk-icon pi-p">🔥</div><span><strong>Leads HOT en tiempo real</strong> — Sé el primero en contactar</span></div>
+                <div class="perk"><div class="perk-icon pi-b">📞</div><span><strong>Contacto etiquetado</strong> — Directo, registro público o requiere enriquecimiento</span></div>
+                <div class="perk"><div class="perk-icon pi-p">🔥</div><span><strong>Señales HOT en tiempo real</strong> — Prioriza permisos, tormentas y homeowners</span></div>
                 <div class="perk"><div class="perk-icon pi-o">📍</div><span><strong>Filtros por zona y oportunidad</strong> — tormenta, remodelación, permisos…</span></div>
             </div>
             <button class="oauth-btn google" id="btnGoogle">
@@ -641,32 +641,17 @@
                 <div id="eliteProofBody">Calculando inventario y ROI...</div>
             </div>
             <div class="tier-grid">
-                <div class="tier-card">
-                    <div class="tier-head"><div><div class="tier-name">Pro</div><div class="tier-price">$29<small>/mes</small></div></div><strong style="font-size:11px;color:#e11d48">200 leads</strong></div>
-                    <div class="tier-desc">Para probar el canal: filtros, contacto completo y pipeline.</div>
-                    <button class="tier-btn" onclick="handleUpgrade('pro')" style="background:var(--accent)">Elegir Pro</button>
-                </div>
                 <div class="tier-card featured">
-                    <div class="tier-head"><div><div class="tier-name">Premium</div><div class="tier-price">$99<small>/mes</small></div></div><strong style="font-size:11px;color:#166534">Ilimitado</strong></div>
-                    <div class="tier-desc">Para equipos activos: leads ilimitados, señales HOT e inspecciones priorizadas.</div>
-                    <button class="tier-btn" onclick="handleUpgrade('premium')" style="background:#16a34a">Elegir Premium</button>
-                </div>
-                <div class="tier-card quality">
-                    <div class="tier-head"><div><div class="tier-name">Quality</div><div class="tier-price">$199<small>/mes</small></div></div><strong style="font-size:11px;color:#0f766e">Curado</strong></div>
-                    <div class="tier-desc">Leads con fuente, teléfono y señal reciente para equipos que quieren pagar por calidad, no solo volumen.</div>
-                    <button class="tier-btn" id="qualityUpgradeBtn" onclick="handleUpgrade('quality')" style="background:#0f766e">Elegir Quality</button>
-                </div>
-                <div class="tier-card elite">
-                    <div class="tier-head"><div><div class="tier-name">Elite</div><div class="tier-price">$500<small>/mes</small></div></div><strong style="font-size:11px;color:#111827">Curado</strong></div>
-                    <div class="tier-desc">Solo leads con evidencia fuerte: fuente oficial, contacto, score alto y ventana de acción. Ideal si un cierre paga varios meses.</div>
-                    <button class="tier-btn" id="eliteUpgradeBtn" onclick="handleUpgrade('elite')" style="background:#111827">Elegir Elite</button>
+                    <div class="tier-head"><div><div class="tier-name">Beta Pro</div><div class="tier-price">$99<small>/mes</small></div></div><strong style="font-size:11px;color:#166534">40 leads gratis</strong></div>
+                    <div class="tier-desc">Oferta inicial: señales verificables, permisos oficiales, filtros, pipeline y créditos de reemplazo si un lead se reporta como no accionable.</div>
+                    <button class="tier-btn" onclick="handleUpgrade('beta_pro')" style="background:#16a34a">Elegir Beta Pro</button>
                 </div>
             </div>
             <p style="font-size:11px;color:var(--muted);text-align:center">Cancela cuando quieras · sin compromisos</p>
         </div>
 
         <div class="pw-footer" id="pwFooterWrap">Al registrarte aceptas los términos de uso.<br>
-            <strong id="pwFooter">40 leads gratis · después desde $29/mes</strong>
+            <strong id="pwFooter">40 leads gratis · después Beta Pro $99/mes</strong>
         </div>
         <button onclick="hidePaywall()" style="background:none;border:none;color:var(--muted);font-size:12px;padding:8px;cursor:pointer;width:100%">Cerrar</button>
     </div>
@@ -1058,9 +1043,26 @@ async function loadEliteInventory() {
         const count = Number(data.total_elite_leads || 0);
         const avg = Number(data.average_quality_score || 0);
         const place = F.city ? ` cerca de ${F.city}` : '';
-        el.textContent = CURRENT_LANG === 'es'
-            ? `${count.toLocaleString()} leads Elite curados${place}${avg ? ` · calidad ${avg}/100` : ''}`
-            : `${count.toLocaleString()} curated Elite leads${place}${avg ? ` · quality ${avg}/100` : ''}`;
+        const eliteRow = document.getElementById('eliteFilterRow');
+        const eliteToggle = document.getElementById('eliteToggle');
+        if (count <= 0) {
+            F.eliteOnly = false;
+            if (eliteToggle) { eliteToggle.classList.remove('on'); eliteToggle.setAttribute('aria-checked','false'); eliteToggle.disabled = true; }
+            if (eliteRow) eliteRow.style.display = 'none';
+            const url = new URL(window.location.href); url.searchParams.delete('elite'); history.replaceState(null, '', url.toString());
+        } else {
+            if (eliteToggle) eliteToggle.disabled = false;
+            if (eliteRow) eliteRow.style.display = '';
+        }
+        if (count > 0) {
+            el.textContent = CURRENT_LANG === 'es'
+                ? `${count.toLocaleString()} leads con verificación avanzada${place}${avg ? ` · calidad ${avg}/100` : ''}`
+                : `${count.toLocaleString()} advanced-verified leads${place}${avg ? ` · quality ${avg}/100` : ''}`;
+        } else {
+            el.textContent = CURRENT_LANG === 'es'
+                ? `Beta Pro: señales verificables con nivel de contacto claro${place}`
+                : `Beta Pro: verifiable signals with clear contact level${place}`;
+        }
     } catch (e) {}
 }
 
@@ -1236,7 +1238,7 @@ const $deck = document.getElementById('deck');
 function updateCounter() {
     const cnt = document.getElementById('counter');
     if (S.isPaid) {
-        const label = S.tier === 'elite' ? 'Elite' : S.tier === 'premium' ? 'Premium' : 'Pro';
+        const label = S.tier === 'elite' ? 'Elite' : S.tier === 'quality' ? 'Quality' : 'Beta Pro';
         if (S.tier === 'elite') {
             const remaining = S.remaining === null || S.remaining === undefined ? '-' : Number(S.remaining).toLocaleString();
             const credits = Number(S.replacementCredits || 0);
@@ -1294,9 +1296,16 @@ function buildCard(lead, idx) {
     const isEN       = CURRENT_LANG === 'en';
     const mapsQ      = leadMapsQuery(lead);
     const locationLabel = leadLocationLabel(lead);
+    const contactStatus = lead.email
+        ? (isEN ? 'Direct email available' : 'Email directo disponible')
+        : (lead.phone
+            ? (lead.contractor && /NONE|State Lic|ID:/i.test(String(lead.contractor))
+                ? (isEN ? 'Public-record phone' : 'Teléfono de registro público')
+                : (isEN ? 'Phone available' : 'Teléfono disponible'))
+            : (isEN ? 'Requires enrichment' : 'Requiere enriquecimiento'));
     const valueProof = lead.value
         ? (isEN ? `${fmtMoney(lead.value)} project signal` : `Señal de proyecto ${fmtMoney(lead.value)}`)
-        : (isEN ? 'Verified contact signal' : 'Señal con contacto verificable');
+        : contactStatus;
     const qualityChecks = Array.isArray(lead.premium_quality_checks) ? lead.premium_quality_checks : [];
     const qualityScore = Number(lead.premium_quality_score || 0);
     const eliteCert = lead.elite_certificate || {};
@@ -1384,6 +1393,7 @@ function buildCard(lead, idx) {
     const rows_gc = [
         lead.contractor  ? `<div class="det-row"><span class="det-k">▸ GC:</span><span class="det-v" style="font-weight:700">${esc(lead.contractor)}</span></div>` : '',
         lead.lic_number  ? `<div class="det-row"><span class="det-k">▸ ${isEN?'Lic.':'CSLB'}:</span><span class="det-v">${esc(lead.lic_number)}</span></div>` : '',
+        `<div class="det-row"><span class="det-k">▸ ${isEN?'Contact status':'Estado contacto'}:</span><span class="det-v" style="font-weight:700">${esc(contactStatus)}</span></div>`,
         phoneBtn         ? `<div class="det-row">${phoneBtn}</div>` : '',
         emailBtn         ? `<div class="det-row">${emailBtn}</div>` : '',
         (phoneBtn || emailBtn) ? `<div class="det-row">${whatsappBtn}</div>` : '',
@@ -2001,12 +2011,12 @@ function showPaywall(mode) {
         // Already registered free user → show tier comparison
         document.getElementById('pwTitle').textContent  = CURRENT_LANG === 'es' ? 'Sigue llenando tu pipeline' : 'Keep filling your pipeline';
         document.getElementById('pwSubtitle').innerHTML = 'Has agotado tus <strong style="color:#fff">40 leads gratis</strong>.<br>Elige un plan para seguir encontrando clientes.';
-        document.getElementById('pwBadge').innerHTML    = '📊 <span id="pwUsageNum">40</span> leads usados<div style="text-align:left"><small>Premium $99/mes · ilimitado</small><small>Elite $500/mes · leads curados</small></div>';
+        document.getElementById('pwBadge').innerHTML    = '📊 <span id="pwUsageNum">40</span> leads usados<div style="text-align:left"><small>Beta Pro $99/mes</small><small>40 leads gratis · señales verificables</small></div>';
         document.getElementById('pwFooter').textContent = 'Sin compromisos · cancela cuando quieras';
         const _roi = Math.round(S.swipes / 20 * 3000);
         document.getElementById('pwUpgradeUsage').innerHTML = CURRENT_LANG === 'es'
-            ? `Contactaste <strong>${S.swipes} leads</strong>. Si un solo cierre vale $10k+, Elite ($500/mes) se justifica con una oportunidad bien verificada.`
-            : `You contacted <strong>${S.swipes} leads</strong>. If one close is worth $10k+, Elite ($500/mo) can justify itself with one well-verified opportunity.`;
+            ? `Contactaste <strong>${S.swipes} leads</strong>. Beta Pro ($99/mes) mantiene acceso a señales verificables, fuentes oficiales y pipeline.`
+            : `You contacted <strong>${S.swipes} leads</strong>. Beta Pro ($99/mo) keeps access to verifiable signals, official sources, and pipeline.`;
         regSec.style.display = 'none';
         upgSec.style.display = '';
         loadQualitySalesProof();
@@ -2015,8 +2025,8 @@ function showPaywall(mode) {
         // Anonymous → register for free leads
         document.getElementById('pwTitle').textContent  = CURRENT_LANG === 'es' ? 'Convierte señales en trabajos' : 'Turn signals into jobs';
         document.getElementById('pwSubtitle').innerHTML = 'Has visto tus <strong style="color:#fff">10 leads gratis</strong>.<br>Regístrate y obtén <strong style="color:#4ade80">40 leads adicionales gratis</strong>.';
-        document.getElementById('pwBadge').innerHTML    = '🎁 40 Leads Gratis<div style="text-align:left"><small id="pwBadgeSmall">Después: Quality $199/mes</small><small>Sin tarjeta de crédito</small></div>';
-        document.getElementById('pwFooter').textContent = '40 leads gratis · después desde $29/mes';
+        document.getElementById('pwBadge').innerHTML    = '🎁 40 Leads Gratis<div style="text-align:left"><small id="pwBadgeSmall">Después: Beta Pro $99/mes</small><small>Sin tarjeta de crédito</small></div>';
+        document.getElementById('pwFooter').textContent = '40 leads gratis · después Beta Pro $99/mes';
         regSec.style.display = '';
         upgSec.style.display = 'none';
     }
@@ -2053,7 +2063,7 @@ async function handleUpgrade(tier) {
             } else if (tier === 'quality') {
                 loadQualitySalesProof();
             } else {
-                btn.textContent = tier === 'pro' ? 'Elegir Pro' : 'Elegir Premium';
+                btn.textContent = tier === 'beta_pro' ? 'Elegir Beta Pro' : tier === 'pro' ? 'Elegir Beta Pro' : 'Elegir Beta Pro';
             }
         }
     }
@@ -2134,8 +2144,8 @@ const I18N = {
         filterReset:   'Restablecer',
         hotLabel:      '🔥 Solo leads HOT',
         hotDesc:       'Score ≥ 90 — máxima temperatura',
-        eliteOnlyLabel:'🏆 Solo leads Elite',
-        eliteOnlyDesc: 'Fuente oficial + contacto + alta intención',
+        eliteOnlyLabel:'🏆 Contacto directo verificado',
+        eliteOnlyDesc: 'Solo con fuente oficial + contacto directo confirmado',
         ltypeTitle:    'Oportunidad para GC',
         locationTitle: 'Ubicación',
         cityPH:        'Tu ciudad...',
@@ -2165,14 +2175,14 @@ const I18N = {
         contactsClose: 'Cerrar',
         contactsEmpty: 'Aún no has contactado ningún lead. Desliza a la derecha o llama para guardar.',
         contactsBtn:   'Mis Contactos',
-        valueMain:     'Leads verificados para GCs listos para llamar',
-        valueSub:      'Permisos, tormentas y oportunidades sin GC confirmado.',
-        valuePill:     '$500/mes Elite',
+        valueMain:     'Señales verificables para GCs y restoration contractors',
+        valueSub:      'Cada lead indica si es contactable, permiso oficial o señal que requiere verificación.',
+        valuePill:     'Beta Pro $99/mes',
         roiTitle:      'Por qué vale pagarlo',
-        roiText:       'Si un cierre vale $10k+, pagar $500/mes por leads curados puede tener sentido rápido.',
+        roiText:       'Beta Pro separa señales verificables, permisos oficiales y leads contactables para que sepas qué estás comprando.',
         obKicker:      'Configura tu búsqueda',
         obTitle:       'Encuentra leads cerca de ti',
-        obCopy:        'Dinos qué oportunidad buscas y en qué zona trabajas. Te mostramos permisos, daños por tormenta y proyectos listos para contactar.',
+        obCopy:        'Dinos qué oportunidad buscas y en qué zona trabajas. Te mostramos permisos, daños por tormenta y proyectos con nivel de verificación claro.',
         obTypeLabel:   'Tipo de oportunidad',
         obLocLabel:    'Zona de trabajo',
         obSkip:        'Saltar',
@@ -2191,8 +2201,8 @@ const I18N = {
         filterReset:   'Reset',
         hotLabel:      '🔥 HOT leads only',
         hotDesc:       'Score ≥ 90 — maximum heat',
-        eliteOnlyLabel:'🏆 Elite leads only',
-        eliteOnlyDesc: 'Official source + contact + high intent',
+        eliteOnlyLabel:'🏆 Direct verified contact',
+        eliteOnlyDesc: 'Only with official source + confirmed direct contact',
         ltypeTitle:    'GC Opportunity',
         locationTitle: 'Location',
         cityPH:        'Your city...',
@@ -2222,14 +2232,14 @@ const I18N = {
         contactsClose: 'Close',
         contactsEmpty: 'You haven\'t contacted any lead yet. Swipe right or call to save.',
         contactsBtn:   'My Contacts',
-        valueMain:     'Verified GC leads ready to call',
-        valueSub:      'Permits, storms, and no-GC-confirmed opportunities.',
-        valuePill:     '$500/mo Elite',
+        valueMain:     'Verifiable signals for GCs and restoration contractors',
+        valueSub:      'Each lead shows whether it is contactable, official permit, or needs verification.',
+        valuePill:     'Beta Pro $99/mo',
         roiTitle:      'Why it can pay off',
-        roiText:       'If one close is worth $10k+, paying $500/mo for curated leads can make sense fast.',
+        roiText:       'Beta Pro separates verifiable signals, official permits, and contactable leads so you know what you are buying.',
         obKicker:      'Set up your search',
         obTitle:       'Find leads near you',
-        obCopy:        'Tell us what opportunity you want and where you work. We will show permits, storm damage, and projects ready to contact.',
+        obCopy:        'Tell us what opportunity you want and where you work. We will show permits, storm damage, and projects with a clear verification level.',
         obTypeLabel:   'Opportunity type',
         obLocLabel:    'Work area',
         obSkip:        'Skip',

@@ -287,6 +287,27 @@ def build_public_real_lead_sql_filter() -> str:
     )
 
 
+def classify_contact_level(lead: Mapping[str, Any]) -> dict[str, Any]:
+    """Classify contact status without turning public-record phones into direct contacts."""
+    phone = _text(lead.get("contact_phone"), lead.get("phone"), lead.get("owner_phone"))
+    email = _text(lead.get("contact_email"), lead.get("email"), lead.get("owner_email"))
+    contractor = _text(_contractor_name(lead), lead.get("contractor"), lead.get("applicant"))
+    channel = _text(lead.get("_lead_channel"), lead.get("lead_channel"), lead.get("source_channel")).lower()
+    contact_source = _text(lead.get("contact_source"), lead.get("phone_source"), lead.get("enrichment_source")).lower()
+    direct_markers = {"homeowner_intake", "owner_form", "direct_owner", "verified_owner", "enriched_direct", "manual_verified"}
+    phone_in_contractor_record = bool(phone and phone in contractor)
+    public_markers = ("state lic", " lic:", "license", "permit", "record", "ph:", "applicant")
+    looks_public_record = phone_in_contractor_record or any(m in contractor.lower() for m in public_markers)
+
+    if email:
+        return {"id": "direct_verified", "label": "Contacto directo verificado", "value": "Email directo disponible", "status": "verified", "is_direct": True}
+    if phone and (channel in direct_markers or contact_source in direct_markers or lead.get("phone_verified_direct") is True) and not looks_public_record:
+        return {"id": "direct_verified", "label": "Contacto directo verificado", "value": "Teléfono directo disponible", "status": "verified", "is_direct": True}
+    if phone:
+        return {"id": "public_record_phone", "label": "Teléfono en registro público", "value": "Owner/GC no confirmado", "status": "public_record", "is_direct": False}
+    return {"id": "requires_enrichment", "label": "Requiere enriquecimiento", "value": "Sin teléfono directo confirmado", "status": "needs_enrichment", "is_direct": False}
+
+
 def build_gc_insight(lead: Mapping[str, Any], service_type: str | None) -> dict[str, Any]:
     """Explain why this lead is useful to a General Contractor buyer."""
     service = (service_type or lead.get("primary_service_type") or "").strip().lower()
@@ -352,9 +373,17 @@ def build_gc_insight(lead: Mapping[str, Any], service_type: str | None) -> dict[
         badges.append("Cross-data")
         reasons.append("Varias señales públicas apuntan a una oportunidad; revisar fuente antes de contactar.")
 
-    if lead.get("contact_phone") or lead.get("phone"):
+    contact_level = classify_contact_level(lead)
+    if contact_level["id"] == "direct_verified":
         score += 15
-        badges.append("Teléfono disponible")
+        badges.append("Contacto directo verificado")
+    elif contact_level["id"] == "public_record_phone":
+        score += 6
+        badges.append("Teléfono en registro público")
+        if contractor_open:
+            badges.append("Owner/GC no confirmado")
+    else:
+        badges.append("Requiere enriquecimiento")
     if has_source:
         score += 25
         badges.append("Fuente verificable")
@@ -385,6 +414,7 @@ def build_gc_insight(lead: Mapping[str, Any], service_type: str | None) -> dict[
         "reasons": reasons or ["Oportunidad abierta para GC; validar alcance y decisión maker."],
         "source_url": url,
         "source_label": "Fuente verificable" if url else "Fuente no verificada",
+        "contact_level": contact_level,
     }
 
 
