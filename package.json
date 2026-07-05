@@ -1,5 +1,6 @@
 {
   "name": "0brix-landing",
+  "description": "Landing page de 0brix",
   "version": "1.0.0",
   "private": true,
   "scripts": {
