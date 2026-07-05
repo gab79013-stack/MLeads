@@ -421,6 +421,41 @@
             line-height: 1.4;
         }
 
+        .market-readiness-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .market-readiness-row {
+            display: grid;
+            grid-template-columns: minmax(120px, 1fr) auto auto;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg);
+            font-size: 12px;
+        }
+
+        .market-readiness-row strong {
+            font-size: 13px;
+            color: var(--fg);
+        }
+
+        .market-readiness-price {
+            font-weight: 800;
+            color: var(--green);
+        }
+
+        .market-readiness-action {
+            grid-column: 1 / -1;
+            color: var(--fg-muted);
+            font-size: 11.5px;
+            line-height: 1.35;
+        }
+
         /* ── SECTION HEADER ── */
         .section-header {
             display: flex;
@@ -1286,6 +1321,36 @@
                         </div>
                     </div>
 
+                    <div class="elite-quality-card" id="billingReadinessCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Billing readiness</div>
+                            <div class="stat-value" id="billingReadyValue">-</div>
+                            <span class="elite-quality-status warn" id="billingReadyStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="billingCheckout">-</strong><span>Checkout</span></div>
+                            <div><strong id="billingQuality">-</strong><span>Quality $199</span></div>
+                            <div><strong id="billingWebhook">-</strong><span>Webhook</span></div>
+                            <div><strong id="billingElite">-</strong><span>Elite $500</span></div>
+                            <div class="elite-quality-alert" id="billingReadyAlerts">Checking Stripe configuration...</div>
+                        </div>
+                    </div>
+
+                    <div class="elite-quality-card" id="qualityReadinessCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Quality readiness</div>
+                            <div class="stat-value" id="qualityReadyCount">0</div>
+                            <span class="elite-quality-status warn" id="qualityReadinessStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="qualityPilotCount">0</strong><span>Pilot markets</span></div>
+                            <div><strong id="qualityNeedsCount">0</strong><span>Needs inventory</span></div>
+                            <div><strong id="qualityLeadTotal">0</strong><span>Quality leads</span></div>
+                            <div class="elite-quality-alert" id="qualityReadinessAlerts">Checking Quality sellability...</div>
+                            <div class="market-readiness-list" id="qualityReadinessList"></div>
+                        </div>
+                    </div>
+
                     <div class="elite-quality-card" id="eliteQualityCard">
                         <div class="elite-quality-kpi">
                             <div class="stat-label">Elite QA</div>
@@ -1296,7 +1361,66 @@
                             <div><strong id="eliteQaAvg">0/100</strong><span>Avg quality</span></div>
                             <div><strong id="eliteQaPhone">0%</strong><span>Phone coverage</span></div>
                             <div><strong id="eliteQaValue">0%</strong><span>Project value</span></div>
+                            <div><strong id="eliteQaFresh">0%</strong><span>Fresh signal</span></div>
                             <div class="elite-quality-alert" id="eliteQaAlerts">Checking sellability...</div>
+                        </div>
+                    </div>
+
+                    <div class="elite-quality-card" id="eliteClaimsCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Elite reservations</div>
+                            <div class="stat-value" id="eliteClaimsTotal">0</div>
+                            <span class="elite-quality-status warn" id="eliteClaimsStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="eliteClaimsContractors">0</strong><span>Contractors</span></div>
+                            <div><strong id="eliteClaimsReported">0</strong><span>Reported</span></div>
+                            <div><strong id="eliteClaimsExpired">0</strong><span>Expired</span></div>
+                            <div class="elite-quality-alert" id="eliteClaimsAlerts">Checking active Elite reservations...</div>
+                            <div class="market-readiness-list" id="eliteClaimsList"></div>
+                        </div>
+                    </div>
+
+                    <div class="elite-quality-card" id="marketReadinessCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Market readiness</div>
+                            <div class="stat-value" id="marketReadyCount">0</div>
+                            <span class="elite-quality-status warn" id="marketReadinessStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="marketPilotCount">0</strong><span>Pilot markets</span></div>
+                            <div><strong id="marketNeedsCount">0</strong><span>Needs inventory</span></div>
+                            <div><strong id="marketEliteTotal">0</strong><span>Elite leads</span></div>
+                            <div class="elite-quality-alert" id="marketReadinessAlerts">Checking market sellability...</div>
+                            <div class="market-readiness-list" id="marketReadinessList"></div>
+                        </div>
+                    </div>
+
+                    <div class="elite-quality-card" id="eliteUpliftCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Elite uplift queue</div>
+                            <div class="stat-value" id="eliteUpliftTotal">0</div>
+                            <span class="elite-quality-status warn" id="eliteUpliftStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="eliteUpliftScanned">0</strong><span>Scanned</span></div>
+                            <div><strong id="eliteUpliftTopGap">-</strong><span>Top gap</span></div>
+                            <div class="elite-quality-alert" id="eliteUpliftAlerts">Checking near-Elite candidates...</div>
+                            <div class="market-readiness-list" id="eliteUpliftList"></div>
+                        </div>
+                    </div>
+
+                    <div class="elite-quality-card" id="elitePilotDemandCard">
+                        <div class="elite-quality-kpi">
+                            <div class="stat-label">Elite demand</div>
+                            <div class="stat-value" id="elitePilotTotal">0</div>
+                            <span class="elite-quality-status warn" id="elitePilotStatus">Loading</span>
+                        </div>
+                        <div class="elite-quality-detail">
+                            <div><strong id="elitePilotMarkets">0</strong><span>Markets waiting</span></div>
+                            <div><strong id="elitePilotLast">-</strong><span>Last request</span></div>
+                            <div class="elite-quality-alert" id="elitePilotAlerts">Checking blocked checkout demand...</div>
+                            <div class="market-readiness-list" id="elitePilotList"></div>
                         </div>
                     </div>
 
@@ -1966,7 +2090,13 @@
         // ── Dashboard ──
         async function loadDashboard() {
             try {
+                loadBillingReadiness();
+                loadQualityReadiness();
                 loadEliteQualityReport();
+                loadEliteClaims();
+                loadMarketReadiness();
+                loadEliteUpliftCandidates();
+                loadElitePilotDemand();
                 const response = await fetch('/api/leads', { headers: { 'Authorization': `Bearer ${currentAccessToken}` } });
                 const data = await response.json();
                 document.getElementById('totalLeads').textContent = data.total || 0;
@@ -1992,6 +2122,91 @@
             } catch (e) { console.error(e); }
         }
 
+        async function loadBillingReadiness() {
+            const statusEl = document.getElementById('billingReadyStatus');
+            if (!statusEl) return;
+            try {
+                const response = await fetch('/api/admin/billing-readiness', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('billing readiness unavailable');
+                const data = await response.json();
+                const checkoutReady = !!data.checkout_ready;
+                const webhookReady = !!data.webhook_ready;
+                const eliteReady = !!data.elite_ready;
+                const qualityReady = !!data.tiers?.quality?.price_configured;
+                document.getElementById('billingReadyValue').textContent = checkoutReady ? 'Ready' : 'Setup';
+                document.getElementById('billingCheckout').textContent = checkoutReady ? 'Ready' : 'Blocked';
+                document.getElementById('billingQuality').textContent = qualityReady ? 'Ready' : 'Missing';
+                document.getElementById('billingWebhook').textContent = webhookReady ? 'Ready' : 'Missing';
+                document.getElementById('billingElite').textContent = eliteReady ? '$500 ready' : 'Hold';
+                statusEl.textContent = checkoutReady && webhookReady && eliteReady ? 'Ready to sell' : 'Action needed';
+                statusEl.classList.toggle('danger', !checkoutReady || !webhookReady);
+                statusEl.classList.toggle('warn', checkoutReady && webhookReady && !eliteReady);
+                const missing = data.missing || [];
+                const market = data.elite_market || {};
+                document.getElementById('billingReadyAlerts').textContent = missing.length
+                    ? `Missing production env: ${missing.join(', ')}.`
+                    : `Return URL ${data.base_url || 'current host'} · Elite ${market.city || 'market'} ${market.status || 'unknown'}.`;
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('billingReadyAlerts').textContent = 'Billing readiness could not be loaded.';
+            }
+        }
+
+        async function loadQualityReadiness() {
+            const statusEl = document.getElementById('qualityReadinessStatus');
+            const listEl = document.getElementById('qualityReadinessList');
+            if (!statusEl || !listEl) return;
+            try {
+                const response = await fetch('/api/admin/quality-readiness', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('quality readiness unavailable');
+                const data = await response.json();
+                const summary = data.summary || {};
+                const markets = data.markets || [];
+                const guidance = data.sales_guidance || {};
+                const billing = data.billing || {};
+                const readyMarkets = Number(summary.ready_markets || 0);
+                const pilotMarkets = Number(summary.pilot_markets || 0);
+                document.getElementById('qualityReadyCount').textContent = readyMarkets;
+                document.getElementById('qualityPilotCount').textContent = pilotMarkets;
+                document.getElementById('qualityNeedsCount').textContent = summary.needs_inventory_markets || 0;
+                document.getElementById('qualityLeadTotal').textContent = summary.total_quality_leads || 0;
+
+                const labels = {
+                    ready_to_sell: 'Sell Quality',
+                    billing_blocked: 'Setup billing',
+                    pilot_only: 'Pilot only',
+                    needs_inventory: 'Needs inventory'
+                };
+                statusEl.textContent = labels[guidance.status] || 'Review';
+                statusEl.classList.toggle('danger', guidance.status === 'needs_inventory' || guidance.status === 'billing_blocked');
+                statusEl.classList.toggle('warn', guidance.status === 'pilot_only');
+                document.getElementById('qualityReadinessAlerts').textContent = billing.quality_price_configured === false
+                    ? `${guidance.headline || 'Quality needs review'} Missing STRIPE_PRICE_ID_QUALITY.`
+                    : (guidance.headline || 'Quality readiness loaded.');
+
+                listEl.innerHTML = markets.slice(0, 6).map(m => `
+                    <div class="market-readiness-row">
+                        <strong>${escHtml(m.city || 'Unknown')}</strong>
+                        <span>${escHtml(m.status || '')} · ${Number(m.quality_leads || 0)} Quality · ${Number(m.average_quality_score || 0)}/100</span>
+                        <span class="market-readiness-price">${m.recommended_price ? '$' + Number(m.recommended_price).toLocaleString() + '/mo' : 'Hold'}</span>
+                        <div class="market-readiness-action">
+                            ${escHtml((m.next_actions || guidance.next_actions || [])[0] || 'Review enrichment gaps before selling Quality.')}
+                        </div>
+                    </div>
+                `).join('') || '<div class="elite-quality-alert">No Quality readiness data yet.</div>';
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('qualityReadinessAlerts').textContent = 'Quality readiness could not be loaded.';
+                listEl.innerHTML = '';
+            }
+        }
+
         async function loadEliteQualityReport() {
             const statusEl = document.getElementById('eliteQaStatus');
             if (!statusEl) return;
@@ -2003,10 +2218,12 @@
                 const data = await response.json();
                 const phonePct = data.coverage?.phone?.pct || 0;
                 const valuePct = data.coverage?.project_value?.pct || 0;
+                const freshPct = data.coverage?.fresh_signal?.pct || 0;
                 document.getElementById('eliteQaTotal').textContent = data.elite_leads || 0;
                 document.getElementById('eliteQaAvg').textContent = `${data.average_quality_score || 0}/100`;
                 document.getElementById('eliteQaPhone').textContent = `${phonePct}%`;
                 document.getElementById('eliteQaValue').textContent = `${valuePct}%`;
+                document.getElementById('eliteQaFresh').textContent = `${freshPct}%`;
                 const labels = {
                     ready_for_elite: 'Ready for Elite',
                     pilot_market: 'Pilot market',
@@ -2023,6 +2240,185 @@
                 statusEl.textContent = 'Unavailable';
                 statusEl.classList.add('danger');
                 document.getElementById('eliteQaAlerts').textContent = 'Elite QA report could not be loaded.';
+            }
+        }
+
+        async function loadEliteClaims() {
+            const statusEl = document.getElementById('eliteClaimsStatus');
+            const listEl = document.getElementById('eliteClaimsList');
+            if (!statusEl || !listEl) return;
+            try {
+                const response = await fetch('/api/admin/elite-claims?status=active', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('elite claims unavailable');
+                const data = await response.json();
+                const summary = data.summary || {};
+                const claims = data.claims || [];
+                document.getElementById('eliteClaimsTotal').textContent = summary.active_claims || 0;
+                document.getElementById('eliteClaimsContractors').textContent = summary.active_contractors || 0;
+                document.getElementById('eliteClaimsReported').textContent = summary.reported_claims || 0;
+                document.getElementById('eliteClaimsExpired').textContent = summary.expired_claims || 0;
+                statusEl.textContent = (summary.active_claims || 0) > 0 ? 'Reserved' : 'No active';
+                statusEl.classList.toggle('warn', (summary.active_claims || 0) > 0);
+                statusEl.classList.toggle('danger', false);
+                document.getElementById('eliteClaimsAlerts').textContent = (summary.active_claims || 0) > 0
+                    ? 'Active Elite leads are reserved exclusively by contractor until their claim window expires.'
+                    : 'No active Elite reservations right now.';
+                listEl.innerHTML = claims.slice(0, 6).map(c => `
+                    <div class="market-readiness-row">
+                        <strong>${escHtml(c.email || c.full_name || 'Unknown GC')}</strong>
+                        <span>${escHtml(c.city || 'Unknown')} · ${escHtml(c.primary_service_type || 'lead')} · ${escHtml(c.status || '')}</span>
+                        <span class="market-readiness-price">${escHtml(String(c.expires_at || '').slice(0, 10))}</span>
+                    </div>
+                `).join('') || '<div class="elite-quality-alert">No active reservations yet.</div>';
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('eliteClaimsAlerts').textContent = 'Elite reservations could not be loaded.';
+                listEl.innerHTML = '';
+            }
+        }
+
+        async function loadMarketReadiness() {
+            const statusEl = document.getElementById('marketReadinessStatus');
+            const listEl = document.getElementById('marketReadinessList');
+            if (!statusEl || !listEl) return;
+            try {
+                const response = await fetch('/api/swipe/market-readiness', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('market readiness unavailable');
+                const data = await response.json();
+                const summary = data.summary || {};
+                const markets = data.markets || [];
+                document.getElementById('marketReadyCount').textContent = summary.ready_markets || 0;
+                document.getElementById('marketPilotCount').textContent = summary.pilot_markets || 0;
+                document.getElementById('marketNeedsCount').textContent = summary.needs_inventory_markets || 0;
+                document.getElementById('marketEliteTotal').textContent = summary.total_elite_leads || 0;
+                statusEl.textContent = (summary.ready_markets || 0) > 0 ? 'Sell Elite' : ((summary.pilot_markets || 0) > 0 ? 'Pilot only' : 'Needs inventory');
+                statusEl.classList.toggle('danger', !(summary.ready_markets || 0) && !(summary.pilot_markets || 0));
+                statusEl.classList.toggle('warn', !(summary.ready_markets || 0) && (summary.pilot_markets || 0) > 0);
+                document.getElementById('marketReadinessAlerts').textContent =
+                    (summary.ready_markets || 0) > 0
+                        ? 'At least one market has enough quality inventory for Elite positioning.'
+                        : 'Use pilot pricing or expand inventory before selling Elite.';
+                listEl.innerHTML = markets.slice(0, 6).map(m => `
+                    <div class="market-readiness-row">
+                        <strong>${escHtml(m.city || 'Unknown')}</strong>
+                        <span>${escHtml(m.status || '')} · ${Number(m.elite_leads || 0)} Elite</span>
+                        <span class="market-readiness-price">${m.recommended_price ? '$' + Number(m.recommended_price).toLocaleString() + '/mo' : 'Hold'}</span>
+                        <div class="market-readiness-action">
+                            Gap: ${Number(m.gap_to_elite?.elite_leads || 0)} leads · ${Number(m.gap_to_elite?.phone_pct || 0)} pts phone.
+                            ${escHtml((m.next_actions || [])[0] || '')}
+                        </div>
+                    </div>
+                `).join('') || '<div class="elite-quality-alert">No market readiness data yet.</div>';
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('marketReadinessAlerts').textContent = 'Market readiness could not be loaded.';
+                listEl.innerHTML = '';
+            }
+        }
+
+        async function loadEliteUpliftCandidates() {
+            const statusEl = document.getElementById('eliteUpliftStatus');
+            const listEl = document.getElementById('eliteUpliftList');
+            if (!statusEl || !listEl) return;
+            try {
+                const response = await fetch('/api/admin/elite-uplift-candidates?limit=8', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('elite uplift unavailable');
+                const data = await response.json();
+                const candidates = data.candidates || [];
+                const missingCounts = data.missing_counts || {};
+                const topGap = Object.entries(missingCounts).sort((a, b) => Number(b[1]) - Number(a[1]))[0];
+                document.getElementById('eliteUpliftTotal').textContent = data.returned || candidates.length || 0;
+                document.getElementById('eliteUpliftScanned').textContent = data.scanned_candidates || 0;
+                document.getElementById('eliteUpliftTopGap').textContent = topGap ? `${topGap[0]} (${topGap[1]})` : '-';
+                statusEl.textContent = candidates.length ? 'Enrich next' : 'No queue';
+                statusEl.classList.toggle('warn', candidates.length > 0);
+                statusEl.classList.toggle('danger', false);
+                document.getElementById('eliteUpliftAlerts').textContent = candidates.length
+                    ? 'Prioritize these leads to convert existing inventory into sellable Elite supply.'
+                    : 'No near-Elite candidates found for current inventory.';
+                listEl.innerHTML = candidates.slice(0, 6).map(c => `
+                    <div class="market-readiness-row">
+                        <strong>${escHtml(c.city || 'Unknown')}</strong>
+                        <span>${escHtml(c.service_type || 'lead')} · ${Number(c.quality_score || 0)}/100 · missing ${Number((c.missing_requirements || []).length)}</span>
+                        <span class="market-readiness-price">${Number(c.value || 0) ? '$' + Number(c.value || 0).toLocaleString() : 'No value'}</span>
+                        <div class="market-readiness-action">
+                            ${escHtml(c.next_action || '')}
+                        </div>
+                    </div>
+                `).join('') || '<div class="elite-quality-alert">No uplift candidates yet.</div>';
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('eliteUpliftAlerts').textContent = 'Elite uplift queue could not be loaded.';
+                listEl.innerHTML = '';
+            }
+        }
+
+        async function loadElitePilotDemand() {
+            const statusEl = document.getElementById('elitePilotStatus');
+            const listEl = document.getElementById('elitePilotList');
+            if (!statusEl || !listEl) return;
+            try {
+                const response = await fetch('/api/admin/elite-pilot-requests?status=open', {
+                    headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+                });
+                if (!response.ok) throw new Error('elite pilot demand unavailable');
+                const data = await response.json();
+                const summary = data.summary || {};
+                const requests = data.requests || [];
+                document.getElementById('elitePilotTotal').textContent = summary.total_requests || 0;
+                document.getElementById('elitePilotMarkets').textContent = summary.markets || 0;
+                document.getElementById('elitePilotLast').textContent = requests[0]?.updated_at
+                    ? String(requests[0].updated_at).slice(0, 10)
+                    : '-';
+                const hasDemand = (summary.total_requests || 0) > 0;
+                statusEl.textContent = hasDemand ? 'Follow up' : 'No demand';
+                statusEl.classList.toggle('warn', hasDemand);
+                statusEl.classList.toggle('danger', false);
+                document.getElementById('elitePilotAlerts').textContent = hasDemand
+                    ? 'Contractors tried to buy Elite in markets that need pilot pricing or more inventory.'
+                    : 'No blocked Elite checkout demand captured yet.';
+                listEl.innerHTML = requests.slice(0, 6).map(r => `
+                    <div class="market-readiness-row">
+                        <strong>${escHtml(r.email || r.full_name || 'Unknown GC')}</strong>
+                        <span>${escHtml(r.city || 'Unspecified')} · ${escHtml(r.service || 'all')} · ${escHtml(r.readiness_status || 'needs_inventory')}</span>
+                        <span>
+                            <button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" onclick="updateElitePilotRequest(${Number(r.id || 0)}, 'contacted')">Contacted</button>
+                            <button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" onclick="updateElitePilotRequest(${Number(r.id || 0)}, 'closed')">Closed</button>
+                        </span>
+                    </div>
+                `).join('') || '<div class="elite-quality-alert">No pilot requests yet.</div>';
+            } catch (e) {
+                statusEl.textContent = 'Unavailable';
+                statusEl.classList.add('danger');
+                document.getElementById('elitePilotAlerts').textContent = 'Elite pilot demand could not be loaded.';
+                listEl.innerHTML = '';
+            }
+        }
+
+        async function updateElitePilotRequest(id, status) {
+            if (!id) return;
+            try {
+                const response = await fetch(`/api/admin/elite-pilot-requests/${id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentAccessToken}`
+                    },
+                    body: JSON.stringify({ status })
+                });
+                if (!response.ok) throw new Error('Could not update Elite pilot request');
+                await loadElitePilotDemand();
+            } catch (e) {
+                alert(e.message || 'Could not update Elite pilot request');
             }
         }
 
@@ -2632,7 +3028,7 @@
                 if (qualityResp.ok && qualityList) {
                     const qData = await qualityResp.json();
                     document.getElementById('qualityReportCount').textContent =
-                        `${qData.summary?.open_count || 0} abiertos · ${qData.summary?.elite_count || 0} Elite`;
+                        `${qData.summary?.open_count || 0} abiertos · ${qData.summary?.elite_count || 0} Elite · ${qData.summary?.open_replacement_credits || 0} créditos abiertos`;
                     if (!qData.reports.length) {
                         qualityList.innerHTML = '<p style="color:#6b7280">No hay reportes de calidad abiertos.</p>';
                     } else {
@@ -2644,7 +3040,12 @@
                                 </div>
                                 <div style="font-size:13px;color:#374151">${escHtml(r.address || r.lead_id)} ${r.city ? '· ' + escHtml(r.city) : ''}</div>
                                 <div style="font-size:13px;color:#111827;margin-top:6px;white-space:pre-wrap">${escHtml(r.details || 'Sin detalles')}</div>
-                                <div style="font-size:12px;color:#6b7280;margin-top:6px">${escHtml(r.email || r.full_name || 'Usuario')}</div>
+                                <div style="font-size:12px;color:#6b7280;margin-top:6px">${escHtml(r.email || r.full_name || 'Usuario')}${r.replacement_credit_status ? ' · crédito ' + escHtml(r.replacement_credit_status) : ''}</div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+                                    <button class="btn btn-secondary" style="padding:5px 9px;font-size:11px" onclick="updateQualityReport(${Number(r.id || 0)}, 'reviewing')">Reviewing</button>
+                                    <button class="btn btn-secondary" style="padding:5px 9px;font-size:11px" onclick="updateQualityReport(${Number(r.id || 0)}, 'resolved')">Resolved</button>
+                                    <button class="btn btn-secondary" style="padding:5px 9px;font-size:11px" onclick="updateQualityReport(${Number(r.id || 0)}, 'dismissed')">Dismissed</button>
+                                </div>
                             </div>
                         `).join('');
                     }
@@ -2667,6 +3068,28 @@
                 list.innerHTML = '<p style="color:#ef4444">Error al cargar feedback.</p>';
             }
         }
+
+        async function updateQualityReport(id, status) {
+            if (!id) return;
+            const resolution = status === 'reviewing'
+                ? 'Reviewing lead quality report'
+                : (status === 'resolved' ? 'Resolved by admin QA review' : 'Dismissed by admin QA review');
+            try {
+                const response = await fetch(`/api/admin/lead-quality-reports/${id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentAccessToken}`
+                    },
+                    body: JSON.stringify({ status, resolution })
+                });
+                if (!response.ok) throw new Error('No se pudo actualizar el reporte');
+                await loadFeedback();
+            } catch (e) {
+                alert(e.message || 'No se pudo actualizar el reporte');
+            }
+        }
+
         async function deleteFeedback(id) {
             if (!confirm('¿Eliminar este comentario?')) return;
             await fetch(`/api/admin/feedback/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${currentAccessToken}` } });

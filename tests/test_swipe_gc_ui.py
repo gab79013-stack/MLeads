@@ -40,11 +40,36 @@ def test_swipe_gc_filter_options_match_general_contractor_buying_intent():
         "Proyecto sin GC confirmado",
         "Demolición / rebuild",
         "Venta de propiedad",
+        "Radar post-venta",
         "Cross-data verificado",
     ]
     for label in expected:
         assert label in html
     assert "Construcción activa" not in html
+
+
+def test_swipe_post_sale_remodel_channel_is_registered_end_to_end():
+    html = _html()
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    db_src = (TEMPLATE.parents[1].parents[0] / "utils" / "web_db.py").read_text(encoding="utf-8")
+    helper_src = (TEMPLATE.parents[1] / "helpers" / "gc_interest.py").read_text(encoding="utf-8")
+
+    assert 'data-cat="post_sale_remodel"' in html
+    assert "post_sale_remodel:'🏘️ Radar post-venta'" in html
+    assert 'post_sale_remodel": "Radar post-venta"' in app_src
+    assert '"post_sale_remodel"' in app_src
+    assert '("post_sale_remodel", "Post-Sale Remodel Radar"' in db_src
+    assert '"post_sale_remodel"' in helper_src
+
+
+def test_post_sale_remodel_intake_api_publishes_to_swipe_inventory():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+
+    assert "@app.route('/api/post-sale-remodel/leads', methods=['POST'])" in app_src
+    assert "def post_sale_remodel_lead_submit" in app_src
+    assert "primary_service_type': 'post_sale_remodel'" in app_src
+    assert "'post_sale_remodel', 1, 1, 0" in app_src
+    assert "INSERT OR REPLACE INTO consolidated_leads" in app_src
 
 
 def test_swipe_feed_request_only_sends_gc_opportunity_categories():
@@ -102,12 +127,18 @@ def test_swipe_supports_elite_500_plan_and_quality_evidence():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
     route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
     db_src = (TEMPLATE.parents[1].parents[0] / "utils" / "web_db.py").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
 
     assert "Elite" in html
     assert "$500" in html
     assert "handleUpgrade('elite')" in html
-    assert "Lead calidad Elite" in html
     assert "premium_quality_score" in html
+    assert "elite_certificate" in html
+    assert "Lead certificado Elite" in html
+    assert "eliteUsageText" in html
+    assert "billableSwipes" in html
+    assert "replacementCredits" in html
+    assert "elite_certificate" in readme
     assert "elite_only" in html
     assert 'url.searchParams.set("elite_only", "1")' in html or "url.searchParams.set('elite_only', '1')" in html
     assert "STRIPE_PRICE_ID_ELITE" in (TEMPLATE.parents[2] / ".env.example").read_text(encoding="utf-8")
@@ -115,6 +146,111 @@ def test_swipe_supports_elite_500_plan_and_quality_evidence():
     assert "required_tier" in app_src and "elite_only" in app_src
     assert "required_tier" in route_src and "elite_only" in route_src
     assert "subscription_tier" in db_src
+
+
+def test_swipe_supports_free_leads_preview_and_quality_plan():
+    html = _html()
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    env_example = (TEMPLATE.parents[2] / ".env.example").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+
+    assert 'id="qualitySalesProof"' in html
+    assert 'id="qualityUpgradeBtn"' in html
+    assert "loadQualitySalesProof()" in html
+    assert "Quality" in html
+    assert "$199" in html
+    assert "@app.route('/api/swipe/free-leads'" in app_src
+    assert "@bp.route('/swipe/free-leads'" in route_src
+    assert "@app.route('/api/swipe/quality-sales-proof'" in app_src
+    assert "@bp.route('/swipe/quality-sales-proof'" in route_src
+    assert "@app.route('/api/swipe/quality-inventory'" in app_src
+    assert "@bp.route('/swipe/quality-inventory'" in route_src
+    assert "def _free_leads_offer_payload" in app_src
+    assert "def _quality_sales_proof_payload" in app_src
+    assert "def _quality_market_readiness_payload" in app_src
+    assert "QUALITY_LEAD_LIMIT" in app_src
+    assert "SWIPE_QUALITY_LIMIT" in env_example
+    assert "STRIPE_PRICE_ID_QUALITY" in env_example
+    assert "Public free-leads preview API" in readme
+    assert "Quality plan designed for `$199/month` positioning" in readme
+
+
+def test_admin_dashboard_surfaces_quality_readiness_for_sales():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    index_html = _index_html()
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+
+    assert "@app.route('/api/admin/quality-readiness'" in app_src
+    assert "def admin_quality_readiness" in app_src
+    assert "@require_admin" in app_src
+    assert "def _quality_admin_guidance_payload" in app_src
+    assert "_quality_market_readiness_payload(city, service)" in app_src
+    assert "STRIPE_PRICE_ID_QUALITY" in app_src
+
+    assert 'id="qualityReadinessCard"' in index_html
+    assert 'id="qualityReadyCount"' in index_html
+    assert 'id="qualityReadinessList"' in index_html
+    assert "/api/admin/quality-readiness" in index_html
+    assert "loadQualityReadiness()" in index_html
+
+    assert "Admin Quality readiness" in readme
+    assert "$199/month Quality plan" in readme
+
+
+def test_quality_admin_readiness_requires_specific_stripe_quality_price():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "leads.py").read_text(encoding="utf-8")
+    billing_src = (TEMPLATE.parents[1].parents[0] / "utils" / "billing.py").read_text(encoding="utf-8")
+    helper_start = app_src.index("def _quality_admin_guidance_payload")
+    helper_end = app_src.index("@app.route('/api/admin/elite-pilot-requests'", helper_start)
+    helper_src = app_src[helper_start:helper_end]
+    billing_start = app_src.index("def _billing_readiness_payload")
+    billing_end = app_src.index("def _quality_admin_guidance_payload", billing_start)
+    readiness_src = app_src[billing_start:billing_end]
+
+    assert 'os.getenv("STRIPE_PRICE_ID_QUALITY") or ""' in helper_src
+    assert 'os.getenv("STRIPE_PRICE_ID_QUALITY") or os.getenv("STRIPE_PRICE_ID")' not in helper_src
+    assert '"missing": [] if quality_price_configured else ["STRIPE_PRICE_ID_QUALITY"]' in helper_src
+    assert "specific_price_required = {'quality', 'elite'}" in readiness_src
+    assert "generic_price_allowed = tier not in specific_price_required" in readiness_src
+    assert "price_set = specific_price_set or (generic_price_allowed and generic_price_set)" in readiness_src
+    assert 'def select_web_checkout_price_id' in billing_src
+    assert 'curated_tiers = {"quality", "elite"}' in billing_src
+    assert 'return os.getenv(specific_key, "")' in billing_src
+    assert 'return os.getenv(specific_key) or os.getenv("STRIPE_PRICE_ID") or ""' in billing_src
+    for src in (app_src, route_src):
+        assert "billing.select_web_checkout_price_id(tier)" in src
+        assert "os.getenv(f'STRIPE_PRICE_ID_{tier.upper()}', os.getenv('STRIPE_PRICE_ID', ''))" not in src
+
+
+def test_elite_quality_gate_requires_phone_source_score_and_action_signal():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    index_html = _index_html()
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+
+    for src in (app_src, route_src):
+        assert "def _lead_age_days" in src
+        assert "dates: list[datetime]" in src
+        assert "max(dates)" in src
+        assert "raw_fallback" in src
+        assert "has_source = bool(gc_insight.get(\"source_url\"))" in src
+        assert "has_phone = bool((lead_data.get(\"contact_phone\") or \"\").strip())" in src
+        assert "fresh_limit_days = 21 if service in {\"weather\", \"flood\", \"disaster\"} else 45" in src
+        assert "has_recent_signal" in src
+        assert "and has_source" in src
+        assert "and has_phone" in src
+        assert "and score >= 85" in src
+        assert "has_value or has_action_window or has_direct_owner_intent" in src
+        assert "and has_recent_signal" in src
+        assert "No Elite: falta teléfono" in src
+        assert "No Elite: señal vieja o sin fecha" in src
+        assert "first_seen" in src
+
+    assert 'id="eliteQaFresh"' in index_html
+    assert "fresh_signal" in app_src
+    assert "Elite qualification requires a verified source, phone contact, high score, fresh signal" in readme
 
 
 def test_swipe_exposes_elite_inventory_for_sales_proof():
@@ -135,12 +271,79 @@ def test_swipe_exposes_elite_inventory_for_sales_proof():
     assert "samples" in app_src
 
 
+def test_swipe_exposes_market_readiness_for_elite_sales():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    script_src = (TEMPLATE.parents[1].parents[0] / "scripts" / "audit_elite_real_data.py").read_text(encoding="utf-8")
+    index_html = _index_html()
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+
+    assert "@app.route('/api/swipe/market-readiness'" in app_src
+    assert "@bp.route('/swipe/market-readiness'" in route_src
+    assert "def _elite_market_readiness_payload" in app_src
+    assert "next_actions" in route_src
+    assert "recommended_price" in app_src
+    assert "def _elite_market_action_plan" in app_src
+    assert "gap_to_elite" in app_src
+    assert "next_actions" in app_src
+    assert '"ready_for_elite": {"elite_leads": 50' in app_src
+    assert '"pilot_market": {"elite_leads": 15' in app_src
+    assert "fresh_signal_pct" in app_src
+    assert "/api/swipe/market-readiness" in script_src
+    assert "source\": \"market-readiness\"" in script_src
+    assert 'id="marketReadinessCard"' in index_html
+    assert "loadMarketReadiness()" in index_html
+    assert "/api/swipe/market-readiness" in index_html
+    assert 'id="marketReadinessList"' in index_html
+    assert "recommended_price" in index_html
+    assert "market-readiness-action" in index_html
+    assert "m.gap_to_elite?.elite_leads" in index_html
+    assert "m.next_actions" in index_html
+    assert "market-readiness API" in readme
+    assert "gap-to-Elite" in readme
+
+
+def test_swipe_exposes_elite_sales_proof_for_500_pricing():
+    html = _html()
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    script_src = (TEMPLATE.parents[1].parents[0] / "scripts" / "audit_elite_real_data.py").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+
+    assert 'id="eliteSalesProof"' in html
+    assert 'id="eliteUpgradeBtn"' in html
+    assert "function loadEliteSalesProof()" in html
+    assert "/api/swipe/elite-sales-proof" in html
+    assert "loadEliteSalesProof();" in html
+    assert "Comprar Elite en" in html
+    assert "Buy Elite in" in html
+    assert "@app.route('/api/swipe/elite-sales-proof'" in app_src
+    assert "@bp.route('/swipe/elite-sales-proof'" in route_src
+    assert "def _elite_sales_proof_payload" in app_src
+    assert "proof_points" in app_src
+    assert "estimated_pipeline_value" in app_src
+    assert "break_even_months_per_close" in app_src
+    assert "conservative_close_rate" in app_src
+    assert "/api/swipe/elite-sales-proof" in script_src
+    assert "sales_proof" in script_src
+    assert "sales-proof API" in readme
+
+
 def test_admin_elite_quality_report_supports_sellability_audit():
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
 
     assert "@app.route('/api/admin/elite-quality-report'" in app_src
     assert "@require_admin" in app_src
     assert "def _elite_quality_report_payload" in app_src
+    assert "@app.route('/api/admin/elite-uplift-candidates'" in app_src
+    assert "def _elite_uplift_candidates_payload" in app_src
+    assert "def _elite_uplift_missing_requirements" in app_src
+    assert "missing_requirements" in app_src
+    assert "next_action" in app_src
+    assert "@bp.route('/admin/elite-uplift-candidates'" in route_src
+    assert "Admin access required" in route_src
     assert "sellability" in app_src
     assert "ready_for_elite" in app_src
     assert "pilot_market" in app_src
@@ -149,6 +352,7 @@ def test_admin_elite_quality_report_supports_sellability_audit():
     assert "project_value" in app_src
     assert "audit_samples" in app_src
     assert "alerts" in app_src
+    assert "Elite uplift queue" in readme
 
 
 def test_admin_dashboard_surfaces_elite_quality_report():
@@ -162,6 +366,26 @@ def test_admin_dashboard_surfaces_elite_quality_report():
     assert "Needs inventory" in html
     assert 'id="eliteQaPhone"' in html
     assert 'id="eliteQaValue"' in html
+    assert 'id="eliteClaimsCard"' in html
+    assert 'id="eliteClaimsTotal"' in html
+    assert "loadEliteClaims()" in html
+    assert "/api/admin/elite-claims?status=active" in html
+    assert "Active Elite leads are reserved exclusively" in html
+    assert 'id="eliteUpliftCard"' in html
+    assert 'id="eliteUpliftList"' in html
+    assert "loadEliteUpliftCandidates()" in html
+    assert "/api/admin/elite-uplift-candidates?limit=8" in html
+    assert "Prioritize these leads" in html
+    assert 'id="elitePilotDemandCard"' in html
+    assert 'id="elitePilotTotal"' in html
+    assert 'id="elitePilotMarkets"' in html
+    assert "loadElitePilotDemand()" in html
+    assert "updateElitePilotRequest" in html
+    assert "Contacted" in html
+    assert "Closed" in html
+    assert "/api/admin/elite-pilot-requests?status=open" in html
+    assert "/api/admin/elite-pilot-requests/${id}" in html
+    assert "Contractors tried to buy Elite" in html
 
 
 def test_elite_leads_are_exclusive_claims_for_500_plan():
@@ -172,14 +396,28 @@ def test_elite_leads_are_exclusive_claims_for_500_plan():
 
     assert "CREATE TABLE IF NOT EXISTS elite_lead_claims" in db_src
     assert "SWIPE_ELITE_CLAIM_DAYS" in app_src
+    assert "@app.route('/api/admin/elite-claims'" in app_src
+    assert "def admin_elite_claims" in app_src
+    assert "active_contractors" in app_src
     assert "def _claim_elite_lead" in app_src
+    assert "def _elite_certificate" in app_src
+    assert "elite_certificate" in app_src
     assert "def _active_elite_claim" in app_src
+    assert "source_url" in app_src
+    assert "'elite_certificate': _elite_certificate" in app_src
     assert "exclusive_unavailable" in app_src
     assert "elite_claimed_by_me" in app_src
     assert "elite_claim_expires_at" in app_src
+    assert "finally:\n        conn.close()\n    return jsonify({'contacts': contacts}), 200" in app_src
     assert "def _claim_elite_lead" in route_src
+    assert "def _elite_certificate" in route_src
+    assert "elite_certificate" in route_src
+    assert "'elite_certificate': _elite_certificate" in route_src
     assert "exclusive_unavailable" in route_src
+    assert "finally:\n        conn.close()\n    return jsonify({'contacts': contacts}), 200" in route_src
     assert "Reservado para tu empresa" in html
+    assert "Reserved until" in html
+    assert "View source" in html
     assert "Lead Elite reservado para ti" in html
 
 
@@ -198,10 +436,55 @@ def test_elite_quality_guarantee_has_user_reports_and_admin_queue():
     assert "@bp.route('/swipe/report-lead'" in route_src
     assert "replacement_review" in app_src
     assert "lead_quality_reports" in app_src
+    assert "credit_granted = False" in app_src
+    assert "replacement_credits = 0" in app_src
+    assert "credit_granted = False" in route_src
+    assert "replacement_credits = 0" in route_src
     assert "@app.route('/api/admin/lead-quality-reports'" in app_src
+    assert "@app.route('/api/admin/lead-quality-reports/<int:report_id>', methods=['PATCH'])" in app_src
+    assert "def admin_update_lead_quality_report" in app_src
     assert 'id="qualityReportList"' in index_html
     assert "/api/admin/lead-quality-reports?status=open" in index_html
+    assert "/api/admin/lead-quality-reports/${id}" in index_html
+    assert "updateQualityReport" in index_html
+    assert "Resolved" in index_html
+    assert "Dismissed" in index_html
     assert "Reportes de calidad" in index_html
+
+
+def test_elite_reports_auto_grant_replacement_credits_for_guarantee():
+    html = _html()
+    index_html = _index_html()
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    db_src = (TEMPLATE.parents[1].parents[0] / "utils" / "web_db.py").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS elite_replacement_credits" in db_src
+    assert "idx_elite_replacement_credits_user_status" in db_src
+    assert "def _elite_replacement_credit_count" in app_src
+    assert "def _grant_elite_replacement_credit" in app_src
+    assert "def _redeem_elite_replacement_credit" in app_src
+    assert "def _redeem_elite_replacement_credit" in route_src
+    assert "replacement_credit_redeemed" in app_src
+    assert "replacement_credit_redeemed" in route_src
+    assert "replacement_credit_granted" in app_src
+    assert "replacement_credits" in app_src
+    assert "billable_swipes" in app_src
+    assert "billable_swipes_count" in app_src
+    assert "_billable_current = max(_current - _replacement_credits, 0)" in app_src
+    assert "_billable_current = max(_current - _replacement_credits, 0)" in route_src
+    assert "billable_swipes_count = max(swipes_count - replacement_credits, 0)" in app_src
+    assert "billable_swipes_count = max(swipes_count - replacement_credits, 0)" in route_src
+    assert "replacement_credit_granted" in route_src
+    assert "billable_swipes" in route_src
+    assert "Te agregamos 1 crédito de reemplazo Elite" in html
+    assert "replacement_credit_status" in app_src
+    assert "open_replacement_credits" in app_src
+    assert "users_with_open_replacements" in app_src
+    assert "créditos abiertos" in index_html
+    assert "crédito " in index_html
+    assert "auto-grant replacement credits" in readme
 
 
 def test_real_data_elite_auditor_script_exists_for_sales_checks():
@@ -218,19 +501,62 @@ def test_real_data_elite_auditor_script_exists_for_sales_checks():
 
 
 def test_stripe_elite_subscription_state_is_persisted_for_recurring_billing():
+    html = _html()
     app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
     route_src = (TEMPLATE.parents[1] / "routes" / "leads.py").read_text(encoding="utf-8")
     db_src = (TEMPLATE.parents[1].parents[0] / "utils" / "web_db.py").read_text(encoding="utf-8")
+    readme = (TEMPLATE.parents[2] / "README.md").read_text(encoding="utf-8")
+    index_html = _index_html()
+    docker_doc = (TEMPLATE.parents[2] / "DOCKER.md").read_text(encoding="utf-8")
+    billing_script = (TEMPLATE.parents[2] / "scripts" / "configure_stripe_billing.py").read_text(encoding="utf-8")
 
+    assert "city: F.city || ''" in html
+    assert "service: [...F.leadTypes].join(',')" in html
     assert "subscription_data={'metadata': checkout_metadata}" in app_src
     assert "subscription_data={'metadata': checkout_metadata}" in route_src
     assert "stripe_customer_id" in db_src
     assert "stripe_subscription_id" in db_src
     assert "paid_until" in db_src
+    assert "def _elite_checkout_guard" in app_src
+    assert "def _elite_checkout_guard" in route_src
+    assert "def _record_elite_pilot_request" in app_src
+    assert "def _record_elite_pilot_request" in route_src
+    assert "elite_market_not_ready" in app_src
+    assert "elite_market_not_ready" in route_src
+    assert "pilot_request_saved" in app_src
+    assert "pilot_request_saved" in route_src
+    assert "CREATE TABLE IF NOT EXISTS elite_pilot_requests" in db_src
+    assert "idx_elite_pilot_requests_status_market" in db_src
+    assert "@app.route('/api/admin/elite-pilot-requests'" in app_src
+    assert "@app.route('/api/admin/elite-pilot-requests/<int:request_id>', methods=['PATCH'])" in app_src
+    assert "@app.route('/api/admin/billing-readiness'" in app_src
+    assert "def _billing_readiness_payload" in app_src
+    assert "STRIPE_WEBHOOK_SECRET" in app_src
+    assert "elite_ready" in app_src
+    assert "Billing readiness" in index_html
+    assert "/api/admin/billing-readiness" in index_html
+    assert "configure_stripe_billing.py" in docker_doc
+    assert "STRIPE_PRICE_ID_ELITE" in docker_doc
+    assert "getpass.getpass" in billing_script
+    assert "chmod(0o600)" in billing_script
+    assert "def admin_update_elite_pilot_request" in app_src
+    assert "function showElitePilotRequest" in html
+    assert "Solicitud piloto registrada" in html
+    assert 'status != "ready_for_elite" or recommended_price < 500' in app_src
+    assert 'status != "ready_for_elite" or recommended_price < 500' in route_src
+    assert "'elite_market_status': status" in app_src or '"elite_market_status": status' in app_src
+    assert "Elite checkout is blocked" in readme
+    assert "elite_pilot_requests" in readme
     assert "def _resolve_web_user_id_from_stripe_object" in app_src
     assert "stripe_subscription_id = COALESCE" in app_src
     assert "stripe_customer_id = COALESCE" in app_src
     assert "SELECT COALESCE(is_paid, 0), COALESCE(subscription_tier, 'free'), paid_until" in app_src
+    assert "def _checkout_base_url" in app_src
+    assert "def _checkout_base_url" in route_src
+    assert "request.host_url.rstrip('/')" in app_src
+    assert "request.host_url.rstrip('/')" in route_src
+    assert "104.42.252.241" not in app_src
+    assert "104.42.252.241" not in route_src
 
 
 def test_swipe_refreshes_subscription_status_after_stripe_return():
@@ -261,6 +587,38 @@ def test_swipe_actions_rerender_remaining_queue_after_each_card():
     assert "quota is exhausted" in html
     assert "misleading \"no more leads\"" in html
     assert "S.queue.shift(); restack();" not in html
+
+
+def test_swipe_filter_drawer_uses_live_filter_options_api():
+    html = _html()
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+    helper_src = (TEMPLATE.parents[1] / "helpers" / "service_filter.py").read_text(encoding="utf-8")
+
+    assert "/api/swipe/filter-options" in html
+    assert "function loadFilterOptions()" in html
+    assert "S.availableServiceCounts = data.available_service_counts || {};" in html
+    assert "loadFilterOptions();" in html
+    assert "@app.route('/api/swipe/filter-options'" in app_src
+    assert "@bp.route('/swipe/filter-options'" in route_src
+    assert "def _swipe_filter_options_payload" in app_src
+    assert '"weather": {"weather", "flood", "disaster"}' in app_src
+    assert "DEFAULT_SERVICE_CATEGORY_ALIASES" in helper_src
+    assert '"weather", "flood", "disaster"' in helper_src
+    assert "filter_categories" in app_src
+    assert "raw_service_counts" in app_src
+    assert "top_cities" in app_src
+
+
+def test_swipe_city_autocomplete_uses_live_inventory_not_only_static_coords():
+    app_src = (TEMPLATE.parents[1] / "app.py").read_text(encoding="utf-8")
+    route_src = (TEMPLATE.parents[1] / "routes" / "swipe.py").read_text(encoding="utf-8")
+
+    assert "FROM consolidated_leads" in app_src
+    assert "FROM consolidated_leads" in route_src
+    assert "city_set.update" in app_src
+    assert "city_set.update" in route_src
+    assert "City autocomplete DB lookup failed" in app_src
 
 
 def test_homeowner_intake_channel_captures_pre_gc_addition_leads():

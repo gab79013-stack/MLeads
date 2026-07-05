@@ -12,7 +12,7 @@ from web.helpers.geocode import _get_ip_geo, _geo_locate_ip
 from web.helpers.swipe import _resolve_swipe_identity, _already_swiped_ids, _count_swipes, ANON_LEAD_LIMIT
 from web.helpers.geocode import _haversine_miles, _city_coords, CITY_COORDS
 from web.helpers.service_filter import build_service_category_filter, DEFAULT_TRADE_SERVICE_TO_AI
-from web.helpers.gc_interest import build_gc_insight, build_gc_interest_sql_filter, build_public_real_lead_sql_filter, is_gc_interesting_lead
+from web.helpers.gc_interest import build_gc_insight, build_gc_interest_sql_filter, build_public_real_lead_sql_filter, classify_contact_level, is_gc_interesting_lead
 bp = Blueprint("swipe", __name__)
 
 # Lazy imports to avoid circular dependency with web.app
@@ -25,11 +25,30 @@ def _get_app_const(name, default=None):
         return default
 
 
+def _current_user_is_admin() -> bool:
+    user_id = getattr(g, "user_id", None)
+    if not user_id:
+        return False
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            SELECT COUNT(*) FROM user_roles ur
+            JOIN roles r ON ur.role_id = r.id
+            WHERE ur.user_id = ? AND r.name = 'admin'
+        """, (user_id,))
+        return c.fetchone()[0] > 0
+    finally:
+        conn.close()
+
+
 def _get_web_subscription(user_id) -> tuple[bool, str]:
     if not user_id:
         return False, "free"
     conn = get_db_connection()
     c = conn.cursor()
+    credit_granted = False
+    replacement_credits = 0
     try:
         c.execute("SELECT COALESCE(is_paid, 0), COALESCE(subscription_tier, 'free'), paid_until FROM users WHERE id = ?", (user_id,))
         row = c.fetchone()
@@ -60,31 +79,141 @@ def _tier_lead_limit(tier: str, is_paid: bool) -> int | None:
     return None
 
 
-def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scoring: dict, inspection_date: str = "") -> tuple[int, list[str], bool]:
+def _lead_age_days(lead_data: dict, fallback_date: str = "") -> int | None:
+    dates: list[datetime] = []
+    for field in ("issued_date", "issue_date", "event_date", "created_at", "last_updated", "_first_seen"):
+        raw = (lead_data.get(field) or "").strip() if isinstance(lead_data.get(field), str) else lead_data.get(field)
+        if not raw:
+            continue
+        try:
+            text = str(raw).strip().replace("Z", "").replace("T", " ")
+            if len(text) >= 19:
+                dt = datetime.fromisoformat(text[:19])
+            else:
+                dt = datetime.fromisoformat(text[:10])
+            dates.append(dt)
+        except Exception:
+            continue
+    if fallback_date:
+        raw_fallback = str(fallback_date).strip().replace("Z", "").replace("T", " ")
+        try:
+            if len(raw_fallback) >= 19:
+                dates.append(datetime.fromisoformat(raw_fallback[:19]))
+            else:
+                dates.append(datetime.fromisoformat(raw_fallback[:10]))
+        except Exception:
+            pass
+    if dates:
+        return max((datetime.utcnow() - max(dates)).days, 0)
+    return None
+
+
+def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scoring: dict, inspection_date: str = "", first_seen: str = "") -> tuple[int, list[str], bool]:
     score = int(scoring.get("score") or 0)
+    service = str(service_type or "").lower()
+    has_source = bool(gc_insight.get("source_url"))
+    contact_level = classify_contact_level(lead_data)
+    has_phone = bool((lead_data.get("contact_phone") or "").strip())
+    has_direct_contact = bool(contact_level.get("is_direct"))
+    has_value = bool(lead_data.get("value_float"))
+    age_days = _lead_age_days(lead_data, first_seen)
+    has_action_window = bool(inspection_date)
+    has_direct_owner_intent = str(lead_data.get("_lead_channel") or "") == "homeowner_intake"
+    fresh_limit_days = 21 if service in {"weather", "flood", "disaster"} else 45
+    has_recent_signal = has_direct_owner_intent or has_action_window or (age_days is not None and age_days <= fresh_limit_days)
     points = 0
     checks: list[str] = []
     if gc_insight.get("confidence") == "verified":
         points += 30
         checks.append("Fuente oficial verificada")
-    if gc_insight.get("source_url"):
+    if has_source:
         points += 15
         checks.append("Link de fuente auditable")
-    if (lead_data.get("contact_phone") or "").strip():
+    if has_direct_contact:
         points += 20
-        checks.append("Teléfono disponible")
+        checks.append("Contacto directo verificado")
+    elif has_phone:
+        points += 6
+        checks.append("Teléfono en registro público")
     if score >= 90:
         points += 15
         checks.append("Score HOT 90+")
-    if lead_data.get("value_float"):
+    if has_value:
         points += 10
         checks.append("Valor de proyecto detectado")
     if inspection_date:
         points += 10
         checks.append("Ventana de visita/inspección")
-    if str(service_type or "").lower() in {"weather", "flood", "disaster"}:
+    if service in {"weather", "flood", "disaster"}:
         checks.append("Oportunidad sensible al tiempo")
-    return min(points, 100), checks[:5], points >= 70
+    if has_direct_owner_intent:
+        checks.append("Homeowner pidió GC directamente")
+    if age_days is not None and age_days <= fresh_limit_days:
+        checks.append(f"Señal fresca ({age_days} días)")
+    is_elite = (
+        points >= 70
+        and has_source
+        and has_direct_contact
+        and score >= 85
+        and (has_value or has_action_window or has_direct_owner_intent)
+        and has_recent_signal
+    )
+    if not is_elite and not has_direct_contact:
+        checks.append("No Elite: contacto directo no verificado")
+    if not is_elite and not has_recent_signal:
+        checks.append("No Elite: señal vieja o sin fecha")
+    return min(points, 100), checks[:5], is_elite
+
+
+def _elite_certificate(
+    lead_data: dict,
+    gc_insight: dict,
+    q_score: int,
+    q_checks: list[str],
+    is_elite: bool,
+    inspection_date: str = "",
+    first_seen: str = "",
+    claimed_by_me: bool = False,
+    claim_expires_at: str = "",
+) -> dict:
+    """Structured buyer-facing proof for why an Elite lead is worth paying for."""
+    age_days = _lead_age_days(lead_data, first_seen)
+    evidence = []
+    if gc_insight.get("source_url"):
+        evidence.append({
+            "label": "Fuente auditable",
+            "value": gc_insight.get("source_label") or "Fuente oficial",
+            "status": "verified" if gc_insight.get("confidence") == "verified" else "present",
+        })
+    contact_level = classify_contact_level(lead_data)
+    if (lead_data.get("contact_phone") or "").strip() or (lead_data.get("contact_email") or "").strip():
+        evidence.append({
+            "label": contact_level.get("label", "Requiere enriquecimiento"),
+            "value": contact_level.get("value", "Owner/GC no confirmado"),
+            "status": contact_level.get("status", "needs_enrichment"),
+        })
+    if lead_data.get("value_float"):
+        try:
+            value = f"${float(lead_data.get('value_float') or 0):,.0f}"
+        except Exception:
+            value = "Detectado"
+        evidence.append({"label": "Valor del proyecto", "value": value, "status": "verified"})
+    if inspection_date:
+        evidence.append({"label": "Ventana de acción", "value": str(inspection_date)[:10], "status": "timely"})
+    elif age_days is not None:
+        evidence.append({"label": "Frescura", "value": f"{age_days} días", "status": "fresh" if age_days <= 45 else "aging"})
+    if claimed_by_me:
+        evidence.append({"label": "Exclusividad", "value": f"Reservado hasta {claim_expires_at[:10]}", "status": "reserved"})
+    elif is_elite:
+        evidence.append({"label": "Exclusividad", "value": "Disponible para reservar", "status": "available"})
+
+    return {
+        "certified": bool(is_elite),
+        "quality_score": int(q_score or 0),
+        "headline": "Certificado Elite" if is_elite else "Evidencia de calidad",
+        "checks": q_checks[:5],
+        "evidence": evidence[:6],
+    }
 
 
 def _is_elite_lead_record(row_dict: dict, lead_data: dict | None = None) -> tuple[bool, int, list[str]]:
@@ -105,7 +234,7 @@ def _is_elite_lead_record(row_dict: dict, lead_data: dict | None = None) -> tupl
         or lead_data.get("next_scheduled_inspection_date")
         or ""
     )
-    q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, str(inspection_date).strip()[:10])
+    q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, str(inspection_date).strip()[:10], row_dict.get("first_seen", ""))
     return is_elite, q_score, q_checks
 
 
@@ -138,6 +267,13 @@ def _claim_elite_lead(conn, c, user_id: int, lead_id: str, claim_type: str = "li
     """, (lead_id, int(user_id), claim_type, expires_at))
     conn.commit()
     return {"claimed": True, "blocked": False, "expires_at": expires_at}
+
+
+def _redeem_elite_replacement_credit(c, user_id: int) -> bool:
+    redeem_fn = _get_app_const("_redeem_elite_replacement_credit")
+    if callable(redeem_fn):
+        return bool(redeem_fn(c, user_id))
+    return False
 
 
 def _elite_inventory_payload(city_filter: str = "", service_filter: str = "") -> dict:
@@ -187,7 +323,7 @@ def _elite_inventory_payload(city_filter: str = "", service_filter: str = "") ->
         if not gc_insight.get("source_url"):
             continue
         scoring = lead_data.get("_scoring", {}) or {}
-        q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring)
+        q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, "", rd.get("first_seen", ""))
         if not is_elite:
             continue
         total += 1
@@ -326,7 +462,10 @@ def swipe_feed():
         if subscription_tier == "elite":
             elite_only = True
         tier_limit = _tier_lead_limit(subscription_tier, is_paid)
-        if tier_limit is not None and swipes_count >= tier_limit:
+        credit_count_fn = _get_app_const("_elite_replacement_credit_count", lambda _user_id: 0)
+        replacement_credits = credit_count_fn(user_id) if subscription_tier == "elite" else 0
+        billable_swipes_count = max(swipes_count - replacement_credits, 0)
+        if tier_limit is not None and billable_swipes_count >= tier_limit:
             return jsonify({
                 "leads":        [],
                 "auth_required": True,
@@ -335,6 +474,8 @@ def swipe_feed():
                 "tier_limit":   tier_limit,
                 "tier":         subscription_tier,
                 "swipes_count": swipes_count,
+                "billable_swipes_count": billable_swipes_count,
+                "replacement_credits": replacement_credits,
                 "remaining":    0,
             }), 200
 
@@ -557,7 +698,7 @@ def swipe_feed():
         inspection_source = (lead_data.get("inspection_source") or "").strip()
         gc_probability    = insp.get("gc_presence_probability") or lead_data.get("_gc_presence_probability") or 0
         premium_quality_score, premium_quality_checks, is_elite_quality = _premium_quality(
-            lead_data, gc_insight, service_type, scoring, inspection_date
+            lead_data, gc_insight, service_type, scoring, inspection_date, row_dict.get("first_seen", "")
         )
         if elite_only and not is_elite_quality:
             continue
@@ -591,6 +732,7 @@ def swipe_feed():
             "gc_badges":        gc_insight.get("badges", []),
             "source_url":       gc_insight.get("source_url", ""),
             "source_label":     gc_insight.get("source_label", ""),
+            "contact_level":    gc_insight.get("contact_level", classify_contact_level(lead_data)),
             "contractor":       contractor,
             "owner":            owner,
             "phone":            phone,
@@ -610,6 +752,17 @@ def swipe_feed():
             "is_elite_quality": is_elite_quality,
             "elite_claimed_by_me": elite_claimed_by_me,
             "elite_claim_expires_at": elite_claim_expires_at,
+            "elite_certificate": _elite_certificate(
+                lead_data,
+                gc_insight,
+                premium_quality_score,
+                premium_quality_checks,
+                is_elite_quality,
+                inspection_date,
+                row_dict.get("first_seen", ""),
+                elite_claimed_by_me,
+                elite_claim_expires_at,
+            ),
             "created_at":       row_dict.get("first_seen", ""),
             # AI classification fields (Qwen)
             "ai_trade":         lead_data.get("_trade", ""),
@@ -675,6 +828,8 @@ def swipe_feed():
         "is_paid":       locals().get('is_paid', False) if user_id else None,
         "tier":          locals().get('subscription_tier', "free") if user_id else "anon",
         "elite_only":    elite_only,
+        "billable_swipes_count": locals().get("billable_swipes_count", swipes_count),
+        "replacement_credits": locals().get("replacement_credits", 0),
         "anon_id":       anon_id if not user_id else None,
     }
     if remaining is not None:
@@ -705,6 +860,8 @@ def swipe_action():
     if not user_id and not anon_id:
         return jsonify({"error": "anon_id or auth required"}), 400
 
+    redeem_replacement_after_swipe = False
+    replacement_credit_redeemed = False
     if not user_id:
         current = _count_swipes(None, anon_id)
         if current >= ANON_LEAD_LIMIT:
@@ -719,8 +876,11 @@ def swipe_action():
     else:
         _is_paid, _tier = _get_web_subscription(user_id)
         _current = _count_swipes(user_id, None)
+        _credit_count_fn = _get_app_const("_elite_replacement_credit_count", lambda _user_id: 0)
+        _replacement_credits = _credit_count_fn(user_id) if _tier == "elite" else 0
+        _billable_current = max(_current - _replacement_credits, 0)
         _limit = _tier_lead_limit(_tier, _is_paid)
-        if _limit is not None and _current >= _limit:
+        if _limit is not None and _billable_current >= _limit:
             return jsonify({
                 "ok": False,
                 "auth_required": True,
@@ -729,8 +889,16 @@ def swipe_action():
                 "tier_limit":   _limit,
                 "tier":         _tier,
                 "swipes_count": _current,
+                "billable_swipes_count": _billable_current,
+                "replacement_credits": _replacement_credits,
                 "remaining":    0,
             }), 200
+        redeem_replacement_after_swipe = (
+            _tier == "elite"
+            and _limit is not None
+            and _current >= _limit
+            and _replacement_credits > 0
+        )
 
     conn = get_db_connection()
     c = conn.cursor()
@@ -738,7 +906,7 @@ def swipe_action():
     try:
         if action == 'like' and user_id:
             c.execute("""
-                SELECT address_key, lead_data, primary_service_type
+                SELECT address_key, lead_data, primary_service_type, first_seen
                 FROM consolidated_leads
                 WHERE address_key = ?
                 LIMIT 1
@@ -791,6 +959,8 @@ def swipe_action():
                     )
                 except Exception as pl_err:
                     logger.debug(f"pipeline insert failed: {pl_err}")
+        if redeem_replacement_after_swipe and user_id:
+            replacement_credit_redeemed = _redeem_elite_replacement_credit(c, int(user_id))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -812,12 +982,25 @@ def swipe_action():
     if not user_id:
         remaining = max(ANON_LEAD_LIMIT - swipes_count, 0)
         auth_required = remaining == 0
+        billable_swipes_count = swipes_count
+        replacement_credits = 0
+    else:
+        _is_paid, _tier = _get_web_subscription(user_id)
+        _credit_count_fn = _get_app_const("_elite_replacement_credit_count", lambda _user_id: 0)
+        replacement_credits = _credit_count_fn(user_id) if _tier == "elite" else 0
+        billable_swipes_count = max(swipes_count - replacement_credits, 0)
+        _limit = _tier_lead_limit(_tier, _is_paid)
+        if _limit is not None:
+            remaining = max(_limit - billable_swipes_count, 0)
 
     return jsonify({
         "ok":            True,
         "auth_required": auth_required,
         "anon_limit":    ANON_LEAD_LIMIT,
         "swipes_count":  swipes_count,
+        "billable_swipes_count": billable_swipes_count,
+        "replacement_credits": replacement_credits,
+        "replacement_credit_redeemed": replacement_credit_redeemed,
         "remaining":     remaining,
         "elite_claim":    claim_result,
     }), 200
@@ -834,19 +1017,93 @@ def swipe_upgrade_info():
     is_paid, tier = _get_web_subscription(user_id)
     swipes = _count_swipes(user_id, None)
     tier_limit = _tier_lead_limit(str(tier).lower(), is_paid)
+    credit_count_fn = _get_app_const("_elite_replacement_credit_count", lambda _user_id: 0)
+    replacement_credits = credit_count_fn(user_id) if str(tier).lower() == "elite" else 0
+    billable_swipes = max(swipes - replacement_credits, 0)
     return jsonify({
         "is_paid":     is_paid,
         "tier":        tier,
         "swipes":      swipes,
+        "billable_swipes": billable_swipes,
+        "replacement_credits": replacement_credits,
         "free_limit":  _get_app_const("FREE_USER_LEAD_LIMIT", 40),
         "pro_limit":   _get_app_const("PRO_LEAD_LIMIT", 200),
+        "quality_limit": _get_app_const("QUALITY_LEAD_LIMIT", 120),
         "elite_limit": _get_app_const("ELITE_LEAD_LIMIT", 80),
-        "remaining":   None if tier_limit is None else max(tier_limit - swipes, 0),
+        "remaining":   None if tier_limit is None else max(tier_limit - billable_swipes, 0),
         "tiers": [
+            {"id": "free",    "price": 0,   "limit": _get_app_const("FREE_USER_LEAD_LIMIT", 40), "label": "Free", "trial": True},
             {"id": "pro",     "price": 29,  "limit": _get_app_const("PRO_LEAD_LIMIT", 200), "label": "Pro"},
+            {"id": "quality", "price": 199, "limit": _get_app_const("QUALITY_LEAD_LIMIT", 120), "label": "Quality", "curated": True},
             {"id": "premium", "price": 99,  "limit": None,           "label": "Premium"},
             {"id": "elite",   "price": 500, "limit": _get_app_const("ELITE_LEAD_LIMIT", 80), "label": "Elite", "curated": True},
         ],
+    }), 200
+
+
+@bp.route('/swipe/free-leads', methods=['GET'])
+def swipe_free_leads():
+    """Public free-leads preview API for the top-of-funnel offer."""
+    payload_fn = _get_app_const("_free_leads_offer_payload")
+    if callable(payload_fn):
+        city = (request.args.get("city") or "").strip()
+        service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+        try:
+            limit = int(request.args.get("limit", 6))
+        except (TypeError, ValueError):
+            limit = 6
+        return jsonify(payload_fn(city, service, limit)), 200
+    return jsonify({
+        "headline": "Muestra gratis para captar contratistas",
+        "subheadline": "Lead gratis como embudo y plan Quality para monetizar leads mejores.",
+        "free_limit": _get_app_const("FREE_USER_LEAD_LIMIT", 40),
+        "anon_limit": ANON_LEAD_LIMIT,
+        "sample_count": 0,
+        "scanned_candidates": 0,
+        "sample_leads": [],
+        "next_action": "Regístrate para desbloquear el paquete gratis completo y luego sube a Quality si quieres leads más limpios.",
+    }), 200
+
+
+@bp.route('/swipe/quality-inventory', methods=['GET'])
+def swipe_quality_inventory():
+    """Non-sensitive inventory counts for the Quality plan."""
+    payload_fn = _get_app_const("_quality_market_readiness_payload")
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    if callable(payload_fn):
+        return jsonify(payload_fn(city, service)), 200
+    return jsonify({
+        "summary": {
+            "ready_markets": 0,
+            "pilot_markets": 0,
+            "needs_inventory_markets": 0,
+            "total_candidate_leads": 0,
+            "total_quality_leads": 0,
+        },
+        "markets": [],
+        "filters": {"city": city, "service": service},
+        "thresholds": {},
+        "gap_to_quality": {},
+        "next_actions": ["Connect the app helper to compute market-level Quality action plans."],
+    }), 200
+
+
+@bp.route('/swipe/quality-sales-proof', methods=['GET'])
+def swipe_quality_sales_proof():
+    """Public-safe proof points for selling the Quality plan."""
+    payload_fn = _get_app_const("_quality_sales_proof_payload")
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    if callable(payload_fn):
+        return jsonify(payload_fn(city, service)), 200
+    return jsonify({
+        "status": "needs_inventory",
+        "recommended_price": 0,
+        "headline": "Quality sales proof unavailable.",
+        "proof_points": [],
+        "market": None,
+        "readiness": {},
     }), 200
 
 
@@ -856,6 +1113,85 @@ def swipe_elite_inventory():
     city = (request.args.get("city") or "").strip()
     service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
     return jsonify(_elite_inventory_payload(city, service)), 200
+
+
+@bp.route('/swipe/market-readiness', methods=['GET'])
+def swipe_market_readiness():
+    """Return public-safe readiness by market for selling Elite."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    payload_fn = _get_app_const("_elite_market_readiness_payload")
+    if callable(payload_fn):
+        return jsonify(payload_fn(city, service)), 200
+    return jsonify({
+        "summary": {
+            "ready_markets": 0,
+            "pilot_markets": 0,
+            "needs_inventory_markets": 0,
+            "total_candidate_leads": 0,
+            "total_elite_leads": 0,
+        },
+        "markets": [],
+        "filters": {"city": city, "service": service},
+        "thresholds": {},
+        "gap_to_elite": {},
+        "next_actions": ["Connect the app helper to compute market-level Elite action plans."],
+    }), 200
+
+
+@bp.route('/swipe/elite-sales-proof', methods=['GET'])
+def swipe_elite_sales_proof():
+    """Return public-safe proof points for selling the Elite tier."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    payload_fn = _get_app_const("_elite_sales_proof_payload")
+    if callable(payload_fn):
+        return jsonify(payload_fn(city, service)), 200
+    return jsonify({
+        "status": "needs_inventory",
+        "recommended_price": 0,
+        "headline": "Elite sales proof unavailable.",
+        "proof_points": [],
+        "market": None,
+        "readiness": {},
+    }), 200
+
+
+@bp.route('/admin/elite-uplift-candidates', methods=['GET'])
+@require_auth
+def admin_elite_uplift_candidates():
+    """Return near-Elite candidates when mounted through the modular blueprint."""
+    if not _current_user_is_admin():
+        return jsonify({"error": "Admin access required"}), 403
+    payload_fn = _get_app_const("_elite_uplift_candidates_payload")
+    if callable(payload_fn):
+        city = (request.args.get("city") or "").strip()
+        service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+        try:
+            limit = int(request.args.get("limit", 30))
+        except (TypeError, ValueError):
+            limit = 30
+        return jsonify(payload_fn(city, service, limit)), 200
+    return jsonify({"filters": {}, "scanned_candidates": 0, "returned": 0, "missing_counts": {}, "candidates": []}), 200
+
+
+@bp.route('/swipe/filter-options', methods=['GET'])
+def swipe_filter_options():
+    """Return live inventory counts for the Swipe filter drawer."""
+    payload_fn = _get_app_const("_swipe_filter_options_payload")
+    if callable(payload_fn):
+        return jsonify(payload_fn(request.args)), 200
+    return jsonify({
+        "total_available": 0,
+        "available_service_counts": {},
+        "raw_service_counts": {},
+        "filter_categories": [],
+        "available_service_types": [],
+        "top_cities": [],
+        "score_buckets": {},
+        "value_buckets": {},
+        "filters": {},
+    }), 200
 
 
 
@@ -918,9 +1254,37 @@ def swipe_claim_anon():
 
 @bp.route('/swipe/cities', methods=['GET'])
 def swipe_cities():
-    """Return a list of known city names for autocomplete (no auth required)."""
+    """Return known city names from live inventory plus geocode fallbacks."""
     q = (request.args.get('q') or '').strip().lower()
-    cities = sorted(CITY_COORDS.keys())
+    city_set = set(CITY_COORDS.keys())
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        if q:
+            c.execute("""
+                SELECT city, COUNT(*) AS n
+                FROM consolidated_leads
+                WHERE TRIM(COALESCE(city, '')) != ''
+                  AND LOWER(city) LIKE LOWER(?)
+                GROUP BY city
+                ORDER BY n DESC, city ASC
+                LIMIT 80
+            """, (f"%{q}%",))
+        else:
+            c.execute("""
+                SELECT city, COUNT(*) AS n
+                FROM consolidated_leads
+                WHERE TRIM(COALESCE(city, '')) != ''
+                GROUP BY city
+                ORDER BY n DESC, city ASC
+                LIMIT 80
+            """)
+        city_set.update(str(row[0]).strip().lower() for row in c.fetchall() if row[0])
+        conn.close()
+    except Exception as e:
+        logger.debug(f"City autocomplete DB lookup failed: {e}")
+
+    cities = sorted(city_set)
     if q:
         # Prefix matches first, then contains matches
         prefix = [c for c in cities if c.startswith(q)]
@@ -975,9 +1339,11 @@ def swipe_report_lead_quality():
 
     conn = get_db_connection()
     c = conn.cursor()
+    credit_granted = False
+    replacement_credits = 0
     try:
         c.execute("""
-            SELECT address_key, lead_data, primary_service_type
+            SELECT address_key, lead_data, primary_service_type, first_seen
             FROM consolidated_leads
             WHERE address_key = ?
             LIMIT 1
@@ -1002,6 +1368,22 @@ def swipe_report_lead_quality():
                        expires_at = CURRENT_TIMESTAMP
                  WHERE lead_id = ? AND user_id = ?
             """, (lead_id, int(user_id)))
+            grant_credit_fn = _get_app_const("_grant_elite_replacement_credit")
+            if callable(grant_credit_fn):
+                credit_granted = grant_credit_fn(
+                    c,
+                    int(user_id),
+                    lead_id,
+                    reason,
+                    "Auto-granted from Elite lead quality report",
+                )
+            c.execute("""
+                SELECT COUNT(*)
+                FROM elite_replacement_credits
+                WHERE user_id = ? AND status = 'open'
+            """, (int(user_id),))
+            row = c.fetchone()
+            replacement_credits = int(row[0]) if row else 0
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -1014,6 +1396,8 @@ def swipe_report_lead_quality():
         "ok": True,
         "is_elite": is_elite_lead,
         "replacement_review": bool(is_elite_lead),
+        "replacement_credit_granted": credit_granted,
+        "replacement_credits": replacement_credits,
         "message": "Gracias. Revisaremos este lead para reemplazo/mejora de calidad.",
     }), 200
 
@@ -1112,7 +1496,7 @@ def swipe_my_contacts():
     c = conn.cursor()
     c.execute("""
         SELECT sa.lead_id, MAX(sa.created_at) as contacted_at,
-               cl.address, cl.city, cl.lead_data
+               cl.address, cl.city, cl.lead_data, cl.primary_service_type, cl.first_seen
         FROM swipe_actions sa
         JOIN consolidated_leads cl ON cl.address_key = sa.lead_id
         WHERE sa.user_id = ? AND sa.action = 'like'
@@ -1121,27 +1505,57 @@ def swipe_my_contacts():
         LIMIT 100
     """, (user_id,))
     rows = c.fetchall()
-    conn.close()
 
     contacts = []
-    for row in rows:
-        rd = dict(row)
-        try:
-            ld = json.loads(rd.get('lead_data') or '{}')
-        except Exception:
-            ld = {}
-        scoring = ld.get('_scoring', {}) or {}
-        contacts.append({
-            'id':           rd['lead_id'],
-            'address':      rd['address'],
-            'city':         rd['city'],
-            'contacted_at': rd['contacted_at'],
-            'score':        scoring.get('score', 0),
-            'grade':        scoring.get('grade', ''),
-            'phone':        (ld.get('contact_phone') or '').strip(),
-            'email':        (ld.get('contact_email') or '').strip(),
-            'value':        ld.get('value_float', 0),
-        })
+    try:
+        for row in rows:
+            rd = dict(row)
+            try:
+                ld = json.loads(rd.get('lead_data') or '{}')
+            except Exception:
+                ld = {}
+            scoring = ld.get('_scoring', {}) or {}
+            service_type = (rd.get('primary_service_type') or ld.get('primary_service_type') or '').strip().lower()
+            gc_insight = build_gc_insight(ld, service_type) if service_type else {}
+            is_elite_quality = False
+            premium_quality_score = 0
+            premium_quality_checks = []
+            if service_type:
+                is_elite_quality, premium_quality_score, premium_quality_checks = _is_elite_lead_record(rd, ld)
+            claim = _active_elite_claim(c, rd['lead_id']) if is_elite_quality else None
+            elite_claimed_by_me = bool(claim and int(claim['user_id']) == int(user_id))
+            elite_claim_expires_at = claim['expires_at'] if elite_claimed_by_me else ''
+            contacts.append({
+                'id':           rd['lead_id'],
+                'address':      rd['address'],
+                'city':         rd['city'],
+                'contacted_at': rd['contacted_at'],
+                'score':        scoring.get('score', 0),
+                'grade':        scoring.get('grade', ''),
+                'phone':        (ld.get('contact_phone') or '').strip(),
+                'email':        (ld.get('contact_email') or '').strip(),
+                'value':        ld.get('value_float', 0),
+                'service_type':  service_type,
+                'source_url':    gc_insight.get('source_url', ''),
+                'source_label':  gc_insight.get('source_label', ''),
+                'is_elite_quality': is_elite_quality,
+                'premium_quality_score': premium_quality_score,
+                'elite_claimed_by_me': elite_claimed_by_me,
+                'elite_claim_expires_at': elite_claim_expires_at,
+                'elite_certificate': _elite_certificate(
+                    ld,
+                    gc_insight,
+                    premium_quality_score,
+                    premium_quality_checks,
+                    is_elite_quality,
+                    '',
+                    rd.get('first_seen', ''),
+                    elite_claimed_by_me,
+                    elite_claim_expires_at,
+                ),
+            })
+    finally:
+        conn.close()
     return jsonify({'contacts': contacts}), 200
 
 
@@ -1165,7 +1579,7 @@ def swipe_log_contact():
     claim_result = None
     try:
         c.execute("""
-            SELECT address_key, lead_data, primary_service_type
+            SELECT address_key, lead_data, primary_service_type, first_seen
             FROM consolidated_leads
             WHERE address_key = ?
             LIMIT 1

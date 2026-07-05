@@ -354,6 +354,48 @@ def init_web_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_lead_quality_reports_status ON lead_quality_reports(status, created_at)")
 
     c.execute("""
+        CREATE TABLE IF NOT EXISTS elite_replacement_credits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            lead_id TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open',
+            granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            redeemed_at TIMESTAMP,
+            notes TEXT DEFAULT '',
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            UNIQUE(user_id, lead_id, reason)
+        )
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_elite_replacement_credits_user_status
+        ON elite_replacement_credits(user_id, status, granted_at)
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS elite_pilot_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            city TEXT DEFAULT '',
+            service TEXT DEFAULT '',
+            readiness_status TEXT DEFAULT '',
+            recommended_price INTEGER DEFAULT 0,
+            requested_price INTEGER DEFAULT 500,
+            proof_json TEXT DEFAULT '{}',
+            source TEXT NOT NULL DEFAULT 'checkout_block',
+            status TEXT NOT NULL DEFAULT 'open',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            UNIQUE(user_id, city, service)
+        )
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_elite_pilot_requests_status_market
+        ON elite_pilot_requests(status, city, service, updated_at)
+    """)
+
+    c.execute("""
         CREATE TABLE IF NOT EXISTS lead_followups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             lead_id TEXT NOT NULL,
@@ -1091,6 +1133,7 @@ def seed_cities_and_agents():
         ("energy", "Energy Efficiency", "🔋", "Energy efficiency programs", "green"),
         ("construction", "Construction", "👷", "Active construction projects", "building"),
         ("realestate", "Real Estate", "🏠", "Real estate sales and transfers", "real_estate"),
+        ("post_sale_remodel", "Post-Sale Remodel Radar", "🏘️", "Recent sales likely to become remodel projects", "real_estate"),
         ("yelp", "Business Directory", "⭐", "Business directory and reviews", "information"),
         ("places", "Business Licenses", "📍", "Business licenses and permits", "information"),
         # Trade-specific services

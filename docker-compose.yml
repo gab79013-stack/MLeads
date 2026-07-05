@@ -27,6 +27,9 @@ services:
       timeout: 10s
       start_period: 30s
       retries: 3
+    networks:
+      - default
+      - twenty_default
 
   # Optional background agent scheduler. Start only when you want collection jobs running:
   # docker compose --profile agents up -d worker
@@ -49,3 +52,9 @@ services:
     depends_on:
       web:
         condition: service_healthy
+
+networks:
+  default:
+    name: mleads_default
+  twenty_default:
+    external: true

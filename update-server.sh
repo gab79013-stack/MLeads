@@ -158,23 +158,28 @@ else
 fi
 
 # ── 3. Variables de entorno ─────────────────────────────────────────
-step "3/5  Comprobando .env"
+step "3/5  Comprobando variables de entorno"
 
-if [[ ! -f "$PROJECT_DIR/.env" ]]; then
-    warn ".env no existe. Cópialo desde la plantilla:"
-    warn "    cp .env.example .env && nano .env"
+ENV_FILE="$PROJECT_DIR/.env"
+if [[ -f "$PROJECT_DIR/docker-compose.yml" ]]; then
+    ENV_FILE="$PROJECT_DIR/.env.production"
+fi
+
+if [[ ! -f "$ENV_FILE" ]]; then
+    warn "$(basename "$ENV_FILE") no existe. Cópialo desde la plantilla:"
+    warn "    cp .env.example $(basename "$ENV_FILE") && nano $ENV_FILE"
 elif [[ -f "$PROJECT_DIR/.env.example" ]]; then
     EXAMPLE_VARS="$(grep -oE '^[A-Z_][A-Z0-9_]*(?==)' "$PROJECT_DIR/.env.example" 2>/dev/null \
                     || grep -oE '^[A-Z_][A-Z0-9_]*=' "$PROJECT_DIR/.env.example" | sed 's/=$//')"
-    CURRENT_VARS="$(grep -oE '^[A-Z_][A-Z0-9_]*=' "$PROJECT_DIR/.env" 2>/dev/null | sed 's/=$//' || true)"
+    CURRENT_VARS="$(grep -oE '^[A-Z_][A-Z0-9_]*=' "$ENV_FILE" 2>/dev/null | sed 's/=$//' || true)"
     MISSING="$(comm -23 <(echo "$EXAMPLE_VARS" | sort -u) <(echo "$CURRENT_VARS" | sort -u) || true)"
 
     if [[ -n "$MISSING" ]]; then
-        warn "Variables nuevas en .env.example que NO están en tu .env:"
+        warn "Variables nuevas en .env.example que NO están en $(basename "$ENV_FILE"):"
         echo "$MISSING" | sed 's/^/    /'
-        warn "Edítalo con:  nano $PROJECT_DIR/.env"
+        warn "Edítalo con:  nano $ENV_FILE"
     else
-        ok ".env tiene todas las variables del template"
+        ok "$(basename "$ENV_FILE") tiene todas las variables del template"
     fi
 fi
 

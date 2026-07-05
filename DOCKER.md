@@ -20,6 +20,35 @@ docker compose ps
 curl -fsS http://127.0.0.1:${PORT:-5001}/api/health
 ```
 
+## Stripe billing
+
+The web checkout requires production Stripe values in `.env.production`.
+Configure them on the server without printing secrets:
+
+```bash
+python3 scripts/configure_stripe_billing.py
+docker compose up -d --build web
+```
+
+Required values:
+
+- `STRIPE_API_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_ID_PRO`
+- `STRIPE_PRICE_ID_QUALITY`
+- `STRIPE_PRICE_ID_PREMIUM`
+- `STRIPE_PRICE_ID_ELITE`
+- `BASE_URL` such as `http://2.25.162.58` or the production domain
+
+In Stripe, point the webhook to:
+
+```text
+BASE_URL/api/stripe/webhook
+```
+
+Use the admin dashboard `Billing readiness` card to confirm checkout,
+webhook, and Quality/Elite readiness before sending contractors to pay.
+
 ## Optional background agents
 
 Only start the worker when you want the scheduled collection/orchestrator loop active:
@@ -27,6 +56,25 @@ Only start the worker when you want the scheduled collection/orchestrator loop a
 ```bash
 docker compose --profile agents up -d worker
 ```
+
+## Twenty CRM
+
+The legacy `/pipeline` page redirects to TwentyHQ. For a same-server
+self-hosted CRM, install Twenty on port `3000`:
+
+```bash
+sudo SERVER_URL=http://2.25.162.58:3000 ./scripts/setup_twenty_crm.sh
+```
+
+Then set the MLeads web runtime variable and rebuild/restart the web service:
+
+```bash
+TWENTY_URL=http://2.25.162.58:3000
+docker compose up -d --build web
+```
+
+On the production VM, `setup_twenty_crm.sh` updates
+`/etc/mleads/mleads.env` automatically when the file exists.
 
 ## Logs
 

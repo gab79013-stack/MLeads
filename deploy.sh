@@ -48,6 +48,8 @@ files=(
     "web_server.py"
     "workers/inspection_scheduler.py"
     "web/templates/index.html"
+    "web/templates/home.html"
+    "web/templates/colaboradores.html"
     "utils/web_db.py"
     "agents/construction_agent.py"
 )
@@ -122,12 +124,12 @@ echo ""
 
 echo -e "${YELLOW}📍 Step 10: Test API endpoint${NC}"
 sleep 2
-RESPONSE=$(curl -s http://localhost:5001/ 2>/dev/null | head -c 100)
-if echo "$RESPONSE" | grep -q "MLeads\|Insulleads"; then
-    echo -e "${GREEN}✓ Dashboard is responding${NC}"
+RESPONSE=$(curl -s http://localhost:5001/ 2>/dev/null | head -c 200)
+if echo "$RESPONSE" | grep -q "0brix\|Leads premium para contratistas"; then
+    echo -e "${GREEN}✓ Public homepage is responding${NC}"
     echo "Response snippet: ${RESPONSE:0:50}..."
 else
-    echo -e "${YELLOW}⚠ Dashboard not responding to localhost test${NC}"
+    echo -e "${YELLOW}⚠ Homepage not responding to localhost test${NC}"
     echo "Response: $RESPONSE"
 fi
 echo ""

@@ -12,8 +12,12 @@ import os
 import json
 import logging
 import hashlib
+import secrets
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, g, send_file
+from flask import Flask, request, jsonify, g, send_file, redirect, render_template
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -39,6 +43,7 @@ from web.helpers.gc_interest import (
     build_gc_insight,
     build_gc_interest_sql_filter,
     build_public_real_lead_sql_filter,
+    classify_contact_level,
     is_gc_interesting_lead,
     is_placeholder_or_demo_lead,
 )
@@ -47,17 +52,27 @@ app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
 
 # ─── CORS ────────────────────────────────────────────────
-_allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
-if _allowed_origins != "*":
-    CORS(app, origins=[o.strip() for o in _allowed_origins.split(",")])
-else:
-    import warnings
-    warnings.warn(
-        "ALLOWED_ORIGINS is not set — CORS is open to all origins. "
-        "Set ALLOWED_ORIGINS in .env for production (e.g., https://your-domain.com).",
-        stacklevel=1,
+_DEFAULT_ALLOWED_ORIGINS = "https://0brix.com,https://www.0brix.com"
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", _DEFAULT_ALLOWED_ORIGINS).strip()
+# Production hardening: legacy deploys may still export ALLOWED_ORIGINS=*.
+# Do not keep wildcard CORS on the public paid-launch surface.
+if not _allowed_origins or _allowed_origins == "*":
+    _allowed_origins = _DEFAULT_ALLOWED_ORIGINS
+CORS(app, origins=[o.strip() for o in _allowed_origins.split(",") if o.strip()])
+
+
+@app.after_request
+def add_production_security_headers(response):
+    """Set conservative browser security headers for the public SaaS surface."""
+    response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "frame-ancestors 'self'; object-src 'none'; base-uri 'self'",
     )
-    CORS(app)
+    return response
 
 # ─── Rate Limiting ────────────────────────────────────────
 # Use Redis if available (shared across gunicorn workers), else fall back to
@@ -145,6 +160,51 @@ def _homeowner_lead_score(has_email, budget_value, timeline, description):
     }
 
 
+def _parse_money(value) -> float:
+    try:
+        return float("".join(ch for ch in str(value or "") if ch.isdigit() or ch == ".") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _post_sale_remodel_score(lead: dict) -> dict:
+    score = 55
+    reasons = ["Venta reciente detectada como señal temprana de remodelación."]
+    buyer_text = " ".join(str(lead.get(k) or "") for k in ("buyer_name", "buyer_type", "financing_type")).lower()
+    desc = str(lead.get("description") or "").lower()
+
+    if lead.get("sale_date"):
+        score += 10
+        reasons.append("Fecha de venta disponible para ventana de contacto.")
+    if any(term in buyer_text for term in ("llc", "cash", "invest", "holdings", "trust", "no mortgage")):
+        score += 16
+        reasons.append("Comprador tipo cash/LLC/inversionista.")
+    try:
+        year_built = int(lead.get("year_built") or 0)
+    except (TypeError, ValueError):
+        year_built = 0
+    if year_built and year_built <= 1985:
+        score += 10
+        reasons.append("Propiedad antigua con alta probabilidad de upgrades.")
+    if any(term in desc for term in ("as-is", "as is", "tlc", "fixer", "contractor special", "needs work", "renovation")):
+        score += 12
+        reasons.append("Texto de condición sugiere reparación/remodelación.")
+    if lead.get("contact_phone"):
+        score += 8
+        reasons.append("Contacto telefónico disponible para venta inmediata.")
+    if lead.get("source_url"):
+        score += 8
+        reasons.append("Fuente pública verificable.")
+
+    score = min(score, 98)
+    return {
+        "score": score,
+        "grade": "HOT" if score >= 90 else "WARM" if score >= 70 else "COOL",
+        "grade_emoji": "🔥" if score >= 90 else "⚡" if score >= 70 else "📍",
+        "reasons": reasons[:5],
+    }
+
+
 # ─────────────────────────────────────────────────────────
 # Error Handlers
 # ─────────────────────────────────────────────────────────
@@ -170,7 +230,19 @@ def server_error(e):
 
 @app.route('/', methods=['GET'])
 def index():
-    """Serve the main dashboard HTML."""
+    """Serve the public project landing page."""
+    template_path = os.path.join(os.path.dirname(__file__), 'templates', 'home.html')
+    try:
+        with open(template_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return jsonify({"error": "Landing page not found"}), 404
+
+
+@app.route('/app', methods=['GET'])
+@app.route('/dashboard', methods=['GET'])
+def dashboard_page():
+    """Serve the internal dashboard HTML."""
     template_path = os.path.join(os.path.dirname(__file__), 'templates', 'index.html')
     try:
         with open(template_path, 'r', encoding='utf-8') as f:
@@ -222,13 +294,49 @@ def homeowner_intake_page():
 @app.route('/pipeline', methods=['GET'])
 @app.route('/pipeline.html', methods=['GET'])
 def pipeline_page():
-    """Serve the Kanban pipeline page for swiped/right leads."""
-    pipeline_path = os.path.join(os.path.dirname(__file__), 'templates', 'pipeline.html')
+    """Serve the per-user CRM populated by swipe likes."""
+    return render_template("pipeline.html")
+
+
+@app.route('/crm', methods=['GET'])
+def crm_redirect():
+    """Open Twenty CRM as a branded 0brix continuation of the swipe session."""
+    return render_template("crm_bridge.html")
+
+
+def _public_base_url():
+    return os.getenv('BASE_URL', 'https://0brix.com').rstrip('/')
+
+
+@app.route('/robots.txt', methods=['GET'])
+def robots_txt():
+    base_url = _public_base_url()
+    body = f"User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: {base_url}/sitemap.xml\n"
+    return app.response_class(body, mimetype='text/plain; charset=utf-8')
+
+
+@app.route('/sitemap.xml', methods=['GET'])
+def sitemap_xml():
+    base_url = _public_base_url()
+    urls = ['/', '/swipe', '/homeowner-intake', '/pipeline', '/colaboradores']
+    items = ''.join(
+        f"<url><loc>{base_url}{path}</loc><changefreq>weekly</changefreq><priority>{'1.0' if path == '/' else '0.8'}</priority></url>"
+        for path in urls
+    )
+    body = f"<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">{items}</urlset>"
+    return app.response_class(body, mimetype='application/xml; charset=utf-8')
+
+
+@app.route('/colaboradores', methods=['GET'])
+@app.route('/partners', methods=['GET'])
+def collaborators_page():
+    """Serve the collaborators / investors invitation page."""
+    template_path = os.path.join(os.path.dirname(__file__), 'templates', 'colaboradores.html')
     try:
-        with open(pipeline_path, 'r', encoding='utf-8') as f:
+        with open(template_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        return jsonify({"error": "Pipeline page not found"}), 404
+        return jsonify({"error": "Collaborators page not found"}), 404
 
 
 @app.route('/api/homeowner-intake', methods=['POST'])
@@ -355,6 +463,120 @@ def homeowner_intake_submit():
     }), 201
 
 
+@app.route('/api/post-sale-remodel/leads', methods=['POST'])
+@limiter.limit("120 per minute")
+def post_sale_remodel_lead_submit():
+    """
+    Publish a recently sold property as a Post-Sale Remodel Radar lead.
+
+    Intended input: county recorder/property-sale data enriched with a reachable
+    owner/buyer phone. The lead becomes visible in Swipe under post_sale_remodel.
+    """
+    data = request.get_json(silent=True) or {}
+    address = _clean_text(data.get("address"), 180)
+    city = _clean_text(data.get("city"), 80)
+    state = _clean_text(data.get("state"), 20).upper()
+    zip_code = _clean_text(data.get("zip") or data.get("zipcode"), 20)
+    buyer_name = _clean_text(data.get("buyer_name") or data.get("buyer"), 160)
+    seller_name = _clean_text(data.get("seller_name") or data.get("seller"), 160)
+    phone = _normalize_phone(data.get("contact_phone") or data.get("phone"))
+    email = _clean_text(data.get("contact_email") or data.get("email"), 160).lower()
+    source_url = _clean_text(data.get("source_url") or data.get("record_url") or data.get("url"), 500)
+    sale_date = _clean_text(data.get("sale_date") or data.get("recording_date") or data.get("transfer_date"), 40)[:10]
+    sale_price = _parse_money(data.get("sale_price") or data.get("price") or data.get("consideration_amount"))
+    year_built_raw = _clean_text(data.get("year_built") or data.get("property_year_built"), 10)
+    description = _clean_text(data.get("description") or data.get("listing_remarks"), 1200)
+    buyer_type = _clean_text(data.get("buyer_type"), 80)
+    financing_type = _clean_text(data.get("financing_type"), 80)
+
+    missing = []
+    for field_name, value in [
+        ("address", address),
+        ("city", city),
+        ("buyer_name", buyer_name),
+        ("contact_phone", phone),
+        ("source_url", source_url),
+    ]:
+        if not value:
+            missing.append(field_name)
+    if missing:
+        return jsonify({"error": "missing_required_fields", "fields": missing}), 400
+
+    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    identity = "|".join([address.lower(), city.lower(), state.lower(), buyer_name.lower(), sale_date])
+    digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()[:16]
+    lead_id = f"post_sale_{digest}"
+    try:
+        year_built = int(year_built_raw) if year_built_raw else None
+    except (TypeError, ValueError):
+        year_built = None
+
+    lead_data = {
+        'id': lead_id,
+        'source': 'post_sale_remodel',
+        'source_label': 'Post-Sale Remodel Radar',
+        'source_url': source_url,
+        'primary_service_type': 'post_sale_remodel',
+        'service_type': 'post_sale_remodel',
+        'lead_type': data.get("lead_type") or "post_sale_remodel_candidate",
+        'address': address,
+        'city': city,
+        'state': state,
+        'zip': zip_code,
+        'owner': buyer_name,
+        'buyer_name': buyer_name,
+        'seller_name': seller_name,
+        'contact_phone': phone,
+        'contact_email': email,
+        'contractor': 'NONE',
+        'sale_date': sale_date,
+        'sale_price': sale_price,
+        'value_float': sale_price,
+        'year_built': year_built,
+        'buyer_type': buyer_type,
+        'financing_type': financing_type,
+        'permit_type': 'Recent property sale',
+        'description': description or f"Recently sold property; buyer {buyer_name} may need remodel work.",
+        '_scoring': {},
+        '_trade': 'GENERAL_CONTRACTOR',
+        '_urgency': 'HIGH',
+        '_ai_summary': 'Recent sale with remodel-intent signals for GC outreach.',
+        '_is_residential': True,
+        '_project_phase': 'post-sale planning',
+        '_decision_maker': 'buyer',
+        '_owner_type': 'NEW_OWNER',
+        '_services': ['general_contractor', 'remodel', 'renovation'],
+        '_lead_channel': 'post_sale_remodel',
+    }
+    lead_data['_scoring'] = _post_sale_remodel_score(lead_data)
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT OR REPLACE INTO consolidated_leads (
+            address_key, address, city, agent_sources, first_seen, last_updated,
+            lead_data, notified, primary_service_type, has_contact, has_phone, is_dead_lead
+        ) VALUES (
+            ?, ?, ?, 'post_sale_remodel',
+            COALESCE((SELECT first_seen FROM consolidated_leads WHERE address_key = ?), ?),
+            ?, ?, 0, 'post_sale_remodel', 1, 1, 0
+        )
+    """, (
+        lead_id, address, city, lead_id, now, now, json.dumps(lead_data, ensure_ascii=False),
+    ))
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "ok": True,
+        "lead_id": lead_id,
+        "service_type": "post_sale_remodel",
+        "score": lead_data["_scoring"]["score"],
+        "grade": lead_data["_scoring"]["grade"],
+        "message": "post_sale_remodel_lead_published",
+    }), 201
+
+
 @app.route('/<path:filename>', methods=['GET'])
 def catch_all(filename):
     """Catch all routes and serve dashboard for SPA routing."""
@@ -373,52 +595,364 @@ def catch_all(filename):
 # ─────────────────────────────────────────────────────────
 
 @app.route('/api/health', methods=['GET'])
+@app.route('/health', methods=['GET'])
 def health():
-    """Health check endpoint with full system status."""
-    now = datetime.utcnow()
+    """Public health check: expose only coarse status, not internals."""
     status = "ok"
-    details = {}
+    try:
+        conn = get_db_connection()
+        conn.execute("SELECT 1")
+        conn.close()
+    except Exception:
+        status = "degraded"
+    return jsonify({
+        "status": status,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }), 200 if status == "ok" else 503
 
-    # Database connectivity + lead count
+
+# ─────────────────────────────────────────────────────────
+# Twenty CRM bridge
+# ─────────────────────────────────────────────────────────
+
+TWENTY_WORKSPACE_ID = os.getenv("TWENTY_WORKSPACE_ID", "d33dc25c-0994-45db-83bc-0058b9a3b60a")
+TWENTY_WORKSPACE_INVITE_HASH = os.getenv("TWENTY_WORKSPACE_INVITE_HASH", "ee3a0c2b-b6d4-4676-8a22-a748073619ec")
+TWENTY_METADATA_URL = os.getenv("TWENTY_METADATA_URL", "http://127.0.0.1:3000/metadata")
+TWENTY_PUBLIC_URL = os.getenv("TWENTY_PUBLIC_URL", "https://crm.0brix.com").rstrip("/")
+TWENTY_CRM_ENTRY_PATH = os.getenv("TWENTY_CRM_ENTRY_PATH", "/objects/opportunities")
+TWENTY_ORIGIN = os.getenv("TWENTY_ORIGIN", "https://crm.0brix.com")
+TWENTY_ADMIN_EMAIL = os.getenv("TWENTY_ADMIN_EMAIL", "")
+TWENTY_ADMIN_PASSWORD = os.getenv("TWENTY_ADMIN_PASSWORD", "")
+
+
+def _ensure_crm_account_table():
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS user_crm_accounts (
+            user_id INTEGER PRIMARY KEY,
+            email TEXT NOT NULL,
+            crm_password TEXT NOT NULL,
+            twenty_workspace_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login_at TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def _twenty_graphql(query, variables=None, access_token=None, workspace_id=None):
+    payload = json.dumps({"query": query, "variables": variables or {}}).encode("utf-8")
+    headers = {"Content-Type": "application/json", "Origin": TWENTY_ORIGIN}
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    if workspace_id:
+        headers["x-workspace-id"] = workspace_id
+    req = urllib.request.Request(TWENTY_METADATA_URL, data=payload, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            raw = resp.read().decode("utf-8")
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Twenty no respondió: {exc}") from exc
+    data = json.loads(raw or "{}")
+    if data.get("errors"):
+        message = data["errors"][0].get("message", "Error de Twenty")
+        raise RuntimeError(message)
+    return data.get("data") or {}
+
+
+def _twenty_login(email, password):
+    sign_in = _twenty_graphql("""
+        mutation SignIn($email:String!, $password:String!) {
+          signIn(email:$email, password:$password) {
+            availableWorkspaces {
+              availableWorkspacesForSignIn { id loginToken workspaceUrls { subdomainUrl customUrl } }
+            }
+          }
+        }
+    """, {"email": email, "password": password})
+    workspaces = (sign_in.get("signIn") or {}).get("availableWorkspaces", {}).get("availableWorkspacesForSignIn", [])
+    for workspace in workspaces:
+        if workspace.get("id") == TWENTY_WORKSPACE_ID:
+            return workspace.get("loginToken")
+    if workspaces:
+        return workspaces[0].get("loginToken")
+    raise RuntimeError("La cuenta existe, pero no tiene acceso al workspace CRM de 0brix.")
+
+
+def _twenty_admin_access_token():
+    if not TWENTY_ADMIN_EMAIL or not TWENTY_ADMIN_PASSWORD:
+        raise RuntimeError("Faltan TWENTY_ADMIN_EMAIL/TWENTY_ADMIN_PASSWORD para invitar usuarios al CRM.")
+    login_token = _twenty_login(TWENTY_ADMIN_EMAIL, TWENTY_ADMIN_PASSWORD)
+    token_data = _twenty_graphql("""
+        mutation GetTokens($loginToken:String!, $origin:String!) {
+          getAuthTokensFromLoginToken(loginToken:$loginToken, origin:$origin) {
+            tokens { accessOrWorkspaceAgnosticToken { token } }
+          }
+        }
+    """, {"loginToken": login_token, "origin": TWENTY_ORIGIN})
+    token = (((token_data.get("getAuthTokensFromLoginToken") or {}).get("tokens") or {})
+             .get("accessOrWorkspaceAgnosticToken") or {}).get("token")
+    if not token:
+        raise RuntimeError("Twenty no devolvió token administrativo.")
+    return token
+
+
+def _twenty_invite_and_signup(email, password):
+    admin_token = _twenty_admin_access_token()
+    try:
+        _twenty_graphql("""
+            mutation SendInvitations($emails:[String!]!) {
+              sendInvitations(emails:$emails) { success errors result { id email expiresAt } }
+            }
+        """, {"emails": [email]}, access_token=admin_token, workspace_id=TWENTY_WORKSPACE_ID)
+    except RuntimeError as exc:
+        # Existing invitations/users are acceptable; sign-up/sign-in below will decide.
+        if "already invited" not in str(exc) and "already in the workspace" not in str(exc):
+            raise
+    sign_up = _twenty_graphql("""
+        mutation SignUpInWorkspace($email:String!, $password:String!, $hash:String!) {
+          signUpInWorkspace(email:$email, password:$password, workspaceInviteHash:$hash) {
+            loginToken { token expiresAt }
+            workspace { id workspaceUrls { subdomainUrl customUrl } }
+          }
+        }
+    """, {"email": email, "password": password, "hash": TWENTY_WORKSPACE_INVITE_HASH})
+    token = (((sign_up.get("signUpInWorkspace") or {}).get("loginToken") or {}).get("token"))
+    if not token:
+        raise RuntimeError("No se pudo crear la cuenta CRM en Twenty.")
+    return token
+
+
+def _get_or_create_twenty_login_token(user_id):
+    _ensure_crm_account_table()
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT email, full_name FROM users WHERE id = ? AND is_active = 1", (user_id,))
+    user = c.fetchone()
+    if not user:
+        conn.close()
+        raise RuntimeError("Usuario 0brix no encontrado o inactivo.")
+    email = (user["email"] or "").strip().lower()
+    if not email:
+        conn.close()
+        raise RuntimeError("El usuario no tiene email para crear acceso CRM.")
+    c.execute("SELECT crm_password FROM user_crm_accounts WHERE user_id = ?", (user_id,))
+    row = c.fetchone()
+    if row:
+        crm_password = row["crm_password"]
+    else:
+        crm_password = secrets.token_urlsafe(32) + "Aa1!"
+        c.execute("""
+            INSERT INTO user_crm_accounts (user_id, email, crm_password, twenty_workspace_id)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, email, crm_password, TWENTY_WORKSPACE_ID))
+        conn.commit()
+    conn.close()
+
+    try:
+        login_token = _twenty_login(email, crm_password)
+    except RuntimeError:
+        login_token = _twenty_invite_and_signup(email, crm_password)
+
+    conn = get_db_connection()
+    conn.execute(
+        "UPDATE user_crm_accounts SET last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
+        (user_id,),
+    )
+    conn.commit()
+    conn.close()
+    return login_token
+
+
+@app.route('/api/crm/sso', methods=['GET'])
+@require_auth
+def crm_sso():
+    """Return a branded Twenty auto-login URL for the current 0brix user."""
+    try:
+        login_token = _get_or_create_twenty_login_token(g.user_id)
+    except Exception as exc:
+        logger.exception("CRM SSO failed")
+        return jsonify({"error": str(exc)}), 502
+    params = {"loginToken": login_token}
+    if TWENTY_CRM_ENTRY_PATH:
+        params["returnToPath"] = TWENTY_CRM_ENTRY_PATH
+    return jsonify({
+        "redirect_url": f"{TWENTY_PUBLIC_URL}/verify?{urllib.parse.urlencode(params)}",
+        "crm_url": TWENTY_PUBLIC_URL,
+        "entry_path": TWENTY_CRM_ENTRY_PATH,
+    }), 200
+
+
+def _twenty_workspace_graphql(query, variables=None):
+    """Run a workspace GraphQL mutation as the 0brix CRM admin."""
+    admin_token = _twenty_admin_access_token()
+    graphql_url = TWENTY_METADATA_URL.replace('/metadata', '/graphql')
+    payload = json.dumps({"query": query, "variables": variables or {}}).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Origin": TWENTY_ORIGIN,
+        "Authorization": f"Bearer {admin_token}",
+        "x-workspace-id": TWENTY_WORKSPACE_ID,
+    }
+    req = urllib.request.Request(graphql_url, data=payload, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=12) as resp:
+        data = json.loads(resp.read().decode("utf-8") or "{}")
+    if data.get("errors"):
+        raise RuntimeError(data["errors"][0].get("message", "Twenty workspace error"))
+    return data.get("data") or {}
+
+
+def _currency_amount_from_lead(lead_data):
+    """Return a Twenty CURRENCY payload when a permit/estimate value is available."""
+    raw = (
+        lead_data.get("permit_value")
+        or lead_data.get("valuation")
+        or lead_data.get("estimated_value")
+        or lead_data.get("project_value")
+        or lead_data.get("value")
+    )
+    if raw in (None, ""):
+        return None
+    try:
+        amount = float(str(raw).replace("$", "").replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+    if amount <= 0:
+        return None
+    return {"amountMicros": int(amount * 1_000_000), "currencyCode": "USD"}
+
+
+def _split_contact_name(name):
+    parts = (name or "").strip().split()
+    if not parts:
+        return {"firstName": "Lead", "lastName": "0brix"}
+    if len(parts) == 1:
+        return {"firstName": parts[0][:80], "lastName": ""}
+    return {"firstName": parts[0][:80], "lastName": " ".join(parts[1:])[:80]}
+
+
+def _sync_liked_lead_to_twenty(user_id, lead_id):
+    """Create market-ready CRM records when a registered user likes a lead.
+
+    The local 0brix write remains the source of truth. This best-effort sync gives
+    the user a real sales workflow in Twenty: Company/property + optional Person +
+    Opportunity + follow-up Task.
+    """
     try:
         conn = get_db_connection()
         c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM consolidated_leads")
-        leads_count = c.fetchone()[0]
+        c.execute("SELECT email, full_name FROM users WHERE id = ?", (user_id,))
+        user = c.fetchone()
         c.execute("""
-            SELECT COUNT(*), MAX(created_at)
-            FROM scheduled_inspections
-            WHERE inspection_date >= date('now')
-        """)
-        row = c.fetchone()
-        future_inspections = row[0]
-        last_inspection_saved = row[1]
+            SELECT address, city, lead_data, primary_service_type
+            FROM consolidated_leads
+            WHERE address_key = ?
+            LIMIT 1
+        """, (lead_id,))
+        lead = c.fetchone()
         conn.close()
-        details["db"] = {
-            "status": "ok",
-            "leads_count": leads_count,
-            "future_inspections": future_inspections,
-            "last_inspection_saved": last_inspection_saved,
+        if not user or not lead:
+            return
+
+        lead_data = json.loads(lead["lead_data"] or "{}")
+        address = lead["address"] or lead_id
+        city = lead["city"] or lead_data.get("city") or ""
+        service = lead["primary_service_type"] or lead_data.get("service_type") or lead_data.get("trade") or "GC opportunity"
+        source_url = lead_data.get("source_url") or lead_data.get("permit_url") or lead_data.get("url") or ""
+        owner = lead_data.get("owner") or lead_data.get("property_owner") or lead_data.get("owner_name") or ""
+        contractor = lead_data.get("contractor") or lead_data.get("gc_name") or lead_data.get("contractor_name") or ""
+        contact_name = lead_data.get("contact_name") or owner or contractor or "Lead 0brix"
+        contact_email = (lead_data.get("contact_email") or lead_data.get("email") or "").strip()
+        contact_phone = lead_data.get("contact_phone") or lead_data.get("phone") or lead_data.get("owner_phone") or ""
+        permit_number = lead_data.get("permit_number") or lead_data.get("permit_id") or lead_data.get("record_id") or ""
+        value_payload = _currency_amount_from_lead(lead_data)
+
+        company_name = f"{address}"
+        if city and city.lower() not in company_name.lower():
+            company_name = f"{company_name} — {city}"
+        company = _twenty_workspace_graphql("""
+            mutation CreateCompany($data: CompanyCreateInput!) {
+              createCompany(data: $data) { id name }
+            }
+        """, {"data": {"name": company_name[:255]}}).get("createCompany") or {}
+        company_id = company.get("id")
+
+        person_id = None
+        if contact_email or contact_phone or contact_name != "Lead 0brix":
+            person_data = {
+                "name": _split_contact_name(contact_name),
+                "jobTitle": "Property contact / decision maker",
+            }
+            if contact_email:
+                person_data["emails"] = {"primaryEmail": contact_email}
+            if company_id:
+                person_data["companyId"] = company_id
+            person = _twenty_workspace_graphql("""
+                mutation CreatePerson($data: PersonCreateInput!) {
+                  createPerson(data: $data) { id }
+                }
+            """, {"data": person_data}).get("createPerson") or {}
+            person_id = person.get("id")
+
+        opportunity_data = {
+            "name": f"{service}: {address}"[:255],
+            "stage": "NEW",
         }
-    except Exception as e:
-        status = "degraded"
-        details["db"] = {"status": "error", "error": str(e)}
+        if company_id:
+            opportunity_data["companyId"] = company_id
+        if person_id:
+            opportunity_data["pointOfContactId"] = person_id
+        if value_payload:
+            opportunity_data["amount"] = value_payload
+        opportunity = _twenty_workspace_graphql("""
+            mutation CreateOpportunity($data: OpportunityCreateInput!) {
+              createOpportunity(data: $data) { id name stage }
+            }
+        """, {"data": opportunity_data}).get("createOpportunity") or {}
+        opportunity_id = opportunity.get("id")
 
-    # Scheduler status
-    try:
-        sched = get_scheduler_status()
-        details["scheduler"] = sched
-        if not sched.get("running"):
-            status = "degraded"
-    except Exception as e:
-        status = "degraded"
-        details["scheduler"] = {"status": "error", "error": str(e)}
-
-    return jsonify({
-        "status": status,
-        "timestamp": now.isoformat() + "Z",
-        **details,
-    }), 200 if status == "ok" else 503
+        lines = [
+            "# Lead guardado desde 0brix",
+            f"Usuario 0brix: {user['full_name'] or ''} <{user['email'] or ''}>",
+            f"Lead ID: {lead_id}",
+            f"Dirección: {address}",
+            f"Ciudad: {city}",
+            f"Servicio/Oportunidad: {service}",
+            f"Permit/Record: {permit_number}",
+            f"Owner: {owner}",
+            f"Contratista/GC actual: {contractor}",
+            f"Contacto: {contact_name}",
+            f"Teléfono: {contact_phone}",
+            f"Email: {contact_email}",
+            f"Fuente: {source_url}",
+            "",
+            f"Company ID: {company_id or ''}",
+            f"Person ID: {person_id or ''}",
+            f"Opportunity ID: {opportunity_id or ''}",
+            "",
+            "Acción recomendada: verificar fuente/contacto y llamar o enviar propuesta inicial.",
+            "Origen: usuario hizo swipe-right / Me interesa en 0brix.",
+        ]
+        _twenty_workspace_graphql("""
+            mutation CreateTask($data: TaskCreateInput!) {
+              createTask(data: $data) { id title status createdAt }
+            }
+        """, {
+            "data": {
+                "title": f"Contactar lead 0brix: {address}"[:255],
+                "status": "TODO",
+                "bodyV2": {"markdown": "\n".join(lines)},
+            }
+        })
+        logger.info(
+            "Twenty lead sync created company=%s person=%s opportunity=%s for lead=%s",
+            company_id, person_id, opportunity_id, lead_id,
+        )
+    except Exception as exc:
+        logger.warning(f"Twenty lead sync failed for {lead_id}: {exc}")
 
 
 # ─────────────────────────────────────────────────────────
@@ -477,6 +1011,8 @@ def register():
 
     conn = get_db_connection()
     c = conn.cursor()
+    credit_granted = False
+    replacement_credits = 0
     try:
         c.execute("SELECT id FROM users WHERE email = ?", (email,))
         if c.fetchone():
@@ -2441,6 +2977,289 @@ def bot_users_stats():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@app.route('/api/admin/billing-readiness', methods=['GET'])
+@require_admin
+def admin_billing_readiness():
+    """Report whether production can actually start paid Stripe checkouts."""
+    return jsonify(_billing_readiness_payload()), 200
+
+
+@app.route('/api/admin/quality-readiness', methods=['GET'])
+@require_admin
+def admin_quality_readiness():
+    """Show admin sales readiness for the $199 Quality plan."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    readiness = _quality_market_readiness_payload(city, service)
+    guidance = _quality_admin_guidance_payload(readiness)
+    payload = {
+        **readiness,
+        "sales_guidance": {
+            "status": guidance["status"],
+            "headline": guidance["headline"],
+            "primary_action": guidance["primary_action"],
+            "next_actions": guidance["next_actions"],
+            "top_market": guidance["top_market"],
+        },
+        "billing": guidance["billing"],
+    }
+    return jsonify(payload), 200
+
+
+def _billing_readiness_payload() -> dict:
+    stripe_key_set = bool((os.getenv('STRIPE_API_KEY') or '').strip())
+    webhook_secret_set = bool((os.getenv('STRIPE_WEBHOOK_SECRET') or '').strip())
+    generic_price_set = bool((os.getenv('STRIPE_PRICE_ID') or '').strip())
+    base_url = _checkout_base_url()
+    tiers = {}
+    missing = []
+
+    if not stripe_key_set:
+        missing.append('STRIPE_API_KEY')
+    if not webhook_secret_set:
+        missing.append('STRIPE_WEBHOOK_SECRET')
+
+    specific_price_required = {'quality', 'elite'}
+    for tier in ('pro', 'quality', 'premium', 'elite'):
+        specific_key = f'STRIPE_PRICE_ID_{tier.upper()}'
+        specific_price_set = bool((os.getenv(specific_key) or '').strip())
+        generic_price_allowed = tier not in specific_price_required
+        price_set = specific_price_set or (generic_price_allowed and generic_price_set)
+        tiers[tier] = {
+            "price_configured": price_set,
+            "uses_generic_price": price_set and not specific_price_set,
+        }
+        if not price_set:
+            missing.append(specific_key)
+
+    elite_proof = {}
+    try:
+        proof = _elite_sales_proof_payload()
+        elite_proof = {
+            "status": proof.get("status"),
+            "recommended_price": proof.get("recommended_price"),
+            "city": (proof.get("market") or {}).get("city"),
+            "elite_leads": (proof.get("market") or {}).get("elite_leads"),
+        }
+    except Exception as exc:
+        elite_proof = {"status": "unavailable", "error": str(exc)[:120]}
+
+    checkout_ready = stripe_key_set and all(t["price_configured"] for t in tiers.values())
+    elite_ready = (
+        checkout_ready
+        and elite_proof.get("status") == "ready_for_elite"
+        and int(elite_proof.get("recommended_price") or 0) >= 500
+    )
+
+    return {
+        "checkout_ready": checkout_ready,
+        "webhook_ready": stripe_key_set and webhook_secret_set,
+        "elite_ready": elite_ready,
+        "base_url": base_url,
+        "missing": sorted(set(missing)),
+        "tiers": tiers,
+        "elite_market": elite_proof,
+        "next_action": (
+            "Add Stripe API key, webhook secret, and plan price IDs to production."
+            if missing else
+            "Billing is configured; run a Stripe test checkout before selling live."
+        ),
+    }
+
+
+def _quality_admin_guidance_payload(readiness: dict) -> dict:
+    """Add admin-only sales guidance to Quality readiness data."""
+    summary = readiness.get("summary") or {}
+    markets = readiness.get("markets") or []
+    top_market = markets[0] if markets else {}
+    ready_count = int(summary.get("ready_markets") or 0)
+    pilot_count = int(summary.get("pilot_markets") or 0)
+    quality_price_configured = bool((os.getenv("STRIPE_PRICE_ID_QUALITY") or "").strip())
+
+    if ready_count and quality_price_configured:
+        status = "ready_to_sell"
+        headline = "Quality is ready to sell in at least one market."
+        primary_action = "Start outreach with the top ready market and use free leads as the entry offer."
+    elif ready_count:
+        status = "billing_blocked"
+        headline = "Quality inventory is ready, but checkout is not fully configured."
+        primary_action = "Configure STRIPE_PRICE_ID_QUALITY before sending buyers to checkout."
+    elif pilot_count:
+        status = "pilot_only"
+        headline = "Quality can support pilot pricing, but needs more proof for the $199 pitch."
+        primary_action = "Sell a limited pilot and enrich phone/source coverage before full rollout."
+    else:
+        status = "needs_inventory"
+        headline = "Quality needs more sellable inventory before a paid push."
+        primary_action = "Prioritize homeowner intake, permits, and contact enrichment in the highest-candidate markets."
+
+    next_actions = list(top_market.get("next_actions") or [])
+    if primary_action not in next_actions:
+        next_actions.insert(0, primary_action)
+
+    return {
+        "status": status,
+        "headline": headline,
+        "primary_action": primary_action,
+        "top_market": top_market,
+        "next_actions": next_actions[:4],
+        "billing": {
+            "quality_price_configured": quality_price_configured,
+            "missing": [] if quality_price_configured else ["STRIPE_PRICE_ID_QUALITY"],
+        },
+    }
+
+
+@app.route('/api/admin/elite-pilot-requests', methods=['GET'])
+@require_admin
+def admin_elite_pilot_requests():
+    """Show captured Elite demand in markets that were not ready for $500 checkout."""
+    status = (request.args.get("status") or "open").strip().lower()
+    if status not in {"open", "contacted", "closed", "all"}:
+        return jsonify({"error": "Invalid status"}), 400
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        where = "" if status == "all" else "WHERE epr.status = ?"
+        params = [] if status == "all" else [status]
+        c.execute(f"""
+            SELECT epr.id, epr.user_id, u.email, u.full_name,
+                   epr.city, epr.service, epr.readiness_status,
+                   epr.recommended_price, epr.requested_price,
+                   epr.proof_json, epr.source, epr.status,
+                   epr.created_at, epr.updated_at
+              FROM elite_pilot_requests epr
+              LEFT JOIN users u ON u.id = epr.user_id
+              {where}
+             ORDER BY epr.updated_at DESC
+             LIMIT 200
+        """, params)
+        requests = []
+        for row in c.fetchall():
+            item = dict(row)
+            try:
+                item["proof"] = json.loads(item.pop("proof_json") or "{}")
+            except Exception:
+                item["proof"] = {}
+            requests.append(item)
+
+        c.execute(f"""
+            SELECT COALESCE(NULLIF(city, ''), 'Unspecified') AS city,
+                   COALESCE(NULLIF(service, ''), 'all') AS service,
+                   readiness_status,
+                   COUNT(*) AS requests,
+                   MAX(updated_at) AS last_requested_at
+              FROM elite_pilot_requests epr
+              {where}
+             GROUP BY city, service, readiness_status
+             ORDER BY requests DESC, last_requested_at DESC
+             LIMIT 50
+        """, params)
+        markets = [dict(row) for row in c.fetchall()]
+    finally:
+        conn.close()
+
+    return jsonify({
+        "requests": requests,
+        "markets": markets,
+        "summary": {
+            "total_requests": len(requests),
+            "markets": len(markets),
+            "status": status,
+        },
+    }), 200
+
+
+@app.route('/api/admin/elite-pilot-requests/<int:request_id>', methods=['PATCH'])
+@require_admin
+def admin_update_elite_pilot_request(request_id):
+    """Update sales follow-up status for captured Elite pilot demand."""
+    data = request.get_json(silent=True) or {}
+    status = (data.get("status") or "").strip().lower()
+    if status not in {"open", "contacted", "closed"}:
+        return jsonify({"error": "Status must be open, contacted or closed"}), 400
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            UPDATE elite_pilot_requests
+               SET status = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?
+        """, (status, request_id))
+        if c.rowcount == 0:
+            conn.rollback()
+            return jsonify({"error": "Elite pilot request not found"}), 404
+        conn.commit()
+        c.execute("""
+            SELECT epr.id, epr.user_id, u.email, u.full_name,
+                   epr.city, epr.service, epr.readiness_status,
+                   epr.recommended_price, epr.requested_price,
+                   epr.source, epr.status, epr.created_at, epr.updated_at
+              FROM elite_pilot_requests epr
+              LEFT JOIN users u ON u.id = epr.user_id
+             WHERE epr.id = ?
+        """, (request_id,))
+        row = c.fetchone()
+        return jsonify({"ok": True, "request": dict(row) if row else {"id": request_id, "status": status}}), 200
+    finally:
+        conn.close()
+
+
+@app.route('/api/admin/elite-claims', methods=['GET'])
+@require_admin
+def admin_elite_claims():
+    """Audit Elite lead exclusivity reservations by contractor and lead."""
+    status = (request.args.get("status") or "active").strip().lower()
+    if status not in {"active", "reported", "expired", "all"}:
+        return jsonify({"error": "Invalid status"}), 400
+
+    params: list = []
+    if status == "active":
+        where = "WHERE c.status = 'active' AND datetime(c.expires_at) > datetime('now')"
+    elif status == "expired":
+        where = "WHERE c.status = 'active' AND datetime(c.expires_at) <= datetime('now')"
+    elif status == "reported":
+        where = "WHERE c.status = 'reported'"
+    else:
+        where = ""
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute(f"""
+            SELECT c.lead_id, c.user_id, u.email, u.full_name,
+                   c.claim_type, c.status, c.claimed_at, c.expires_at,
+                   l.address, l.city, l.primary_service_type
+              FROM elite_lead_claims c
+              LEFT JOIN users u ON u.id = c.user_id
+              LEFT JOIN consolidated_leads l ON l.address_key = c.lead_id
+              {where}
+             ORDER BY datetime(c.expires_at) ASC, datetime(c.claimed_at) DESC
+             LIMIT 200
+        """, params)
+        claims = [dict(row) for row in c.fetchall()]
+
+        c.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN status = 'active' AND datetime(expires_at) > datetime('now') THEN 1 ELSE 0 END), 0) AS active_claims,
+                COALESCE(SUM(CASE WHEN status = 'reported' THEN 1 ELSE 0 END), 0) AS reported_claims,
+                COALESCE(SUM(CASE WHEN status = 'active' AND datetime(expires_at) <= datetime('now') THEN 1 ELSE 0 END), 0) AS expired_claims,
+                COUNT(DISTINCT CASE WHEN status = 'active' AND datetime(expires_at) > datetime('now') THEN user_id END) AS active_contractors
+            FROM elite_lead_claims
+        """)
+        summary = dict(c.fetchone())
+    finally:
+        conn.close()
+
+    return jsonify({
+        "claims": claims,
+        "summary": summary,
+        "status": status,
+    }), 200
+
+
 # ─────────────────────────────────────────────────────────
 # Stripe — checkout + webhook
 # ─────────────────────────────────────────────────────────
@@ -2451,17 +3270,23 @@ def bot_users_stats():
 def create_payment_checkout():
     """
     Create a Stripe Checkout session for the authenticated web user.
-    Body: {"tier": "pro" | "premium" | "elite"}
+    Body: {"tier": "beta_pro"}
     Returns: {"checkout_url": "https://checkout.stripe.com/..."}
-    Requires STRIPE_API_KEY and STRIPE_PRICE_ID_PRO / STRIPE_PRICE_ID_PREMIUM in env.
+    Requires STRIPE_API_KEY and STRIPE_PRICE_ID in env.
     """
     data = request.get_json(silent=True) or {}
-    tier = (data.get('tier') or 'pro').lower()
-    if tier not in ('pro', 'premium', 'elite'):
-        return jsonify({"error": "Tier must be 'pro', 'premium' or 'elite'"}), 400
+    tier = (data.get('tier') or 'beta_pro').lower()
+    if tier == 'premium':
+        tier = 'beta_pro'
+    if tier not in ('beta_pro', 'pro', 'quality', 'elite'):
+        return jsonify({"error": "Tier must be 'beta_pro'"}), 400
+
+    elite_gate, checkout_context = _elite_checkout_guard(tier, data)
+    if elite_gate:
+        return elite_gate
 
     stripe_key = os.getenv('STRIPE_API_KEY', '')
-    price_id   = os.getenv(f'STRIPE_PRICE_ID_{tier.upper()}', os.getenv('STRIPE_PRICE_ID', ''))
+    price_id = billing.select_web_checkout_price_id(tier)
     if not stripe_key or not price_id:
         return jsonify({"error": "Pago no configurado. Contacta a soporte.", "code": "stripe_not_configured"}), 503
 
@@ -2475,8 +3300,8 @@ def create_payment_checkout():
         user = c.fetchone()
         conn.close()
 
-        base_url = os.getenv('BASE_URL', 'http://104.42.252.241:5000')
-        checkout_metadata = {'user_id': str(g.user_id), 'tier': tier}
+        base_url = _checkout_base_url()
+        checkout_metadata = {'user_id': str(g.user_id), 'tier': tier, **checkout_context}
         session = _stripe.checkout.Session.create(
             mode='subscription',
             line_items=[{'price': price_id, 'quantity': 1}],
@@ -2491,6 +3316,117 @@ def create_payment_checkout():
     except Exception as e:
         logger.exception(f"Stripe checkout creation failed: {e}")
         return jsonify({"error": "Error al procesar el pago. Intenta de nuevo."}), 500
+
+
+def _checkout_filter(value) -> str:
+    """Keep checkout metadata/filter values compact and Stripe-safe."""
+    if isinstance(value, (list, tuple, set)):
+        value = ",".join(str(v) for v in value if str(v).strip())
+    return str(value or "").strip()[:120]
+
+
+def _checkout_base_url() -> str:
+    """Resolve Stripe return URLs from production config or the active request host."""
+    configured = (os.getenv('BASE_URL') or '').strip()
+    if configured:
+        return configured.rstrip('/')
+    return request.host_url.rstrip('/')
+
+
+def _elite_checkout_guard(tier: str, data: dict):
+    """Only sell the $500 Elite plan where inventory is actually ready."""
+    city = _checkout_filter(data.get('city'))
+    service = _checkout_filter(data.get('service') or data.get('service_cats'))
+    context = {}
+    if city:
+        context['market_city'] = city
+    if service:
+        context['market_service'] = service
+
+    if tier != 'elite':
+        return None, context
+
+    try:
+        proof = _elite_sales_proof_payload(city, service)
+    except Exception as exc:
+        logger.warning(f"Elite checkout readiness unavailable: {exc}")
+        return (jsonify({
+            "error": "Elite requiere validación de inventario antes de cobrar. Intenta de nuevo en unos minutos.",
+            "code": "elite_readiness_unavailable",
+            "checkout_allowed": False,
+        }), 503), context
+
+    status = proof.get("status")
+    recommended_price = int(proof.get("recommended_price") or 0)
+    market = proof.get("market") or {}
+    if status != "ready_for_elite" or recommended_price < 500:
+        saved_request = _record_elite_pilot_request(
+            int(g.user_id), city, service, status or "needs_inventory", recommended_price, proof
+        )
+        return (jsonify({
+            "error": "Elite todavía no está listo para venderse en este mercado/filtro. Usa Premium o solicita piloto.",
+            "code": "elite_market_not_ready",
+            "checkout_allowed": False,
+            "pilot_request_saved": saved_request,
+            "status": status or "needs_inventory",
+            "recommended_price": recommended_price,
+            "market": market,
+            "proof_points": proof.get("proof_points", []),
+        }), 409), context
+
+    context.update({
+        "elite_market_status": status,
+        "elite_recommended_price": str(recommended_price),
+    })
+    if market.get("city"):
+        context["elite_market_city"] = _checkout_filter(market.get("city"))
+    return None, context
+
+
+def _record_elite_pilot_request(
+    user_id: int,
+    city: str,
+    service: str,
+    readiness_status: str,
+    recommended_price: int,
+    proof: dict,
+) -> bool:
+    """Capture demand when a contractor wants Elite before the market is ready."""
+    try:
+        proof_snapshot = {
+            "status": readiness_status,
+            "recommended_price": recommended_price,
+            "market": proof.get("market"),
+            "proof_points": proof.get("proof_points", [])[:5],
+        }
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO elite_pilot_requests (
+                user_id, city, service, readiness_status, recommended_price,
+                requested_price, proof_json, source, status, updated_at
+            ) VALUES (?, ?, ?, ?, ?, 500, ?, 'checkout_block', 'open', CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, city, service) DO UPDATE SET
+                readiness_status = excluded.readiness_status,
+                recommended_price = excluded.recommended_price,
+                proof_json = excluded.proof_json,
+                source = excluded.source,
+                status = 'open',
+                updated_at = CURRENT_TIMESTAMP
+        """, (
+            user_id,
+            city,
+            service,
+            readiness_status,
+            recommended_price,
+            json.dumps(proof_snapshot, ensure_ascii=False),
+        ))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as exc:
+        logger.warning(f"Could not record Elite pilot request: {exc}")
+        return False
 
 
 @app.route('/api/stripe/webhook', methods=['POST'])
@@ -2634,6 +3570,7 @@ ANON_LEAD_LIMIT = int(os.getenv("SWIPE_ANON_LIMIT", "10"))
 FREE_USER_LEAD_LIMIT = int(os.getenv("SWIPE_FREE_LIMIT", "40"))
 REQUIRE_CONTACT = os.getenv("SWIPE_REQUIRE_CONTACT", "false").lower() in ("true", "1", "yes")
 PRO_LEAD_LIMIT = int(os.getenv("SWIPE_PRO_LIMIT", "200"))   # $29/mo tier
+QUALITY_LEAD_LIMIT = int(os.getenv("SWIPE_QUALITY_LIMIT", "120"))  # mid-tier quality plan
 ELITE_LEAD_LIMIT = int(os.getenv("SWIPE_ELITE_LIMIT", "80")) # $500/mo curated tier
 ELITE_CLAIM_DAYS = int(os.getenv("SWIPE_ELITE_CLAIM_DAYS", "14"))
 # PREMIUM = is_paid flag + no limit ($99/mo)
@@ -2656,7 +3593,9 @@ def _get_web_subscription(user_id) -> tuple[bool, str]:
             except Exception:
                 pass
         if is_paid and tier == "free":
-            tier = "premium"
+            tier = "beta_pro"
+        if tier == "premium":
+            tier = "beta_pro"
         if not is_paid:
             tier = "free"
         return is_paid, tier
@@ -2667,8 +3606,10 @@ def _get_web_subscription(user_id) -> tuple[bool, str]:
 def _tier_lead_limit(tier: str, is_paid: bool) -> int | None:
     if not is_paid:
         return FREE_USER_LEAD_LIMIT
-    if tier == "pro":
+    if tier in {"pro", "beta_pro"}:
         return PRO_LEAD_LIMIT
+    if tier == "quality":
+        return QUALITY_LEAD_LIMIT
     if tier == "elite":
         return ELITE_LEAD_LIMIT
     return None
@@ -2724,6 +3665,78 @@ def _count_swipes(user_id, anon_id) -> int:
     return int(row[0]) if row else 0
 
 
+def _elite_replacement_credit_count(user_id) -> int:
+    if not user_id:
+        return 0
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            SELECT COUNT(*)
+            FROM elite_replacement_credits
+            WHERE user_id = ? AND status = 'open'
+        """, (int(user_id),))
+        row = c.fetchone()
+        return int(row[0]) if row else 0
+    except Exception:
+        return 0
+    finally:
+        conn.close()
+
+
+def _grant_elite_replacement_credit(c, user_id: int, lead_id: str, reason: str, notes: str = "") -> bool:
+    c.execute("""
+        INSERT OR IGNORE INTO elite_replacement_credits (user_id, lead_id, reason, status, notes)
+        VALUES (?, ?, ?, 'open', ?)
+    """, (int(user_id), lead_id, reason, notes[:500]))
+    return c.rowcount > 0
+
+
+def _redeem_elite_replacement_credit(c, user_id: int) -> bool:
+    c.execute("""
+        UPDATE elite_replacement_credits
+           SET status = 'redeemed',
+               redeemed_at = CURRENT_TIMESTAMP
+         WHERE id = (
+               SELECT id
+                 FROM elite_replacement_credits
+                WHERE user_id = ? AND status = 'open'
+                ORDER BY granted_at ASC
+                LIMIT 1
+         )
+    """, (int(user_id),))
+    return c.rowcount > 0
+
+
+def _lead_age_days(lead_data: dict, fallback_date: str = "") -> int | None:
+    dates: list[datetime] = []
+    for field in ("issued_date", "issue_date", "event_date", "created_at", "last_updated", "_first_seen"):
+        raw = (lead_data.get(field) or "").strip() if isinstance(lead_data.get(field), str) else lead_data.get(field)
+        if not raw:
+            continue
+        try:
+            text = str(raw).strip().replace("Z", "").replace("T", " ")
+            if len(text) >= 19:
+                dt = datetime.fromisoformat(text[:19])
+            else:
+                dt = datetime.fromisoformat(text[:10])
+            dates.append(dt)
+        except Exception:
+            continue
+    if fallback_date:
+        raw_fallback = str(fallback_date).strip().replace("Z", "").replace("T", " ")
+        try:
+            if len(raw_fallback) >= 19:
+                dates.append(datetime.fromisoformat(raw_fallback[:19]))
+            else:
+                dates.append(datetime.fromisoformat(raw_fallback[:10]))
+        except Exception:
+            pass
+    if dates:
+        return max((datetime.utcnow() - max(dates)).days, 0)
+    return None
+
+
 def _already_swiped_ids(user_id, anon_id) -> set:
     conn = get_db_connection()
     c = conn.cursor()
@@ -2745,32 +3758,113 @@ def _already_swiped_ids(user_id, anon_id) -> set:
     return ids
 
 
-def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scoring: dict, inspection_date: str = "") -> tuple[int, list[str], bool]:
+def _premium_quality(lead_data: dict, gc_insight: dict, service_type: str, scoring: dict, inspection_date: str = "", first_seen: str = "") -> tuple[int, list[str], bool]:
     """Score evidence that can justify high-ticket curated leads."""
     score = int(scoring.get("score") or 0)
+    service = str(service_type or "").lower()
+    has_source = bool(gc_insight.get("source_url"))
+    contact_level = classify_contact_level(lead_data)
+    has_phone = bool((lead_data.get("contact_phone") or "").strip())
+    has_direct_contact = bool(contact_level.get("is_direct"))
+    has_value = bool(lead_data.get("value_float"))
+    age_days = _lead_age_days(lead_data, first_seen)
+    has_action_window = bool(inspection_date)
+    has_direct_owner_intent = str(lead_data.get("_lead_channel") or "") == "homeowner_intake"
+    fresh_limit_days = 21 if service in {"weather", "flood", "disaster"} else 45
+    has_recent_signal = has_direct_owner_intent or has_action_window or (age_days is not None and age_days <= fresh_limit_days)
     points = 0
     checks: list[str] = []
     if gc_insight.get("confidence") == "verified":
         points += 30
         checks.append("Fuente oficial verificada")
-    if gc_insight.get("source_url"):
+    if has_source:
         points += 15
         checks.append("Link de fuente auditable")
-    if (lead_data.get("contact_phone") or "").strip():
+    if has_direct_contact:
         points += 20
-        checks.append("Teléfono disponible")
+        checks.append("Contacto directo verificado")
+    elif has_phone:
+        points += 6
+        checks.append("Teléfono en registro público")
     if score >= 90:
         points += 15
         checks.append("Score HOT 90+")
-    if lead_data.get("value_float"):
+    if has_value:
         points += 10
         checks.append("Valor de proyecto detectado")
     if inspection_date:
         points += 10
         checks.append("Ventana de visita/inspección")
-    if str(service_type or "").lower() in {"weather", "flood", "disaster"}:
+    if service in {"weather", "flood", "disaster"}:
         checks.append("Oportunidad sensible al tiempo")
-    return min(points, 100), checks[:5], points >= 70
+    if has_direct_owner_intent:
+        checks.append("Homeowner pidió GC directamente")
+    if age_days is not None and age_days <= fresh_limit_days:
+        checks.append(f"Señal fresca ({age_days} días)")
+    is_elite = (
+        points >= 70
+        and has_source
+        and has_direct_contact
+        and score >= 85
+        and (has_value or has_action_window or has_direct_owner_intent)
+        and has_recent_signal
+    )
+    if not is_elite and not has_direct_contact:
+        checks.append("No Elite: contacto directo no verificado")
+    if not is_elite and not has_recent_signal:
+        checks.append("No Elite: señal vieja o sin fecha")
+    return min(points, 100), checks[:5], is_elite
+
+
+def _elite_certificate(
+    lead_data: dict,
+    gc_insight: dict,
+    q_score: int,
+    q_checks: list[str],
+    is_elite: bool,
+    inspection_date: str = "",
+    first_seen: str = "",
+    claimed_by_me: bool = False,
+    claim_expires_at: str = "",
+) -> dict:
+    """Structured buyer-facing proof for why an Elite lead is worth paying for."""
+    age_days = _lead_age_days(lead_data, first_seen)
+    evidence = []
+    if gc_insight.get("source_url"):
+        evidence.append({
+            "label": "Fuente auditable",
+            "value": gc_insight.get("source_label") or "Fuente oficial",
+            "status": "verified" if gc_insight.get("confidence") == "verified" else "present",
+        })
+    contact_level = classify_contact_level(lead_data)
+    if (lead_data.get("contact_phone") or "").strip() or (lead_data.get("contact_email") or "").strip():
+        evidence.append({
+            "label": contact_level.get("label", "Requiere enriquecimiento"),
+            "value": contact_level.get("value", "Owner/GC no confirmado"),
+            "status": contact_level.get("status", "needs_enrichment"),
+        })
+    if lead_data.get("value_float"):
+        try:
+            value = f"${float(lead_data.get('value_float') or 0):,.0f}"
+        except Exception:
+            value = "Detectado"
+        evidence.append({"label": "Valor del proyecto", "value": value, "status": "verified"})
+    if inspection_date:
+        evidence.append({"label": "Ventana de acción", "value": str(inspection_date)[:10], "status": "timely"})
+    elif age_days is not None:
+        evidence.append({"label": "Frescura", "value": f"{age_days} días", "status": "fresh" if age_days <= 45 else "aging"})
+    if claimed_by_me:
+        evidence.append({"label": "Exclusividad", "value": f"Reservado hasta {claim_expires_at[:10]}", "status": "reserved"})
+    elif is_elite:
+        evidence.append({"label": "Exclusividad", "value": "Disponible para reservar", "status": "available"})
+
+    return {
+        "certified": bool(is_elite),
+        "quality_score": int(q_score or 0),
+        "headline": "Certificado Elite" if is_elite else "Evidencia de calidad",
+        "checks": q_checks[:5],
+        "evidence": evidence[:6],
+    }
 
 
 def _is_elite_lead_record(row_dict: dict, lead_data: dict | None = None) -> tuple[bool, int, list[str]]:
@@ -2791,7 +3885,7 @@ def _is_elite_lead_record(row_dict: dict, lead_data: dict | None = None) -> tupl
         or lead_data.get("next_scheduled_inspection_date")
         or ""
     )
-    q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, str(inspection_date).strip()[:10])
+    q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, str(inspection_date).strip()[:10], row_dict.get("first_seen", ""))
     return is_elite, q_score, q_checks
 
 
@@ -2876,7 +3970,7 @@ def _elite_inventory_payload(city_filter: str = "", service_filter: str = "") ->
         if not gc_insight.get("source_url"):
             continue
         scoring = lead_data.get("_scoring", {}) or {}
-        q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring)
+        q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, "", rd.get("first_seen", ""))
         if not is_elite:
             continue
         total += 1
@@ -2950,6 +4044,7 @@ def _elite_quality_report_payload(city_filter: str = "", service_filter: str = "
             "project_value": 0,
             "hot_score_90": 0,
             "inspection_window": 0,
+            "fresh_signal": 0,
         },
         "rejection_reasons": {
             "not_gc_relevant": 0,
@@ -2985,7 +4080,7 @@ def _elite_quality_report_payload(city_filter: str = "", service_filter: str = "
             continue
         scoring = lead_data.get("_scoring", {}) or {}
         inspection_date = (lead_data.get("inspection_date") or lead_data.get("next_inspection_date") or "").strip()[:10]
-        q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, inspection_date)
+        q_score, q_checks, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, inspection_date, rd.get("first_seen", ""))
         if not is_elite:
             report["rejection_reasons"]["below_elite_threshold"] += 1
             continue
@@ -3005,6 +4100,7 @@ def _elite_quality_report_payload(city_filter: str = "", service_filter: str = "
             report["coverage"]["hot_score_90"] += 1
         if inspection_date:
             report["coverage"]["inspection_window"] += 1
+        report["coverage"]["fresh_signal"] += 1
         if len(report["audit_samples"]) < 12:
             report["audit_samples"].append({
                 "lead_id": rd.get("address_key"),
@@ -3048,6 +4144,787 @@ def _elite_quality_report_payload(city_filter: str = "", service_filter: str = "
         report["alerts"].append("Valor de proyecto bajo 50%: mostrar ROI puede ser más difícil.")
 
     return report
+
+
+def _elite_market_action_plan(
+    elite: int,
+    avg_quality: float,
+    phone_pct: float,
+    value_pct: float,
+    hot_pct: float,
+    candidate_leads: int,
+    status: str,
+) -> dict:
+    """Return sales-ops actions needed to make a market sellable at Elite price."""
+    ready_elite_min = 50
+    ready_quality_min = 80
+    ready_phone_min = 90
+    pilot_elite_min = 15
+    pilot_phone_min = 80
+
+    gap_to_elite = {
+        "elite_leads": max(ready_elite_min - elite, 0),
+        "average_quality_score": max(round(ready_quality_min - avg_quality, 1), 0),
+        "phone_pct": max(round(ready_phone_min - phone_pct, 1), 0),
+        "project_value_pct": max(round(50 - value_pct, 1), 0),
+        "hot_score_pct": max(round(70 - hot_pct, 1), 0),
+    }
+    next_actions: list[str] = []
+    if gap_to_elite["elite_leads"]:
+        next_actions.append(
+            f"Add {gap_to_elite['elite_leads']} more Elite-qualified leads from homeowner intake, permits and storm signals."
+        )
+    if gap_to_elite["phone_pct"]:
+        next_actions.append(
+            f"Enrich/verify phone coverage by {gap_to_elite['phone_pct']} pts before selling at $500/month."
+        )
+    if gap_to_elite["average_quality_score"]:
+        next_actions.append(
+            f"Raise average quality by {gap_to_elite['average_quality_score']} pts with fresher source, value and contact evidence."
+        )
+    if gap_to_elite["project_value_pct"]:
+        next_actions.append(
+            f"Capture project value/budget for {gap_to_elite['project_value_pct']} pts more leads to make ROI proof stronger."
+        )
+    if not next_actions:
+        next_actions.append("Ready for $500/month Elite positioning; monitor reports and replacement credits weekly.")
+
+    if status == "ready_for_elite":
+        priority = "sell_now"
+    elif elite >= pilot_elite_min and phone_pct >= pilot_phone_min:
+        priority = "pilot_and_enrich"
+    elif candidate_leads >= ready_elite_min:
+        priority = "enrich_existing_inventory"
+    else:
+        priority = "source_more_inventory"
+
+    return {
+        "priority": priority,
+        "gap_to_elite": gap_to_elite,
+        "next_actions": next_actions[:4],
+    }
+
+
+def _elite_market_readiness_payload(city_filter: str = "", service_filter: str = "") -> dict:
+    """Public-safe market readiness summary for selling Elite subscriptions."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    conditions = [
+        build_public_real_lead_sql_filter(),
+        build_gc_interest_sql_filter(),
+    ]
+    params: list = []
+    if city_filter:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+    if service_filter:
+        cats = [x.strip().lower() for x in service_filter.split(",") if x.strip()]
+        service_sql, service_params = build_service_category_filter(cats, _TRADE_SERVICE_TO_AI, _SERVICE_TYPE_CATS)
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
+
+    where_sql = "WHERE " + " AND ".join(conditions)
+    c.execute(f"""
+        SELECT address_key, address, city, lead_data, primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY first_seen DESC
+        LIMIT 5000
+    """, params)
+    rows = c.fetchall()
+    conn.close()
+
+    markets: dict[str, dict] = {}
+    total_candidates = 0
+    total_elite = 0
+    for row in rows:
+        rd = dict(row)
+        try:
+            lead_data = json.loads(rd.get("lead_data") or "{}")
+        except Exception:
+            continue
+        service_type = (rd.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if not service_type or not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        gc_insight = build_gc_insight(lead_data, service_type)
+        if not gc_insight.get("source_url"):
+            continue
+        total_candidates += 1
+        city = rd.get("city") or "Unknown"
+        market = markets.setdefault(city, {
+            "city": city,
+            "candidate_leads": 0,
+            "elite_leads": 0,
+            "quality_sum": 0,
+            "phone_count": 0,
+            "value_count": 0,
+            "hot_count": 0,
+            "services": {},
+        })
+        market["candidate_leads"] += 1
+        scoring = lead_data.get("_scoring", {}) or {}
+        q_score, _, is_elite = _premium_quality(
+            lead_data,
+            gc_insight,
+            service_type,
+            scoring,
+            str(lead_data.get("inspection_date") or lead_data.get("next_inspection_date") or "")[:10],
+            rd.get("first_seen", ""),
+        )
+        if not is_elite:
+            continue
+        total_elite += 1
+        market["elite_leads"] += 1
+        market["quality_sum"] += q_score
+        market["services"][service_type] = market["services"].get(service_type, 0) + 1
+        if (lead_data.get("contact_phone") or "").strip():
+            market["phone_count"] += 1
+        if lead_data.get("value_float"):
+            market["value_count"] += 1
+        if int(scoring.get("score") or 0) >= 90:
+            market["hot_count"] += 1
+
+    readiness = []
+    for city, market in markets.items():
+        elite = int(market["elite_leads"])
+        avg_quality = round(market["quality_sum"] / elite, 1) if elite else 0
+        phone_pct = round(market["phone_count"] * 100 / elite, 1) if elite else 0
+        value_pct = round(market["value_count"] * 100 / elite, 1) if elite else 0
+        hot_pct = round(market["hot_count"] * 100 / elite, 1) if elite else 0
+        if elite >= 50 and avg_quality >= 80 and phone_pct >= 90:
+            status = "ready_for_elite"
+            recommended_price = 500
+        elif elite >= 15 and phone_pct >= 80:
+            status = "pilot_market"
+            recommended_price = 250
+        else:
+            status = "needs_inventory"
+            recommended_price = 0
+        action_plan = _elite_market_action_plan(
+            elite,
+            avg_quality,
+            phone_pct,
+            value_pct,
+            hot_pct,
+            int(market["candidate_leads"]),
+            status,
+        )
+        readiness.append({
+            "city": city,
+            "status": status,
+            "recommended_price": recommended_price,
+            "candidate_leads": int(market["candidate_leads"]),
+            "elite_leads": elite,
+            "average_quality_score": avg_quality,
+            "priority": action_plan["priority"],
+            "gap_to_elite": action_plan["gap_to_elite"],
+            "next_actions": action_plan["next_actions"],
+            "coverage": {
+                "phone_pct": phone_pct,
+                "project_value_pct": value_pct,
+                "hot_score_pct": hot_pct,
+                "fresh_signal_pct": 100 if elite else 0,
+            },
+            "top_services": [
+                {"service_type": service, "elite_leads": count}
+                for service, count in sorted(market["services"].items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+            ],
+        })
+
+    readiness.sort(key=lambda m: (m["status"] != "ready_for_elite", m["status"] != "pilot_market", -m["elite_leads"], m["city"]))
+    summary = {
+        "ready_markets": sum(1 for m in readiness if m["status"] == "ready_for_elite"),
+        "pilot_markets": sum(1 for m in readiness if m["status"] == "pilot_market"),
+        "needs_inventory_markets": sum(1 for m in readiness if m["status"] == "needs_inventory"),
+        "total_candidate_leads": total_candidates,
+        "total_elite_leads": total_elite,
+    }
+    return {
+        "summary": summary,
+        "markets": readiness[:50],
+        "filters": {"city": city_filter, "service": service_filter},
+        "thresholds": {
+            "ready_for_elite": {"elite_leads": 50, "average_quality_score": 80, "phone_pct": 90, "price": 500},
+            "pilot_market": {"elite_leads": 15, "phone_pct": 80, "price": 250},
+        },
+    }
+
+
+def _quality_lead_profile(
+    lead_data: dict,
+    gc_insight: dict,
+    service_type: str,
+    scoring: dict,
+    inspection_date: str = "",
+    first_seen: str = "",
+) -> tuple[int, list[str], bool]:
+    """Return a softer quality score for monetizing mid-tier leads."""
+    q_score, q_checks, _is_elite = _premium_quality(
+        lead_data,
+        gc_insight,
+        service_type,
+        scoring,
+        inspection_date,
+        first_seen,
+    )
+    has_source = bool(gc_insight.get("source_url"))
+    has_phone = bool((lead_data.get("contact_phone") or "").strip())
+    age_days = _lead_age_days(lead_data, first_seen)
+    fresh_limit_days = 30 if str(service_type or "").lower() in {"weather", "flood", "disaster"} else 60
+    has_recent_signal = bool(
+        str(lead_data.get("_lead_channel") or "") == "homeowner_intake"
+        or inspection_date
+        or (age_days is not None and age_days <= fresh_limit_days)
+    )
+    is_quality = q_score >= 60 and has_source and has_phone and has_recent_signal
+    return q_score, q_checks, is_quality
+
+
+def _quality_market_action_plan(
+    quality_leads: int,
+    avg_quality: float,
+    phone_pct: float,
+    source_pct: float,
+    hot_pct: float,
+    candidate_leads: int,
+    status: str,
+) -> dict:
+    """Return the commercial steps needed to sell a quality-tier plan."""
+    ready_quality_min = 40
+    ready_score_min = 65
+    ready_phone_min = 80
+    ready_source_min = 85
+    pilot_quality_min = 15
+    pilot_phone_min = 70
+
+    gap_to_quality = {
+        "quality_leads": max(ready_quality_min - quality_leads, 0),
+        "average_quality_score": max(round(ready_score_min - avg_quality, 1), 0),
+        "phone_pct": max(round(ready_phone_min - phone_pct, 1), 0),
+        "source_pct": max(round(ready_source_min - source_pct, 1), 0),
+        "hot_score_pct": max(round(50 - hot_pct, 1), 0),
+    }
+    next_actions: list[str] = []
+    if gap_to_quality["quality_leads"]:
+        next_actions.append(
+            f"Add {gap_to_quality['quality_leads']} more quality-qualified leads from permits, homeowner intake and cross-data enrichment."
+        )
+    if gap_to_quality["phone_pct"]:
+        next_actions.append(
+            f"Enrich/verify phone coverage by {gap_to_quality['phone_pct']} pts before pitching the quality plan."
+        )
+    if gap_to_quality["source_pct"]:
+        next_actions.append(
+            f"Raise source coverage by {gap_to_quality['source_pct']} pts so the quality plan feels provably better than free."
+        )
+    if gap_to_quality["average_quality_score"]:
+        next_actions.append(
+            f"Lift average quality by {gap_to_quality['average_quality_score']} pts with fresher and more actionable leads."
+        )
+    if not next_actions:
+        next_actions.append("Ready to sell the quality plan; use free leads as the top-of-funnel and upsell the better inventory.")
+
+    if status == "ready_for_quality":
+        priority = "sell_now"
+    elif quality_leads >= pilot_quality_min and phone_pct >= pilot_phone_min:
+        priority = "pilot_and_enrich"
+    elif candidate_leads >= ready_quality_min:
+        priority = "enrich_existing_inventory"
+    else:
+        priority = "source_more_inventory"
+
+    return {
+        "priority": priority,
+        "gap_to_quality": gap_to_quality,
+        "next_actions": next_actions[:4],
+    }
+
+
+def _quality_market_readiness_payload(city_filter: str = "", service_filter: str = "") -> dict:
+    """Public-safe market readiness summary for the mid-tier quality plan."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    conditions = [
+        build_public_real_lead_sql_filter(),
+        build_gc_interest_sql_filter(),
+    ]
+    params: list = []
+    if city_filter:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+    if service_filter:
+        cats = [x.strip().lower() for x in service_filter.split(",") if x.strip()]
+        service_sql, service_params = build_service_category_filter(cats, _TRADE_SERVICE_TO_AI, _SERVICE_TYPE_CATS)
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
+
+    where_sql = "WHERE " + " AND ".join(conditions)
+    c.execute(f"""
+        SELECT address_key, address, city, lead_data, primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY first_seen DESC
+        LIMIT 5000
+    """, params)
+    rows = c.fetchall()
+    conn.close()
+
+    markets: dict[str, dict] = {}
+    total_candidates = 0
+    total_quality = 0
+    for row in rows:
+        rd = dict(row)
+        try:
+            lead_data = json.loads(rd.get("lead_data") or "{}")
+        except Exception:
+            continue
+        service_type = (rd.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if not service_type or not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        gc_insight = build_gc_insight(lead_data, service_type)
+        if not gc_insight.get("source_url"):
+            continue
+        total_candidates += 1
+        city = rd.get("city") or "Unknown"
+        market = markets.setdefault(city, {
+            "city": city,
+            "candidate_leads": 0,
+            "quality_leads": 0,
+            "quality_sum": 0,
+            "phone_count": 0,
+            "source_count": 0,
+            "hot_count": 0,
+            "services": {},
+        })
+        market["candidate_leads"] += 1
+        scoring = lead_data.get("_scoring", {}) or {}
+        q_score, _, is_quality = _quality_lead_profile(
+            lead_data,
+            gc_insight,
+            service_type,
+            scoring,
+            str(lead_data.get("inspection_date") or lead_data.get("next_inspection_date") or "")[:10],
+            rd.get("first_seen", ""),
+        )
+        if not is_quality:
+            continue
+        total_quality += 1
+        market["quality_leads"] += 1
+        market["quality_sum"] += q_score
+        market["services"][service_type] = market["services"].get(service_type, 0) + 1
+        if (lead_data.get("contact_phone") or "").strip():
+            market["phone_count"] += 1
+        if gc_insight.get("source_url"):
+            market["source_count"] += 1
+        if int(scoring.get("score") or 0) >= 90:
+            market["hot_count"] += 1
+
+    readiness = []
+    for city, market in markets.items():
+        quality = int(market["quality_leads"])
+        avg_quality = round(market["quality_sum"] / quality, 1) if quality else 0
+        phone_pct = round(market["phone_count"] * 100 / quality, 1) if quality else 0
+        source_pct = round(market["source_count"] * 100 / quality, 1) if quality else 0
+        hot_pct = round(market["hot_count"] * 100 / quality, 1) if quality else 0
+        if quality >= 40 and avg_quality >= 65 and phone_pct >= 80 and source_pct >= 85:
+            status = "ready_for_quality"
+            recommended_price = 199
+        elif quality >= 15 and avg_quality >= 55 and phone_pct >= 70:
+            status = "pilot_quality"
+            recommended_price = 129
+        else:
+            status = "needs_inventory"
+            recommended_price = 0
+        action_plan = _quality_market_action_plan(
+            quality,
+            avg_quality,
+            phone_pct,
+            source_pct,
+            hot_pct,
+            int(market["candidate_leads"]),
+            status,
+        )
+        readiness.append({
+            "city": city,
+            "status": status,
+            "recommended_price": recommended_price,
+            "candidate_leads": int(market["candidate_leads"]),
+            "quality_leads": quality,
+            "average_quality_score": avg_quality,
+            "priority": action_plan["priority"],
+            "gap_to_quality": action_plan["gap_to_quality"],
+            "next_actions": action_plan["next_actions"],
+            "coverage": {
+                "phone_pct": phone_pct,
+                "source_pct": source_pct,
+                "hot_score_pct": hot_pct,
+                "fresh_signal_pct": 100 if quality else 0,
+            },
+            "top_services": [
+                {"service_type": service, "quality_leads": count}
+                for service, count in sorted(market["services"].items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+            ],
+        })
+
+    readiness.sort(key=lambda m: (m["status"] != "ready_for_quality", m["status"] != "pilot_quality", -m["quality_leads"], m["city"]))
+    summary = {
+        "ready_markets": sum(1 for m in readiness if m["status"] == "ready_for_quality"),
+        "pilot_markets": sum(1 for m in readiness if m["status"] == "pilot_quality"),
+        "needs_inventory_markets": sum(1 for m in readiness if m["status"] == "needs_inventory"),
+        "total_candidate_leads": total_candidates,
+        "total_quality_leads": total_quality,
+    }
+    return {
+        "summary": summary,
+        "markets": readiness[:50],
+        "filters": {"city": city_filter, "service": service_filter},
+        "thresholds": {
+            "ready_for_quality": {"quality_leads": 40, "average_quality_score": 65, "phone_pct": 80, "source_pct": 85, "price": 199},
+            "pilot_quality": {"quality_leads": 15, "average_quality_score": 55, "phone_pct": 70, "price": 129},
+        },
+    }
+
+
+def _quality_sales_proof_payload(city_filter: str = "", service_filter: str = "") -> dict:
+    """Public-safe proof points for selling a mid-tier quality plan."""
+    readiness = _quality_market_readiness_payload(city_filter, service_filter)
+    markets = readiness.get("markets", [])
+    top_market = markets[0] if markets else None
+    if top_market:
+        quality = int(top_market.get("quality_leads") or 0)
+        avg_quality = float(top_market.get("average_quality_score") or 0)
+        recommended_price = int(top_market.get("recommended_price") or 0)
+        if top_market.get("status") == "ready_for_quality" and recommended_price >= 199:
+            status = "ready_for_quality"
+            headline = f"{top_market.get('city')} está listo para Quality a $199/mes."
+        elif quality >= 15:
+            status = "pilot_quality"
+            headline = f"{top_market.get('city')} puede venderse como Quality piloto."
+            recommended_price = recommended_price or 129
+        else:
+            status = "needs_inventory"
+            headline = "Quality todavía necesita más inventario."
+            recommended_price = 0
+        proof_points = [
+            f"{quality} leads Quality con calidad promedio {avg_quality}/100.",
+            f"{float(top_market.get('coverage', {}).get('phone_pct') or 0):.1f}% con teléfono y {float(top_market.get('coverage', {}).get('source_pct') or 0):.1f}% con fuente.",
+        ]
+        return {
+            "status": status,
+            "recommended_price": recommended_price,
+            "headline": headline,
+            "proof_points": proof_points,
+            "market": top_market,
+            "readiness": readiness,
+        }
+    return {
+        "status": "needs_inventory",
+        "recommended_price": 0,
+        "headline": "Quality sales proof unavailable.",
+        "proof_points": [],
+        "market": None,
+        "readiness": readiness,
+    }
+
+
+def _free_leads_offer_payload(city_filter: str = "", service_filter: str = "", limit: int = 6) -> dict:
+    """Public-safe preview payload for the free-leads funnel."""
+    limit = max(1, min(int(limit or 6), 10))
+    conn = get_db_connection()
+    c = conn.cursor()
+    conditions = [
+        build_public_real_lead_sql_filter(),
+        build_gc_interest_sql_filter(),
+    ]
+    params: list = []
+    if city_filter:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+    if service_filter:
+        cats = [x.strip().lower() for x in service_filter.split(",") if x.strip()]
+        service_sql, service_params = build_service_category_filter(cats, _TRADE_SERVICE_TO_AI, _SERVICE_TYPE_CATS)
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
+
+    where_sql = "WHERE " + " AND ".join(conditions)
+    c.execute(f"""
+        SELECT address_key, address, city, lead_data, primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY CAST(json_extract(lead_data, '$._scoring.score') AS INTEGER) DESC,
+                 first_seen DESC
+        LIMIT 200
+    """, params)
+    rows = c.fetchall()
+    conn.close()
+
+    samples: list[dict] = []
+    scanned = 0
+    for row in rows:
+        rd = dict(row)
+        try:
+            lead_data = json.loads(rd.get("lead_data") or "{}")
+        except Exception:
+            continue
+        service_type = (rd.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if not service_type or not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        gc_insight = build_gc_insight(lead_data, service_type)
+        if not gc_insight.get("source_url"):
+            continue
+        scanned += 1
+        scoring = lead_data.get("_scoring", {}) or {}
+        q_score, _, is_quality = _quality_lead_profile(
+            lead_data,
+            gc_insight,
+            service_type,
+            scoring,
+            str(lead_data.get("inspection_date") or lead_data.get("next_inspection_date") or "")[:10],
+            rd.get("first_seen", ""),
+        )
+        samples.append({
+            "id": rd.get("address_key"),
+            "address": rd.get("address"),
+            "city": rd.get("city"),
+            "service_type": service_type,
+            "score": int(scoring.get("score") or 0),
+            "quality_score": q_score,
+            "source_label": gc_insight.get("source_label") or "Fuente oficial",
+            "source_url": gc_insight.get("source_url"),
+            "phone_available": bool((lead_data.get("contact_phone") or "").strip()),
+            "value": lead_data.get("value_float") or 0,
+            "highlight": lead_data.get("_ai_summary") or lead_data.get("description") or "",
+            "is_quality": is_quality,
+        })
+        if len(samples) >= limit:
+            break
+
+    return {
+        "headline": "Muestra gratis para captar contratistas",
+        "subheadline": "Lead gratis como embudo y plan Quality para monetizar leads mejores.",
+        "free_limit": FREE_USER_LEAD_LIMIT,
+        "anon_limit": ANON_LEAD_LIMIT,
+        "sample_count": len(samples),
+        "scanned_candidates": scanned,
+        "sample_leads": samples,
+        "next_action": "Regístrate para desbloquear el paquete gratis completo y luego sube a Quality si quieres leads más limpios.",
+    }
+
+
+def _elite_uplift_missing_requirements(lead_data: dict, gc_insight: dict, service_type: str, scoring: dict, inspection_date: str, first_seen: str) -> list[str]:
+    """Explain what a near-Elite lead still needs before it can be sold."""
+    missing: list[str] = []
+    score = int(scoring.get("score") or 0)
+    contact_level = classify_contact_level(lead_data)
+    has_phone = bool((lead_data.get("contact_phone") or "").strip())
+    has_direct_contact = bool(contact_level.get("is_direct"))
+    has_value = bool(lead_data.get("value_float"))
+    has_action_window = bool(inspection_date)
+    has_direct_owner_intent = str(lead_data.get("_lead_channel") or "") == "homeowner_intake"
+    age_days = _lead_age_days(lead_data, first_seen)
+    fresh_limit_days = 21 if str(service_type or "").lower() in {"weather", "flood", "disaster"} else 45
+    has_recent_signal = has_direct_owner_intent or has_action_window or (age_days is not None and age_days <= fresh_limit_days)
+
+    if not gc_insight.get("source_url"):
+        missing.append("official_source_url")
+    if gc_insight.get("confidence") != "verified":
+        missing.append("verified_source_confidence")
+    if not has_phone:
+        missing.append("phone")
+    if score < 85:
+        missing.append("score_85_plus")
+    if not (has_value or has_action_window or has_direct_owner_intent):
+        missing.append("project_value_or_action_window")
+    if not has_recent_signal:
+        missing.append("fresh_signal")
+    return missing
+
+
+def _elite_uplift_candidates_payload(city_filter: str = "", service_filter: str = "", limit: int = 30) -> dict:
+    """Admin queue of non-Elite leads closest to becoming sellable Elite inventory."""
+    limit = max(1, min(int(limit or 30), 100))
+    conn = get_db_connection()
+    c = conn.cursor()
+    conditions = [
+        build_public_real_lead_sql_filter(),
+        build_gc_interest_sql_filter(),
+    ]
+    params: list = []
+    if city_filter:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+    if service_filter:
+        cats = [x.strip().lower() for x in service_filter.split(",") if x.strip()]
+        service_sql, service_params = build_service_category_filter(cats, _TRADE_SERVICE_TO_AI, _SERVICE_TYPE_CATS)
+        if service_sql:
+            conditions.append(service_sql)
+            params.extend(service_params)
+
+    where_sql = "WHERE " + " AND ".join(conditions)
+    c.execute(f"""
+        SELECT address_key, address, city, lead_data, primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY first_seen DESC
+        LIMIT 5000
+    """, params)
+    rows = c.fetchall()
+    conn.close()
+
+    candidates: list[dict] = []
+    missing_counts: dict[str, int] = {}
+    scanned = 0
+    for row in rows:
+        rd = dict(row)
+        try:
+            lead_data = json.loads(rd.get("lead_data") or "{}")
+        except Exception:
+            continue
+        service_type = (rd.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if not service_type or not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        scanned += 1
+        gc_insight = build_gc_insight(lead_data, service_type)
+        scoring = lead_data.get("_scoring", {}) or {}
+        inspection_date = str(lead_data.get("inspection_date") or lead_data.get("next_inspection_date") or "").strip()[:10]
+        q_score, q_checks, is_elite = _premium_quality(
+            lead_data,
+            gc_insight,
+            service_type,
+            scoring,
+            inspection_date,
+            rd.get("first_seen", ""),
+        )
+        if is_elite:
+            continue
+        missing = _elite_uplift_missing_requirements(lead_data, gc_insight, service_type, scoring, inspection_date, rd.get("first_seen", ""))
+        if not missing:
+            missing = ["quality_score_70_plus"]
+        for item in missing:
+            missing_counts[item] = missing_counts.get(item, 0) + 1
+        uplift_score = q_score - (len(missing) * 6)
+        candidates.append({
+            "lead_id": rd.get("address_key"),
+            "address": rd.get("address") or rd.get("address_key") or "",
+            "city": rd.get("city") or "Unknown",
+            "service_type": service_type,
+            "quality_score": q_score,
+            "uplift_score": uplift_score,
+            "score": int(scoring.get("score") or 0),
+            "missing_requirements": missing,
+            "next_action": _elite_uplift_next_action(missing),
+            "source_label": gc_insight.get("source_label", ""),
+            "source_url": gc_insight.get("source_url", ""),
+            "has_phone": bool((lead_data.get("contact_phone") or "").strip()),
+            "value": lead_data.get("value_float") or 0,
+            "first_seen": rd.get("first_seen", ""),
+            "checks": q_checks,
+        })
+
+    candidates.sort(key=lambda item: (-int(item["uplift_score"]), len(item["missing_requirements"]), item["city"], item["lead_id"]))
+    return {
+        "filters": {"city": city_filter, "service": service_filter},
+        "scanned_candidates": scanned,
+        "returned": min(len(candidates), limit),
+        "missing_counts": dict(sorted(missing_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "candidates": candidates[:limit],
+    }
+
+
+def _elite_uplift_next_action(missing: list[str]) -> str:
+    if "phone" in missing:
+        return "Verify owner/decision-maker phone before selling as Elite."
+    if "official_source_url" in missing or "verified_source_confidence" in missing:
+        return "Attach an auditable public source URL and mark source confidence verified."
+    if "fresh_signal" in missing:
+        return "Refresh permit, inspection, storm or homeowner signal before certification."
+    if "project_value_or_action_window" in missing:
+        return "Capture budget, permit value, inspection window or homeowner intent."
+    if "score_85_plus" in missing:
+        return "Enrich project context until lead score reaches 85+."
+    return "Review manually; lead is close to Elite but below quality threshold."
+
+
+def _elite_sales_proof_payload(city_filter: str = "", service_filter: str = "") -> dict:
+    """Public-safe proof points for explaining Elite pricing to contractors."""
+    readiness = _elite_market_readiness_payload(city_filter, service_filter)
+    markets = readiness.get("markets") or []
+    target = None
+    for market in markets:
+        if market.get("status") == "ready_for_elite":
+            target = market
+            break
+    if target is None and markets:
+        target = markets[0]
+
+    if not target:
+        return {
+            "status": "needs_inventory",
+            "recommended_price": 0,
+            "headline": "Elite no está listo para vender en este mercado todavía.",
+            "proof_points": ["Aumentar inventario y cobertura de teléfono antes de vender."],
+            "market": None,
+            "readiness": readiness,
+        }
+
+    price = int(target.get("recommended_price") or 0)
+    elite_count = int(target.get("elite_leads") or 0)
+    coverage = target.get("coverage") or {}
+    avg_quality = float(target.get("average_quality_score") or 0)
+    avg_project_value = 0
+    try:
+        inventory = _elite_inventory_payload(target.get("city") or city_filter, service_filter)
+        sample_values = [
+            float(sample.get("value") or 0)
+            for sample in inventory.get("samples", [])
+            if float(sample.get("value") or 0) > 0
+        ]
+        avg_project_value = round(sum(sample_values) / len(sample_values)) if sample_values else 0
+    except Exception:
+        inventory = {}
+
+    conservative_close_rate = 0.05
+    expected_jobs = round(elite_count * conservative_close_rate, 1)
+    estimated_pipeline_value = round(avg_project_value * expected_jobs) if avg_project_value else 0
+    break_even_months = round(avg_project_value / price, 1) if price and avg_project_value else 0
+    headline = (
+        f"{target.get('city')} está listo para Elite a ${price}/mes."
+        if target.get("status") == "ready_for_elite"
+        else f"{target.get('city')} conviene venderlo como piloto antes de Elite."
+    )
+    proof_points = [
+        f"{elite_count} leads Elite disponibles con calidad promedio {avg_quality}/100.",
+        f"{coverage.get('phone_pct', 0)}% con teléfono y {coverage.get('project_value_pct', 0)}% con valor de proyecto.",
+        f"Señales frescas: {coverage.get('fresh_signal_pct', 0)}% del inventario Elite.",
+    ]
+    if avg_project_value:
+        proof_points.append(
+            f"Valor promedio de muestra: ${avg_project_value:,.0f}; un cierre puede cubrir {break_even_months} meses de Elite."
+        )
+    if estimated_pipeline_value:
+        proof_points.append(
+            f"Con cierre conservador de 5%, pipeline estimado: ${estimated_pipeline_value:,.0f}."
+        )
+
+    return {
+        "status": target.get("status"),
+        "recommended_price": price,
+        "headline": headline,
+        "proof_points": proof_points,
+        "roi": {
+            "average_sample_project_value": avg_project_value,
+            "conservative_close_rate": conservative_close_rate,
+            "estimated_jobs": expected_jobs,
+            "estimated_pipeline_value": estimated_pipeline_value,
+            "break_even_months_per_close": break_even_months,
+        },
+        "market": target,
+        "readiness": readiness,
+        "inventory_sample_count": len((inventory or {}).get("samples", [])),
+    }
 
 
 # ── City coordinates for radius filtering ─────────────────────────────────────
@@ -3150,7 +5027,7 @@ _SERVICE_CAT_KEYWORDS: dict[str, list[str]] = {
     "remodel":     ["remodel", "renovation", "kitchen remodel", "bathroom remodel", "addition", "adu", "accessory dwelling", "tenant improvement", "interior alteration", "room addition"],
 }
 # These map directly to primary_service_type column
-_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "flood", "weather", "disaster", "energy", "rodents", "deconstruction", "remodel", "crossdata"}
+_SERVICE_TYPE_CATS = {"solar", "permits", "construction", "realestate", "post_sale_remodel", "flood", "weather", "disaster", "energy", "rodents", "deconstruction", "remodel", "crossdata"}
 
 # Subcontractor categories must use the post-classification opportunity trade,
 # not raw permit keywords. Example: a REROOF permit pulled by a CCC roofer is
@@ -3171,6 +5048,231 @@ _TRADE_SERVICE_TO_AI = {
     "deconstruction": "DEMOLITION",
     "insulation": "INSULATION",
 }
+
+_SWIPE_FILTER_CATEGORY_LABELS = {
+    "weather": "Daño por tormenta",
+    "permits": "Permisos listos",
+    "construction": "Proyecto sin GC confirmado",
+    "remodel": "Remodelación / reparación",
+    "deconstruction": "Demolición / rebuild",
+    "realestate": "Venta de propiedad",
+    "post_sale_remodel": "Radar post-venta",
+    "crossdata": "Cross-data verificado",
+}
+
+_SWIPE_FILTER_SERVICE_ALIASES = {
+    "weather": {"weather", "flood", "disaster"},
+    "permits": {"permits"},
+    "construction": {"construction"},
+    "remodel": {"remodel"},
+    "deconstruction": {"deconstruction"},
+    "realestate": {"realestate"},
+    "post_sale_remodel": {"post_sale_remodel"},
+    "crossdata": {"crossdata"},
+}
+
+
+def _service_count_keys(service_type: str) -> list[str]:
+    service = (service_type or "").strip().lower()
+    keys = [service] if service else []
+    for category, aliases in _SWIPE_FILTER_SERVICE_ALIASES.items():
+        if service in aliases and category not in keys:
+            keys.append(category)
+    return keys
+
+
+def _add_service_count(counts: dict[str, int], service_type: str) -> None:
+    for key in _service_count_keys(service_type):
+        counts[key] = counts.get(key, 0) + 1
+
+
+def _matches_city_radius(row_dict: dict, lead_data: dict, city_filter: str, radius_miles: float) -> bool:
+    city_filter = (city_filter or "").strip()
+    if not city_filter:
+        return True
+    lead_city = (row_dict.get("city") or lead_data.get("city") or "").strip()
+    if radius_miles <= 0:
+        return city_filter.lower() in lead_city.lower()
+
+    origin = _city_coords(city_filter)
+    if not origin:
+        return city_filter.lower() in lead_city.lower()
+
+    lead_lat = lead_data.get("lat")
+    lead_lon = lead_data.get("lon")
+    try:
+        if lead_lat and lead_lon:
+            return _haversine_miles(origin[0], origin[1], float(lead_lat), float(lead_lon)) <= radius_miles
+    except (TypeError, ValueError):
+        pass
+
+    lead_coords = _city_coords(lead_city)
+    if lead_coords:
+        return _haversine_miles(origin[0], origin[1], lead_coords[0], lead_coords[1]) <= radius_miles
+    return city_filter.lower() in lead_city.lower()
+
+
+def _parse_swipe_filter_args(args) -> dict:
+    hot_only = args.get("hot_only", "0") == "1"
+    try:
+        min_score = int(args.get("min_score", 0))
+    except (TypeError, ValueError):
+        min_score = 0
+    if hot_only:
+        min_score = max(min_score, 90)
+    try:
+        min_value = float(args.get("min_value", 0))
+    except (TypeError, ValueError):
+        min_value = 0.0
+    try:
+        max_value = float(args.get("max_value", 0))
+    except (TypeError, ValueError):
+        max_value = 0.0
+    try:
+        radius_miles = float(args.get("radius_miles", 0))
+    except (TypeError, ValueError):
+        radius_miles = 0.0
+    return {
+        "hot_only": hot_only,
+        "min_score": min_score,
+        "min_value": min_value,
+        "max_value": max_value,
+        "city": (args.get("city") or "").strip(),
+        "radius_miles": radius_miles,
+        "elite_only": args.get("elite_only", "0") == "1",
+    }
+
+
+def _swipe_filter_options_payload(args) -> dict:
+    filters = _parse_swipe_filter_args(args)
+    city_filter = filters["city"]
+    radius_miles = filters["radius_miles"]
+    do_radius = bool(city_filter and radius_miles > 0)
+
+    conditions = [
+        "(has_phone = 1 OR primary_service_type IN ('weather', 'flood', 'disaster'))",
+        "COALESCE(is_dead_lead, 0) = 0",
+        build_public_real_lead_sql_filter(),
+        build_gc_interest_sql_filter(),
+    ]
+    params: list = []
+
+    if filters["min_score"] > 0:
+        conditions.append("CAST(json_extract(lead_data, '$._scoring.score') AS INTEGER) >= ?")
+        params.append(filters["min_score"])
+    if filters["min_value"] > 0:
+        conditions.append(
+            "(primary_service_type IN ('weather', 'flood', 'disaster') OR "
+            "CAST(COALESCE(json_extract(lead_data, '$.value_float'), 0) AS REAL) >= ?)"
+        )
+        params.append(filters["min_value"])
+    if filters["max_value"] > 0:
+        conditions.append("CAST(COALESCE(json_extract(lead_data, '$.value_float'), 0) AS REAL) <= ?")
+        params.append(filters["max_value"])
+    if city_filter and not do_radius:
+        conditions.append("LOWER(city) LIKE LOWER(?)")
+        params.append(f"%{city_filter}%")
+
+    where_sql = "WHERE " + " AND ".join(conditions)
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute(f"""
+        SELECT address_key, address, city, lead_data, primary_service_type, first_seen
+        FROM consolidated_leads
+        {where_sql}
+        ORDER BY first_seen DESC
+        LIMIT 5000
+    """, params)
+    rows = c.fetchall()
+    conn.close()
+
+    service_counts: dict[str, int] = {}
+    raw_service_counts: dict[str, int] = {}
+    by_city: dict[str, int] = {}
+    score_buckets = {"hot_90": 0, "warm_70": 0, "all": 0}
+    value_buckets = {"under_100k": 0, "100k_500k": 0, "over_500k": 0, "unknown": 0}
+    total = 0
+
+    for row in rows:
+        rd = dict(row)
+        try:
+            lead_data = json.loads(rd.get("lead_data") or "{}")
+        except Exception:
+            continue
+        if is_placeholder_or_demo_lead(lead_data, rd.get("address_key")):
+            continue
+        service_type = (rd.get("primary_service_type") or lead_data.get("primary_service_type") or "").strip().lower()
+        if not service_type:
+            continue
+        if service_type not in {"weather", "flood", "disaster"} and not (lead_data.get("contact_phone") or lead_data.get("phone")):
+            continue
+        if not _matches_city_radius(rd, lead_data, city_filter, radius_miles):
+            continue
+        if not is_gc_interesting_lead(lead_data, service_type):
+            continue
+        gc_insight = build_gc_insight(lead_data, service_type)
+        if not gc_insight.get("source_url"):
+            continue
+
+        scoring = lead_data.get("_scoring", {}) or {}
+        q_score, _, is_elite = _premium_quality(lead_data, gc_insight, service_type, scoring, "", rd.get("first_seen", ""))
+        if filters["elite_only"] and not is_elite:
+            continue
+
+        total += 1
+        raw_service_counts[service_type] = raw_service_counts.get(service_type, 0) + 1
+        _add_service_count(service_counts, service_type)
+        city = rd.get("city") or "Unknown"
+        by_city[city] = by_city.get(city, 0) + 1
+
+        score = int(scoring.get("score") or 0)
+        score_buckets["all"] += 1
+        if score >= 90:
+            score_buckets["hot_90"] += 1
+        if score >= 70:
+            score_buckets["warm_70"] += 1
+
+        value = float(lead_data.get("value_float") or 0)
+        if value <= 0:
+            value_buckets["unknown"] += 1
+        elif value < 100000:
+            value_buckets["under_100k"] += 1
+        elif value <= 500000:
+            value_buckets["100k_500k"] += 1
+        else:
+            value_buckets["over_500k"] += 1
+
+    categories = [
+        {
+            "id": category,
+            "label": label,
+            "count": int(service_counts.get(category, 0)),
+            "available": int(service_counts.get(category, 0)) > 0,
+        }
+        for category, label in _SWIPE_FILTER_CATEGORY_LABELS.items()
+    ]
+
+    return {
+        "total_available": total,
+        "available_service_counts": service_counts,
+        "raw_service_counts": raw_service_counts,
+        "filter_categories": categories,
+        "available_service_types": sorted(k for k, v in service_counts.items() if v > 0),
+        "top_cities": [
+            {"city": city, "count": count}
+            for city, count in sorted(by_city.items(), key=lambda kv: (-kv[1], kv[0]))[:25]
+        ],
+        "score_buckets": score_buckets,
+        "value_buckets": value_buckets,
+        "filters": filters,
+    }
+
+
+@app.route('/api/swipe/filter-options', methods=['GET'])
+@limiter.limit("60 per minute")
+def swipe_filter_options():
+    """Return live inventory counts for the Swipe filter drawer."""
+    return jsonify(_swipe_filter_options_payload(request.args)), 200
 
 
 @app.route('/api/swipe/feed', methods=['GET'])
@@ -3278,7 +5380,9 @@ def swipe_feed():
         if subscription_tier == "elite":
             elite_only = True
         tier_limit = _tier_lead_limit(subscription_tier, is_paid)
-        if tier_limit is not None and swipes_count >= tier_limit:
+        replacement_credits = _elite_replacement_credit_count(user_id) if subscription_tier == "elite" else 0
+        billable_swipes_count = max(swipes_count - replacement_credits, 0)
+        if tier_limit is not None and billable_swipes_count >= tier_limit:
             return jsonify({
                 "leads":        [],
                 "auth_required": True,
@@ -3287,6 +5391,8 @@ def swipe_feed():
                 "tier_limit":   tier_limit,
                 "tier":         subscription_tier,
                 "swipes_count": swipes_count,
+                "billable_swipes_count": billable_swipes_count,
+                "replacement_credits": replacement_credits,
                 "remaining":    0,
             }), 200
 
@@ -3461,11 +5567,13 @@ def swipe_feed():
                 continue
             if ast not in {"weather", "flood", "disaster"} and not (ald.get("contact_phone") or ald.get("phone")):
                 continue
+            if not _matches_city_radius(ard, ald, city_filter, radius_miles):
+                continue
             if not is_gc_interesting_lead(ald, ast):
                 continue
             if not build_gc_insight(ald, ast).get("source_url"):
                 continue
-            available_service_counts[ast] = available_service_counts.get(ast, 0) + 1
+            _add_service_count(available_service_counts, ast)
     except Exception as ae:
         logger.debug(f"Availability lookup failed: {ae}")
 
@@ -3564,7 +5672,7 @@ def swipe_feed():
         inspection_source = (lead_data.get("inspection_source") or "").strip()
         gc_probability    = insp.get("gc_presence_probability") or lead_data.get("_gc_presence_probability") or 0
         premium_quality_score, premium_quality_checks, is_elite_quality = _premium_quality(
-            lead_data, gc_insight, service_type, scoring, inspection_date
+            lead_data, gc_insight, service_type, scoring, inspection_date, row_dict.get("first_seen", "")
         )
         if elite_only and not is_elite_quality:
             continue
@@ -3598,6 +5706,7 @@ def swipe_feed():
             "gc_badges":        gc_insight.get("badges", []),
             "source_url":       gc_insight.get("source_url", ""),
             "source_label":     gc_insight.get("source_label", ""),
+            "contact_level":    gc_insight.get("contact_level", classify_contact_level(lead_data)),
             "contractor":       contractor,
             "owner":            owner,
             "phone":            phone,
@@ -3617,6 +5726,17 @@ def swipe_feed():
             "is_elite_quality": is_elite_quality,
             "elite_claimed_by_me": elite_claimed_by_me,
             "elite_claim_expires_at": elite_claim_expires_at,
+            "elite_certificate": _elite_certificate(
+                lead_data,
+                gc_insight,
+                premium_quality_score,
+                premium_quality_checks,
+                is_elite_quality,
+                inspection_date,
+                row_dict.get("first_seen", ""),
+                elite_claimed_by_me,
+                elite_claim_expires_at,
+            ),
             "created_at":       row_dict.get("first_seen", ""),
             # AI classification fields (Qwen)
             "ai_trade":         lead_data.get("_trade", ""),
@@ -3665,6 +5785,8 @@ def swipe_feed():
         "is_paid":       locals().get('is_paid', False) if user_id else None,
         "tier":          locals().get('subscription_tier', "free") if user_id else "anon",
         "elite_only":    elite_only,
+        "billable_swipes_count": locals().get("billable_swipes_count", swipes_count),
+        "replacement_credits": locals().get("replacement_credits", 0),
         "available_service_counts": available_service_counts,
         "available_service_types": sorted(available_service_counts.keys()),
     }
@@ -3695,6 +5817,8 @@ def swipe_action():
     if not user_id and not anon_id:
         return jsonify({"error": "anon_id or auth required"}), 400
 
+    redeem_replacement_after_swipe = False
+    replacement_credit_redeemed = False
     if not user_id:
         current = _count_swipes(None, anon_id)
         if current >= ANON_LEAD_LIMIT:
@@ -3710,8 +5834,10 @@ def swipe_action():
         # Check quota by subscription tier.
         _is_paid, _tier = _get_web_subscription(user_id)
         _current = _count_swipes(user_id, None)
+        _replacement_credits = _elite_replacement_credit_count(user_id) if _tier == "elite" else 0
+        _billable_current = max(_current - _replacement_credits, 0)
         _limit = _tier_lead_limit(_tier, _is_paid)
-        if _limit is not None and _current >= _limit:
+        if _limit is not None and _billable_current >= _limit:
             return jsonify({
                 "ok": False,
                 "auth_required": True,
@@ -3720,8 +5846,16 @@ def swipe_action():
                 "tier_limit":   _limit,
                 "tier":         _tier,
                 "swipes_count": _current,
+                "billable_swipes_count": _billable_current,
+                "replacement_credits": _replacement_credits,
                 "remaining":    0,
             }), 200
+        redeem_replacement_after_swipe = (
+            _tier == "elite"
+            and _limit is not None
+            and _current >= _limit
+            and _replacement_credits > 0
+        )
 
     conn = get_db_connection()
     c = conn.cursor()
@@ -3729,7 +5863,7 @@ def swipe_action():
     try:
         if action == 'like' and user_id:
             c.execute("""
-                SELECT address_key, lead_data, primary_service_type
+                SELECT address_key, lead_data, primary_service_type, first_seen
                 FROM consolidated_leads
                 WHERE address_key = ?
                 LIMIT 1
@@ -3781,6 +5915,8 @@ def swipe_action():
                 """, (user_id, lead_id))
             except Exception as log_err:
                 logger.debug(f"lead_contacts log failed: {log_err}")
+        if redeem_replacement_after_swipe and user_id:
+            replacement_credit_redeemed = _redeem_elite_replacement_credit(c, int(user_id))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -3788,6 +5924,10 @@ def swipe_action():
         logger.warning(f"swipe_action insert failed: {e}")
         return jsonify({"error": "failed to record swipe"}), 500
     conn.close()
+
+    # ── Non-blocking CRM sync: a liked authenticated lead becomes a Twenty task ──
+    if action == 'like' and user_id:
+        _sync_liked_lead_to_twenty(user_id, lead_id)
 
     # ── Alert admin after 50 consecutive rejections ───────────────────────────
     if action == 'dislike':
@@ -3802,12 +5942,24 @@ def swipe_action():
     if not user_id:
         remaining = max(ANON_LEAD_LIMIT - swipes_count, 0)
         auth_required = remaining == 0
+        billable_swipes_count = swipes_count
+        replacement_credits = 0
+    else:
+        _is_paid, _tier = _get_web_subscription(user_id)
+        replacement_credits = _elite_replacement_credit_count(user_id) if _tier == "elite" else 0
+        billable_swipes_count = max(swipes_count - replacement_credits, 0)
+        _limit = _tier_lead_limit(_tier, _is_paid)
+        if _limit is not None:
+            remaining = max(_limit - billable_swipes_count, 0)
 
     return jsonify({
         "ok":            True,
         "auth_required": auth_required,
         "anon_limit":    ANON_LEAD_LIMIT,
         "swipes_count":  swipes_count,
+        "billable_swipes_count": billable_swipes_count,
+        "replacement_credits": replacement_credits,
+        "replacement_credit_redeemed": replacement_credit_redeemed,
         "remaining":     remaining,
         "elite_claim":    claim_result,
     }), 200
@@ -3848,29 +6000,80 @@ def _check_and_alert_rejections(user_id, anon_id):
             logger.warning(f"Failed to send rejection alert: {e}")
 
 
+def _public_beta_pro_tiers() -> list[dict]:
+    return [
+        {"id": "free", "price": 0, "limit": FREE_USER_LEAD_LIMIT, "label": "Free", "trial": True},
+        {
+            "id": "beta_pro",
+            "price": 99,
+            "limit": PRO_LEAD_LIMIT,
+            "label": "Beta Pro",
+            "early_access": True,
+            "replacement_policy": "Crédito interno si la fuente está rota, el contacto está mal rotulado o el lead está duplicado.",
+        },
+    ]
+
+
 @app.route('/api/swipe/upgrade-info', methods=['GET'])
 def swipe_upgrade_info():
-    """Return current user's quota status."""
+    """Return current user's quota status and the single public Beta Pro offer."""
     user_id, _ = _resolve_swipe_identity()
     if not user_id:
-        return jsonify({"anon": True, "limit": ANON_LEAD_LIMIT}), 200
+        return jsonify({"anon": True, "limit": ANON_LEAD_LIMIT, "tiers": _public_beta_pro_tiers()}), 200
     is_paid, tier = _get_web_subscription(user_id)
     swipes = _count_swipes(user_id, None)
     tier_limit = _tier_lead_limit(str(tier).lower(), is_paid)
+    replacement_credits = _elite_replacement_credit_count(user_id) if str(tier).lower() == "elite" else 0
+    billable_swipes = max(swipes - replacement_credits, 0)
     return jsonify({
         "is_paid":     is_paid,
         "tier":        tier,
         "swipes":      swipes,
+        "billable_swipes": billable_swipes,
+        "replacement_credits": replacement_credits,
         "free_limit":  FREE_USER_LEAD_LIMIT,
-        "pro_limit":   PRO_LEAD_LIMIT,
-        "elite_limit": ELITE_LEAD_LIMIT,
-        "remaining":   None if tier_limit is None else max(tier_limit - swipes, 0),
+        "beta_pro_limit": PRO_LEAD_LIMIT,
+        "remaining":   None if tier_limit is None else max(tier_limit - billable_swipes, 0),
         "tiers": [
-            {"id": "pro",     "price": 29,  "limit": PRO_LEAD_LIMIT, "label": "Pro"},
-            {"id": "premium", "price": 99,  "limit": None,           "label": "Premium"},
-            {"id": "elite",   "price": 500, "limit": ELITE_LEAD_LIMIT, "label": "Elite", "curated": True},
+            {"id": "free", "price": 0, "limit": FREE_USER_LEAD_LIMIT, "label": "Free", "trial": True},
+            {
+                "id": "beta_pro",
+                "price": 99,
+                "limit": PRO_LEAD_LIMIT,
+                "label": "Beta Pro",
+                "early_access": True,
+                "replacement_policy": "Crédito interno si la fuente está rota, el contacto está mal rotulado o el lead está duplicado.",
+            },
         ],
     }), 200
+
+
+@app.route('/api/swipe/free-leads', methods=['GET'])
+def swipe_free_leads():
+    """Public free-leads preview API for the top-of-funnel offer."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    try:
+        limit = int(request.args.get("limit", 6))
+    except (TypeError, ValueError):
+        limit = 6
+    return jsonify(_free_leads_offer_payload(city, service, limit)), 200
+
+
+@app.route('/api/swipe/quality-inventory', methods=['GET'])
+def swipe_quality_inventory():
+    """Non-sensitive inventory counts for the Quality plan."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    return jsonify(_quality_market_readiness_payload(city, service)), 200
+
+
+@app.route('/api/swipe/quality-sales-proof', methods=['GET'])
+def swipe_quality_sales_proof():
+    """Public-safe proof points for selling the Quality plan."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    return jsonify(_quality_sales_proof_payload(city, service)), 200
 
 
 @app.route('/api/swipe/elite-inventory', methods=['GET'])
@@ -3881,6 +6084,22 @@ def swipe_elite_inventory():
     return jsonify(_elite_inventory_payload(city, service)), 200
 
 
+@app.route('/api/swipe/market-readiness', methods=['GET'])
+def swipe_market_readiness():
+    """Public-safe market readiness summary for selling Elite."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    return jsonify(_elite_market_readiness_payload(city, service)), 200
+
+
+@app.route('/api/swipe/elite-sales-proof', methods=['GET'])
+def swipe_elite_sales_proof():
+    """Public-safe proof points for selling the Elite tier."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    return jsonify(_elite_sales_proof_payload(city, service)), 200
+
+
 @app.route('/api/admin/elite-quality-report', methods=['GET'])
 @require_admin
 def admin_elite_quality_report():
@@ -3888,6 +6107,19 @@ def admin_elite_quality_report():
     city = (request.args.get("city") or "").strip()
     service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
     return jsonify(_elite_quality_report_payload(city, service)), 200
+
+
+@app.route('/api/admin/elite-uplift-candidates', methods=['GET'])
+@require_admin
+def admin_elite_uplift_candidates():
+    """Return near-Elite candidates that ops can enrich into sellable inventory."""
+    city = (request.args.get("city") or "").strip()
+    service = (request.args.get("service") or request.args.get("service_cats") or "").strip()
+    try:
+        limit = int(request.args.get("limit", 30))
+    except (TypeError, ValueError):
+        limit = 30
+    return jsonify(_elite_uplift_candidates_payload(city, service, limit)), 200
 
 
 PIPELINE_STATUSES = ["Nuevo", "Contactado", "Propuesta", "Negociación", "Ganado", "Perdido"]
@@ -4344,9 +6576,37 @@ def swipe_claim_anon():
 
 @app.route('/api/swipe/cities', methods=['GET'])
 def swipe_cities():
-    """Return a list of known city names for autocomplete (no auth required)."""
+    """Return known city names from live inventory plus geocode fallbacks."""
     q = (request.args.get('q') or '').strip().lower()
-    cities = sorted(_CITY_COORDS.keys())
+    city_set = set(_CITY_COORDS.keys())
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        if q:
+            c.execute("""
+                SELECT city, COUNT(*) AS n
+                FROM consolidated_leads
+                WHERE TRIM(COALESCE(city, '')) != ''
+                  AND LOWER(city) LIKE LOWER(?)
+                GROUP BY city
+                ORDER BY n DESC, city ASC
+                LIMIT 80
+            """, (f"%{q}%",))
+        else:
+            c.execute("""
+                SELECT city, COUNT(*) AS n
+                FROM consolidated_leads
+                WHERE TRIM(COALESCE(city, '')) != ''
+                GROUP BY city
+                ORDER BY n DESC, city ASC
+                LIMIT 80
+            """)
+        city_set.update(str(row[0]).strip().lower() for row in c.fetchall() if row[0])
+        conn.close()
+    except Exception as e:
+        logger.debug(f"City autocomplete DB lookup failed: {e}")
+
+    cities = sorted(city_set)
     if q:
         # Prefix matches first, then contains matches
         prefix = [c for c in cities if c.startswith(q)]
@@ -4400,9 +6660,11 @@ def swipe_report_lead_quality():
 
     conn = get_db_connection()
     c = conn.cursor()
+    credit_granted = False
+    replacement_credits = 0
     try:
         c.execute("""
-            SELECT address_key, lead_data, primary_service_type
+            SELECT address_key, lead_data, primary_service_type, first_seen
             FROM consolidated_leads
             WHERE address_key = ?
             LIMIT 1
@@ -4427,6 +6689,20 @@ def swipe_report_lead_quality():
                        expires_at = CURRENT_TIMESTAMP
                  WHERE lead_id = ? AND user_id = ?
             """, (lead_id, int(user_id)))
+            credit_granted = _grant_elite_replacement_credit(
+                c,
+                int(user_id),
+                lead_id,
+                reason,
+                "Auto-granted from Elite lead quality report",
+            )
+            c.execute("""
+                SELECT COUNT(*)
+                FROM elite_replacement_credits
+                WHERE user_id = ? AND status = 'open'
+            """, (int(user_id),))
+            row = c.fetchone()
+            replacement_credits = int(row[0]) if row else 0
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -4439,6 +6715,8 @@ def swipe_report_lead_quality():
         "ok": True,
         "is_elite": is_elite_lead,
         "replacement_review": bool(is_elite_lead),
+        "replacement_credit_granted": credit_granted,
+        "replacement_credits": replacement_credits,
         "message": "Gracias. Revisaremos este lead para reemplazo/mejora de calidad.",
     }), 200
 
@@ -4454,7 +6732,7 @@ def swipe_my_contacts():
     c = conn.cursor()
     c.execute("""
         SELECT sa.lead_id, MAX(sa.created_at) as contacted_at,
-               cl.address, cl.city, cl.lead_data
+               cl.address, cl.city, cl.lead_data, cl.primary_service_type, cl.first_seen
         FROM swipe_actions sa
         JOIN consolidated_leads cl ON cl.address_key = sa.lead_id
         WHERE sa.user_id = ? AND sa.action = 'like'
@@ -4463,27 +6741,57 @@ def swipe_my_contacts():
         LIMIT 100
     """, (user_id,))
     rows = c.fetchall()
-    conn.close()
 
     contacts = []
-    for row in rows:
-        rd = dict(row)
-        try:
-            ld = json.loads(rd.get('lead_data') or '{}')
-        except Exception:
-            ld = {}
-        scoring = ld.get('_scoring', {}) or {}
-        contacts.append({
-            'id':           rd['lead_id'],
-            'address':      rd['address'],
-            'city':         rd['city'],
-            'contacted_at': rd['contacted_at'],
-            'score':        scoring.get('score', 0),
-            'grade':        scoring.get('grade', ''),
-            'phone':        (ld.get('contact_phone') or '').strip(),
-            'email':        (ld.get('contact_email') or '').strip(),
-            'value':        ld.get('value_float', 0),
-        })
+    try:
+        for row in rows:
+            rd = dict(row)
+            try:
+                ld = json.loads(rd.get('lead_data') or '{}')
+            except Exception:
+                ld = {}
+            scoring = ld.get('_scoring', {}) or {}
+            service_type = (rd.get('primary_service_type') or ld.get('primary_service_type') or '').strip().lower()
+            gc_insight = build_gc_insight(ld, service_type) if service_type else {}
+            is_elite_quality = False
+            premium_quality_score = 0
+            premium_quality_checks = []
+            if service_type:
+                is_elite_quality, premium_quality_score, premium_quality_checks = _is_elite_lead_record(rd, ld)
+            claim = _active_elite_claim(c, rd['lead_id']) if is_elite_quality else None
+            elite_claimed_by_me = bool(claim and int(claim['user_id']) == int(user_id))
+            elite_claim_expires_at = claim['expires_at'] if elite_claimed_by_me else ''
+            contacts.append({
+                'id':           rd['lead_id'],
+                'address':      rd['address'],
+                'city':         rd['city'],
+                'contacted_at': rd['contacted_at'],
+                'score':        scoring.get('score', 0),
+                'grade':        scoring.get('grade', ''),
+                'phone':        (ld.get('contact_phone') or '').strip(),
+                'email':        (ld.get('contact_email') or '').strip(),
+                'value':        ld.get('value_float', 0),
+                'service_type':  service_type,
+                'source_url':    gc_insight.get('source_url', ''),
+                'source_label':  gc_insight.get('source_label', ''),
+                'is_elite_quality': is_elite_quality,
+                'premium_quality_score': premium_quality_score,
+                'elite_claimed_by_me': elite_claimed_by_me,
+                'elite_claim_expires_at': elite_claim_expires_at,
+                'elite_certificate': _elite_certificate(
+                    ld,
+                    gc_insight,
+                    premium_quality_score,
+                    premium_quality_checks,
+                    is_elite_quality,
+                    '',
+                    rd.get('first_seen', ''),
+                    elite_claimed_by_me,
+                    elite_claim_expires_at,
+                ),
+            })
+    finally:
+        conn.close()
     return jsonify({'contacts': contacts}), 200
 
 
@@ -4505,7 +6813,7 @@ def swipe_log_contact():
     claim_result = None
     try:
         c.execute("""
-            SELECT address_key, lead_data, primary_service_type
+            SELECT address_key, lead_data, primary_service_type, first_seen
             FROM consolidated_leads
             WHERE address_key = ?
             LIMIT 1
@@ -4586,10 +6894,16 @@ def admin_lead_quality_reports():
             SELECT r.id, r.lead_id, r.user_id, u.email, u.full_name,
                    r.reason, r.details, r.is_elite, r.status, r.resolution,
                    r.created_at, r.updated_at,
-                   l.address, l.city, l.primary_service_type
+                   l.address, l.city, l.primary_service_type,
+                   erc.status AS replacement_credit_status,
+                   erc.granted_at AS replacement_credit_granted_at
             FROM lead_quality_reports r
             LEFT JOIN users u ON u.id = r.user_id
             LEFT JOIN consolidated_leads l ON l.address_key = r.lead_id
+            LEFT JOIN elite_replacement_credits erc
+              ON erc.user_id = r.user_id
+             AND erc.lead_id = r.lead_id
+             AND erc.reason = r.reason
             {where}
             ORDER BY r.created_at DESC
             LIMIT 100
@@ -4603,9 +6917,58 @@ def admin_lead_quality_reports():
             FROM lead_quality_reports
         """)
         summary = dict(c.fetchone())
+        c.execute("""
+            SELECT
+                COUNT(*) AS open_replacement_credits,
+                COUNT(DISTINCT user_id) AS users_with_open_replacements
+            FROM elite_replacement_credits
+            WHERE status = 'open'
+        """)
+        summary.update(dict(c.fetchone()))
     finally:
         conn.close()
     return jsonify({"reports": reports, "total": total, "summary": summary, "status": status}), 200
+
+
+@app.route('/api/admin/lead-quality-reports/<int:report_id>', methods=['PATCH'])
+@require_admin
+def admin_update_lead_quality_report(report_id):
+    """Update QA report status after admin review."""
+    data = request.get_json(silent=True) or {}
+    status = (data.get("status") or "").strip().lower()
+    resolution = (data.get("resolution") or "").strip()[:1000]
+    if status not in {"open", "reviewing", "resolved", "dismissed"}:
+        return jsonify({"error": "Status must be open, reviewing, resolved or dismissed"}), 400
+
+    if status in {"resolved", "dismissed"} and not resolution:
+        resolution = "Closed by admin review"
+    elif status == "reviewing" and not resolution:
+        resolution = "Reviewing lead quality report"
+
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            UPDATE lead_quality_reports
+               SET status = ?,
+                   resolution = ?,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?
+        """, (status, resolution, report_id))
+        if c.rowcount == 0:
+            conn.rollback()
+            return jsonify({"error": "Lead quality report not found"}), 404
+        conn.commit()
+        c.execute("""
+            SELECT id, lead_id, user_id, reason, details, is_elite,
+                   status, resolution, created_at, updated_at
+              FROM lead_quality_reports
+             WHERE id = ?
+        """, (report_id,))
+        row = c.fetchone()
+        return jsonify({"ok": True, "report": dict(row) if row else {"id": report_id, "status": status}}), 200
+    finally:
+        conn.close()
 
 
 @app.route('/api/admin/feedback', methods=['GET'])

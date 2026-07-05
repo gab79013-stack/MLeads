@@ -18,6 +18,7 @@ GC_OPPORTUNITY_SERVICE_TYPES = {
     "permits",
     "deconstruction",
     "realestate",
+    "post_sale_remodel",
     "crossdata",
     "rodents",
 }
@@ -201,6 +202,55 @@ def _source_url(lead: Mapping[str, Any]) -> str:
     return ""
 
 
+def _is_cash_or_investor_buyer(lead: Mapping[str, Any]) -> bool:
+    buyer_text = _text(
+        lead.get("buyer_name"),
+        lead.get("buyer"),
+        lead.get("grantee"),
+        lead.get("owner"),
+        lead.get("_buyer_type"),
+        lead.get("financing_type"),
+    )
+    return any(
+        term in buyer_text
+        for term in (
+            " llc",
+            "llc ",
+            "inc",
+            "holdings",
+            "invest",
+            "trust",
+            "cash",
+            "no mortgage",
+        )
+    )
+
+
+def _post_sale_signal_count(lead: Mapping[str, Any]) -> int:
+    desc = _text(
+        lead.get("description"),
+        lead.get("desc"),
+        lead.get("listing_remarks"),
+        lead.get("_ai_summary"),
+    )
+    count = 0
+    if lead.get("sale_date") or lead.get("recording_date") or lead.get("transfer_date"):
+        count += 1
+    if _is_cash_or_investor_buyer(lead):
+        count += 1
+    try:
+        year_built = int(lead.get("year_built") or lead.get("property_year_built") or 0)
+    except (TypeError, ValueError):
+        year_built = 0
+    if year_built and year_built <= 1985:
+        count += 1
+    if any(term in desc for term in ("as-is", "as is", "tlc", "fixer", "contractor special", "needs work", "renovation")):
+        count += 1
+    if lead.get("sale_price") or lead.get("value_float"):
+        count += 1
+    return count
+
+
 def is_placeholder_or_demo_lead(lead: Mapping[str, Any], address_key: str | None = None) -> bool:
     """Return True for synthetic/demo rows that must never appear publicly."""
     haystack = _text(
@@ -235,6 +285,27 @@ def build_public_real_lead_sql_filter() -> str:
         "AND LOWER(lead_data) NOT LIKE '%555010%' "
         "AND LOWER(lead_data) NOT LIKE '%555-01%'"
     )
+
+
+def classify_contact_level(lead: Mapping[str, Any]) -> dict[str, Any]:
+    """Classify contact status without turning public-record phones into direct contacts."""
+    phone = _text(lead.get("contact_phone"), lead.get("phone"), lead.get("owner_phone"))
+    email = _text(lead.get("contact_email"), lead.get("email"), lead.get("owner_email"))
+    contractor = _text(_contractor_name(lead), lead.get("contractor"), lead.get("applicant"))
+    channel = _text(lead.get("_lead_channel"), lead.get("lead_channel"), lead.get("source_channel")).lower()
+    contact_source = _text(lead.get("contact_source"), lead.get("phone_source"), lead.get("enrichment_source")).lower()
+    direct_markers = {"homeowner_intake", "owner_form", "direct_owner", "verified_owner", "enriched_direct", "manual_verified"}
+    phone_in_contractor_record = bool(phone and phone in contractor)
+    public_markers = ("state lic", " lic:", "license", "permit", "record", "ph:", "applicant")
+    looks_public_record = phone_in_contractor_record or any(m in contractor.lower() for m in public_markers)
+
+    if email:
+        return {"id": "direct_verified", "label": "Contacto directo verificado", "value": "Email directo disponible", "status": "verified", "is_direct": True}
+    if phone and (channel in direct_markers or contact_source in direct_markers or lead.get("phone_verified_direct") is True) and not looks_public_record:
+        return {"id": "direct_verified", "label": "Contacto directo verificado", "value": "Teléfono directo disponible", "status": "verified", "is_direct": True}
+    if phone:
+        return {"id": "public_record_phone", "label": "Teléfono en registro público", "value": "Owner/GC no confirmado", "status": "public_record", "is_direct": False}
+    return {"id": "requires_enrichment", "label": "Requiere enriquecimiento", "value": "Sin teléfono directo confirmado", "status": "needs_enrichment", "is_direct": False}
 
 
 def build_gc_insight(lead: Mapping[str, Any], service_type: str | None) -> dict[str, Any]:
@@ -279,14 +350,40 @@ def build_gc_insight(lead: Mapping[str, Any], service_type: str | None) -> dict[
         score += 15
         badges.append("Venta reciente")
         reasons.append("Venta/propiedad en transición puede detonar remodelación o reparación.")
+    elif service == "post_sale_remodel":
+        score += 25
+        badges.append("Post-sale remodel")
+        reasons.append("Venta reciente con señales de remodelación temprana; ideal para contactar antes de que el owner elija GC.")
+        if _is_cash_or_investor_buyer(lead):
+            score += 15
+            badges.append("Cash/LLC buyer")
+            reasons.append("Comprador tipo cash/LLC/inversionista suele remodelar rápido para renta, flip o reventa.")
+        try:
+            year_built = int(lead.get("year_built") or lead.get("property_year_built") or 0)
+        except (TypeError, ValueError):
+            year_built = 0
+        if year_built and year_built <= 1985:
+            score += 10
+            badges.append("Casa antigua")
+        if _post_sale_signal_count(lead) >= 3:
+            score += 10
+            badges.append("Señales cruzadas")
     elif service == "crossdata":
         score += 20
         badges.append("Cross-data")
         reasons.append("Varias señales públicas apuntan a una oportunidad; revisar fuente antes de contactar.")
 
-    if lead.get("contact_phone") or lead.get("phone"):
+    contact_level = classify_contact_level(lead)
+    if contact_level["id"] == "direct_verified":
         score += 15
-        badges.append("Teléfono disponible")
+        badges.append("Contacto directo verificado")
+    elif contact_level["id"] == "public_record_phone":
+        score += 6
+        badges.append("Teléfono en registro público")
+        if contractor_open:
+            badges.append("Owner/GC no confirmado")
+    else:
+        badges.append("Requiere enriquecimiento")
     if has_source:
         score += 25
         badges.append("Fuente verificable")
@@ -317,6 +414,7 @@ def build_gc_insight(lead: Mapping[str, Any], service_type: str | None) -> dict[
         "reasons": reasons or ["Oportunidad abierta para GC; validar alcance y decisión maker."],
         "source_url": url,
         "source_label": "Fuente verificable" if url else "Fuente no verificada",
+        "contact_level": contact_level,
     }
 
 
@@ -343,6 +441,9 @@ def is_gc_interesting_lead(lead: Mapping[str, Any], service_type: str | None) ->
 
     if service in PRE_AWARD_CONSTRUCTION_SERVICE_TYPES:
         return _is_pre_award_signal(lead)
+
+    if service == "post_sale_remodel":
+        return _post_sale_signal_count(lead) >= 2
 
     if service in GC_OPPORTUNITY_SERVICE_TYPES:
         return True
